@@ -414,6 +414,19 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
 	planet.Stock = state.Stock
+	// Units finished since the last settlement are delivered after the resources
+	// of the elapsed interval have been produced, so satellites delivered during
+	// that interval only count from the next one.
+	if err := settleProduction(ctx, tx, planet.ID, now); err != nil {
+		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
+	}
+	planet.Units, err = loadUnits(ctx, tx, planet.ID)
+	if err != nil {
+		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
+	}
+	if err := enrichEconomy(&planet); err != nil {
+		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
+	}
 	planet.ActiveQueue, err = activeQueue(ctx, tx, planet.ID)
 	if err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, fmt.Errorf("economy repository: read active queue: %w", err)

@@ -22,6 +22,7 @@ import (
 	appresearch "universeatwar/internal/app/research"
 	appserverstate "universeatwar/internal/app/serverstate"
 	appsetup "universeatwar/internal/app/setup"
+	appshipyard "universeatwar/internal/app/shipyard"
 	appsimulation "universeatwar/internal/app/simulation"
 	"universeatwar/internal/auth"
 	appclock "universeatwar/internal/clock"
@@ -216,10 +217,12 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	catalogues := catalogue.Default()
 	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)
 	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
+	shipyardRepository := storagesqlite.NewShipyardRepository(database.Write(), catalogues)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	events.Logger = logger
 	economyRepository.RegisterHandlers(events)
 	researchRepository.RegisterHandlers(events)
+	shipyardRepository.RegisterHandlers(events)
 	worker := appsimulation.NewWorker(clock, events)
 	worker.Logger = logger
 	economy := appeconomy.Service{
@@ -236,7 +239,14 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Completer:  events,
 		Wake:       worker.Wake,
 	}
-	_ = research
+	shipyard := appshipyard.Service{
+		Clock:      clock,
+		Repository: shipyardRepository,
+		Catalogues: catalogues,
+		Completer:  events,
+		Wake:       worker.Wake,
+	}
+	_, _ = research, shipyard
 	workerContext, stopWorker := context.WithCancel(ctx)
 	defer stopWorker()
 	workerErrors := make(chan error, 1)

@@ -6,6 +6,7 @@ import (
 
 	appeconomy "universeatwar/internal/app/economy"
 	appresearch "universeatwar/internal/app/research"
+	appshipyard "universeatwar/internal/app/shipyard"
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/catalogue"
 	storagesqlite "universeatwar/internal/storage/sqlite"
@@ -19,6 +20,7 @@ type world struct {
 	Events   *storagesqlite.EventProcessor
 	Economy  appeconomy.Service
 	Research appresearch.Service
+	Shipyard appshipyard.Service
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -26,9 +28,11 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 	catalogues := catalogue.Default()
 	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)
 	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
+	shipyardRepository := storagesqlite.NewShipyardRepository(database.Write(), catalogues)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	economyRepository.RegisterHandlers(events)
 	researchRepository.RegisterHandlers(events)
+	shipyardRepository.RegisterHandlers(events)
 	return &world{
 		Database: database,
 		Clock:    clock,
@@ -42,6 +46,12 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		Research: appresearch.Service{
 			Clock:      clock,
 			Repository: researchRepository,
+			Catalogues: catalogues,
+			Completer:  events,
+		},
+		Shipyard: appshipyard.Service{
+			Clock:      clock,
+			Repository: shipyardRepository,
 			Catalogues: catalogues,
 			Completer:  events,
 		},
