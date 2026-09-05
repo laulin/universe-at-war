@@ -66,6 +66,15 @@ const (
 	InterplanetaryMissile ID = "interplanetary_missile"
 )
 
+// DriveUpgrade replaces the drive and the base speed of a unit once a
+// technology reaches a level. The last matching upgrade of a definition wins,
+// so upgrades are declared from the least to the most advanced.
+type DriveUpgrade struct {
+	Drive        research.ID
+	MinimumLevel int
+	BaseSpeed    int64
+}
+
 // Definition holds everything the production and combat algorithms need.
 type Definition struct {
 	ID              ID
@@ -76,6 +85,7 @@ type Definition struct {
 	Cargo           int64
 	BaseSpeed       int64
 	Drive           research.ID
+	DriveUpgrades   []DriveUpgrade
 	FuelConsumption int64
 	Prerequisites   []prerequisite.Requirement
 	RapidFire       map[ID]int
@@ -151,6 +161,7 @@ func DefaultCatalogue() Catalogue {
 	definitions := []Definition{
 		{ID: SmallCargo, Family: Ship, BaseCost: economy.Resources{Metal: 2000, Crystal: 2000},
 			Shield: 10, Weapon: 5, Cargo: 5000, BaseSpeed: 5000, Drive: research.CombustionDrive, FuelConsumption: 10,
+			DriveUpgrades: []DriveUpgrade{{Drive: research.ImpulseDrive, MinimumLevel: 5, BaseSpeed: 10000}},
 			Prerequisites: []prerequisite.Requirement{building("shipyard", 2), technology(research.CombustionDrive, 2)},
 			RapidFire:     probeRapidFire(nil)},
 		{ID: LargeCargo, Family: Ship, BaseCost: economy.Resources{Metal: 6000, Crystal: 6000},
@@ -179,6 +190,10 @@ func DefaultCatalogue() Catalogue {
 			RapidFire:     probeRapidFire(nil)},
 		{ID: Recycler, Family: Ship, BaseCost: economy.Resources{Metal: 10000, Crystal: 6000, Deuterium: 2000},
 			Shield: 10, Weapon: 1, Cargo: 20000, BaseSpeed: 2000, Drive: research.CombustionDrive, FuelConsumption: 300,
+			DriveUpgrades: []DriveUpgrade{
+				{Drive: research.ImpulseDrive, MinimumLevel: 17, BaseSpeed: 4000},
+				{Drive: research.HyperspaceDrive, MinimumLevel: 15, BaseSpeed: 6000},
+			},
 			Prerequisites: []prerequisite.Requirement{building("shipyard", 4), technology(research.CombustionDrive, 6), technology(research.ShieldingTechnology, 2)},
 			RapidFire:     probeRapidFire(nil)},
 		{ID: EspionageProbe, Family: Ship, BaseCost: economy.Resources{Crystal: 1000},
@@ -186,6 +201,7 @@ func DefaultCatalogue() Catalogue {
 			Prerequisites: []prerequisite.Requirement{building("shipyard", 3), technology(research.CombustionDrive, 3), technology(research.EspionageTechnology, 2)}},
 		{ID: Bomber, Family: Ship, BaseCost: economy.Resources{Metal: 50000, Crystal: 25000, Deuterium: 15000},
 			Shield: 500, Weapon: 1000, Cargo: 500, BaseSpeed: 4000, Drive: research.ImpulseDrive, FuelConsumption: 1000,
+			DriveUpgrades: []DriveUpgrade{{Drive: research.HyperspaceDrive, MinimumLevel: 8, BaseSpeed: 5000}},
 			Prerequisites: []prerequisite.Requirement{building("shipyard", 8), technology(research.ImpulseDrive, 6), technology(research.PlasmaTechnology, 5)},
 			RapidFire:     probeRapidFire(map[ID]int{RocketLauncher: 20, LightLaser: 20, HeavyLaser: 10, IonCannon: 10})},
 		{ID: SolarSatellite, Family: Ship, BaseCost: economy.Resources{Crystal: 2000, Deuterium: 500},
