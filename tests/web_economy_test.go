@@ -11,11 +11,8 @@ import (
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
-	appeconomy "universeatwar/internal/app/economy"
 	appclock "universeatwar/internal/clock"
-	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/server"
-	storagesqlite "universeatwar/internal/storage/sqlite"
 	webhandler "universeatwar/internal/web"
 )
 
@@ -49,9 +46,7 @@ func TestWebEconomyFlowIsPlayableAndCSRFProtected(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
 	database := economyDatabase(t, ctx, 1)
-	economy := appeconomy.Service{
-		Clock: appclock.NewFake(now), Repository: storagesqlite.NewEconomyRepository(database.Write()), Catalogue: building.DefaultCatalogue(),
-	}
+	economy := newWorld(t, database, appclock.NewFake(now)).Economy
 	handler, err := webhandler.New(webhandler.Dependencies{
 		Authentication: webAuthenticationStub{principal: appauth.Principal{AccountID: 1, Username: "player1"}},
 		ServerState:    runningStateStub{}, CSRFSecrets: sequenceSecret{value: "csrf-token"}, Economy: economy,

@@ -23,7 +23,8 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
 	clock := appclock.NewFake(now)
 	database := economyDatabase(t, ctx, 1)
-	service := appeconomy.Service{Clock: clock, Repository: storagesqlite.NewEconomyRepository(database.Write()), Catalogue: building.DefaultCatalogue()}
+	universe := newWorld(t, database, clock)
+	service := universe.Economy
 	principal := appauth.Principal{AccountID: 1, Username: "captain"}
 
 	planet, err := service.CreateEmpire(ctx, principal, "Captain")
@@ -69,11 +70,11 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	}
 
 	clock.Advance(108 * time.Second)
-	completed, err := service.CompleteDue(ctx, 10)
+	completed, err := universe.Events.CompleteDue(ctx, 10)
 	if err != nil || completed != 1 {
 		t.Fatalf("CompleteDue() = %d, %v", completed, err)
 	}
-	completed, err = service.CompleteDue(ctx, 10)
+	completed, err = universe.Events.CompleteDue(ctx, 10)
 	if err != nil || completed != 0 {
 		t.Fatalf("second CompleteDue() = %d, %v", completed, err)
 	}
@@ -81,7 +82,7 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	if _, err := database.Write().ExecContext(ctx, "UPDATE scheduled_events SET state = 'pending', processed_at = NULL WHERE entity_id = ?", fmt.Sprint(queue.ID)); err != nil {
 		t.Fatal(err)
 	}
-	completed, err = service.CompleteDue(ctx, 10)
+	completed, err = universe.Events.CompleteDue(ctx, 10)
 	if err != nil || completed != 1 {
 		t.Fatalf("redelivered CompleteDue() = %d, %v", completed, err)
 	}
@@ -100,7 +101,8 @@ func TestDueBuildingsUseStableEventOrder(t *testing.T) {
 	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
 	clock := appclock.NewFake(now)
 	database := economyDatabase(t, ctx, 2)
-	service := appeconomy.Service{Clock: clock, Repository: storagesqlite.NewEconomyRepository(database.Write()), Catalogue: building.DefaultCatalogue()}
+	universe := newWorld(t, database, clock)
+	service := universe.Economy
 	one, err := service.CreateEmpire(ctx, appauth.Principal{AccountID: 1}, "First Player")
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +123,7 @@ func TestDueBuildingsUseStableEventOrder(t *testing.T) {
 		t.Fatalf("queues do not establish the fixture order: %#v %#v", firstQueue, secondQueue)
 	}
 	clock.Advance(firstQueue.CompletesAt.Sub(now))
-	completed, err := service.CompleteDue(ctx, 1)
+	completed, err := universe.Events.CompleteDue(ctx, 1)
 	if err != nil || completed != 1 {
 		t.Fatalf("CompleteDue(limit 1) = %d, %v", completed, err)
 	}
@@ -138,7 +140,8 @@ func TestEmpirePositionsAndResourceConstraints(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
 	database := economyDatabase(t, ctx, 2)
-	service := appeconomy.Service{Clock: appclock.NewFake(now), Repository: storagesqlite.NewEconomyRepository(database.Write()), Catalogue: building.DefaultCatalogue()}
+	universe := newWorld(t, database, appclock.NewFake(now))
+	service := universe.Economy
 	one, err := service.CreateEmpire(ctx, appauth.Principal{AccountID: 1}, "Player One")
 	if err != nil {
 		t.Fatal(err)
@@ -162,8 +165,8 @@ func TestConcurrentBuildingSpendOnlySucceedsOnce(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
 	database := economyDatabase(t, ctx, 1)
-	repository := storagesqlite.NewEconomyRepository(database.Write())
-	service := appeconomy.Service{Clock: appclock.NewFake(now), Repository: repository, Catalogue: building.DefaultCatalogue()}
+	universe := newWorld(t, database, appclock.NewFake(now))
+	service := universe.Economy
 	principal := appauth.Principal{AccountID: 1}
 	planet, err := service.CreateEmpire(ctx, principal, "Concurrent")
 	if err != nil {

@@ -58,6 +58,9 @@ ne pas faire dépendre le domaine de chemins de fichiers.
 - `domain` ne dépend que de la bibliothèque standard.
 - `app` dépend du domaine et déclare uniquement les ports réellement utiles.
 - `storage/sqlite`, `auth`, `sim` et `web` adaptent ces ports.
+- les événements planifiés sont répartis par type : `storage/sqlite` sélectionne
+  la prochaine échéance tous types confondus et délègue au gestionnaire
+  enregistré, dans la transaction qui l'a sélectionnée.
 - `web` ne démarre aucune transaction et ne contient aucune formule métier.
 - `ai` appelle les cas d'usage de `app`; il n'accède jamais aux repositories
   adverses.

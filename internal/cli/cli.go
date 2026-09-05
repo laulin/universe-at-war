@@ -189,13 +189,18 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Clock:      clock,
 		Repository: storagesqlite.NewSetupRepository(database.Write()),
 	}
+	catalogue := building.DefaultCatalogue()
+	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogue)
+	events := storagesqlite.NewEventProcessor(database.Write(), clock)
+	economyRepository.RegisterHandlers(events)
+	worker := appsimulation.NewWorker(clock, events)
 	economy := appeconomy.Service{
 		Clock:      clock,
-		Repository: storagesqlite.NewEconomyRepository(database.Write()),
-		Catalogue:  building.DefaultCatalogue(),
+		Repository: economyRepository,
+		Catalogue:  catalogue,
+		Completer:  events,
+		Wake:       worker.Wake,
 	}
-	worker := appsimulation.NewWorker(clock, &economy)
-	economy.Wake = worker.Wake
 	workerContext, stopWorker := context.WithCancel(ctx)
 	defer stopWorker()
 	workerErrors := make(chan error, 1)

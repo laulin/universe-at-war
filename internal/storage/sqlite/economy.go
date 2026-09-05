@@ -20,27 +20,19 @@ import (
 
 // EconomyRepository persists each economic action in one serialized write transaction.
 type EconomyRepository struct {
-	write *sql.DB
+	write     *sql.DB
+	catalogue building.Catalogue
 }
 
-func NewEconomyRepository(write *sql.DB) *EconomyRepository {
-	return &EconomyRepository{write: write}
+func NewEconomyRepository(write *sql.DB, catalogue building.Catalogue) *EconomyRepository {
+	return &EconomyRepository{write: write, catalogue: catalogue}
 }
 
-func (r *EconomyRepository) NextDue(ctx context.Context) (time.Time, bool, error) {
-	var value string
-	err := r.write.QueryRowContext(ctx, `SELECT due_at FROM scheduled_events WHERE state = 'pending' AND event_type = 'building_completed' ORDER BY due_at, priority, id LIMIT 1`).Scan(&value)
-	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, false, nil
-	}
-	if err != nil {
-		return time.Time{}, false, fmt.Errorf("economy repository: next due event: %w", err)
-	}
-	dueAt, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil {
-		return time.Time{}, false, fmt.Errorf("economy repository: parse next due event: %w", err)
-	}
-	return dueAt, true, nil
+// RegisterHandlers plugs building completion into the shared event processor.
+func (r *EconomyRepository) RegisterHandlers(processor *EventProcessor) {
+	processor.Register("building_completed", func(ctx context.Context, transaction *sql.Tx, event ScheduledEvent, now time.Time) error {
+		return completeBuilding(ctx, transaction, event, now, r.catalogue)
+	})
 }
 
 func (r *EconomyRepository) CreateEmpire(ctx context.Context, accountID int64, name string, now time.Time) (appeconomy.Planet, error) {
@@ -240,43 +232,13 @@ func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, pl
 	return queue, nil
 }
 
-func (r *EconomyRepository) CompleteDue(ctx context.Context, now time.Time, limit int, catalogue building.Catalogue) (int, error) {
-	completed := 0
-	for completed < limit {
-		didComplete, err := r.completeOne(ctx, now, catalogue)
-		if err != nil {
-			return completed, err
-		}
-		if !didComplete {
-			break
-		}
-		completed++
-	}
-	return completed, nil
-}
-
-func (r *EconomyRepository) completeOne(ctx context.Context, now time.Time, catalogue building.Catalogue) (bool, error) {
-	tx, err := r.write.BeginTx(ctx, nil)
+// completeBuilding raises the finished level exactly once. A queue that is no
+// longer active makes the event a successful no-op so that a redelivery after a
+// crash cannot increment twice.
+func completeBuilding(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time, catalogue building.Catalogue) error {
+	queueID, err := strconv.ParseInt(event.EntityID, 10, 64)
 	if err != nil {
-		return false, fmt.Errorf("economy repository: begin completion: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	var eventID int64
-	var dueText, entityID string
-	err = tx.QueryRowContext(ctx, `SELECT id, due_at, entity_id FROM scheduled_events WHERE state = 'pending' AND event_type = 'building_completed' AND due_at <= ? ORDER BY due_at, priority, id LIMIT 1`, timestamp(now)).Scan(&eventID, &dueText, &entityID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("economy repository: select due event: %w", err)
-	}
-	dueAt, err := time.Parse(time.RFC3339Nano, dueText)
-	if err != nil {
-		return false, fmt.Errorf("economy repository: parse due time: %w", err)
-	}
-	queueID, err := strconv.ParseInt(entityID, 10, 64)
-	if err != nil {
-		return false, errors.New("economy repository: invalid queue event reference")
+		return errors.New("economy repository: invalid queue event reference")
 	}
 	var planetID int64
 	var buildingID string
@@ -284,48 +246,39 @@ func (r *EconomyRepository) completeOne(ctx context.Context, now time.Time, cata
 	var queueState string
 	err = tx.QueryRowContext(ctx, "SELECT planet_id, building_id, target_level, state FROM building_queue WHERE id = ?", queueID).Scan(&planetID, &buildingID, &targetLevel, &queueState)
 	if err != nil {
-		return false, fmt.Errorf("economy repository: read due queue: %w", err)
+		return fmt.Errorf("economy repository: read due queue: %w", err)
 	}
 	if queueState != "active" {
-		if _, err := tx.ExecContext(ctx, "UPDATE scheduled_events SET state = 'completed', processed_at = ? WHERE id = ? AND state = 'pending'", timestamp(now), eventID); err != nil {
-			return false, err
-		}
-		return true, tx.Commit()
+		return nil
 	}
-	planet, _, production, err := loadPlanetByID(ctx, tx, planetID, dueAt, catalogue)
+	planet, _, production, err := loadPlanetByID(ctx, tx, planetID, event.DueAt, catalogue)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if err := persistProduction(ctx, tx, planetID, production); err != nil {
-		return false, err
+		return err
 	}
 	current := planet.Levels[building.ID(buildingID)]
 	if current+1 != targetLevel {
-		return false, errors.New("economy repository: building queue target is stale")
+		return errors.New("economy repository: building queue target is stale")
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO planet_buildings(planet_id, building_id, level) VALUES (?, ?, ?) ON CONFLICT(planet_id, building_id) DO UPDATE SET level = excluded.level`, planetID, buildingID, targetLevel); err != nil {
-		return false, fmt.Errorf("economy repository: complete building level: %w", err)
+		return fmt.Errorf("economy repository: complete building level: %w", err)
 	}
 	extraFields := 0
 	if building.ID(buildingID) == building.Terraformer {
 		extraFields = 5
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE planets SET used_fields = used_fields + 1, total_fields = total_fields + ? WHERE id = ?", extraFields, planetID); err != nil {
-		return false, fmt.Errorf("economy repository: consume planet field: %w", err)
+		return fmt.Errorf("economy repository: consume planet field: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE building_queue SET state = 'completed', completed_at = ? WHERE id = ? AND state = 'active'", timestamp(now), queueID); err != nil {
-		return false, fmt.Errorf("economy repository: complete queue: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, "UPDATE scheduled_events SET state = 'completed', processed_at = ?, attempts = attempts + 1 WHERE id = ? AND state = 'pending'", timestamp(now), eventID); err != nil {
-		return false, fmt.Errorf("economy repository: complete event: %w", err)
+		return fmt.Errorf("economy repository: complete queue: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload) VALUES ('building_completed', 'planet', ?, ?, json_object('building_id', ?, 'level', ?, 'queue_id', ?))`, planetID, timestamp(now), buildingID, targetLevel, queueID); err != nil {
-		return false, fmt.Errorf("economy repository: log completion: %w", err)
+		return fmt.Errorf("economy repository: log completion: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("economy repository: commit completion: %w", err)
-	}
-	return true, nil
+	return nil
 }
 
 func loadPlanet(ctx context.Context, tx *sql.Tx, accountID, requestedPlanetID int64, now time.Time, catalogue building.Catalogue) (appeconomy.Planet, int64, economy.ProductionState, error) {

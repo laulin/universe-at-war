@@ -70,14 +70,19 @@ type Repository interface {
 	CreateEmpire(context.Context, int64, string, time.Time) (Planet, error)
 	Planet(context.Context, int64, time.Time, building.Catalogue) (Planet, error)
 	StartConstruction(context.Context, int64, int64, building.ID, string, time.Time, building.Catalogue) (Queue, error)
-	CompleteDue(context.Context, time.Time, int, building.Catalogue) (int, error)
-	NextDue(context.Context) (time.Time, bool, error)
+}
+
+// Completer settles the scheduled events that are already due, so an
+// authoritative read never shows a stale queue.
+type Completer interface {
+	CompleteDue(context.Context, int) (int, error)
 }
 
 type Service struct {
 	Clock      domainclock.Clock
 	Repository Repository
 	Catalogue  building.Catalogue
+	Completer  Completer
 	Wake       func()
 }
 
@@ -96,11 +101,12 @@ func (s Service) Planet(ctx context.Context, principal appauth.Principal) (Plane
 	if err := s.validatePrincipal(principal); err != nil {
 		return Planet{}, err
 	}
-	now := s.Clock.Now().UTC()
-	if _, err := s.Repository.CompleteDue(ctx, now, 100, s.Catalogue); err != nil {
-		return Planet{}, err
+	if s.Completer != nil {
+		if _, err := s.Completer.CompleteDue(ctx, 100); err != nil {
+			return Planet{}, err
+		}
 	}
-	return s.Repository.Planet(ctx, principal.AccountID, now, s.Catalogue)
+	return s.Repository.Planet(ctx, principal.AccountID, s.Clock.Now().UTC(), s.Catalogue)
 }
 
 func (s Service) Buildings(ctx context.Context, principal appauth.Principal) (Planet, []BuildingChoice, error) {
@@ -136,20 +142,6 @@ func (s Service) StartConstruction(ctx context.Context, principal appauth.Princi
 		s.Wake()
 	}
 	return queue, err
-}
-
-func (s Service) NextDue(ctx context.Context) (time.Time, bool, error) {
-	if s.Repository == nil {
-		return time.Time{}, false, errors.New("economy: incomplete event service")
-	}
-	return s.Repository.NextDue(ctx)
-}
-
-func (s Service) CompleteDue(ctx context.Context, limit int) (int, error) {
-	if s.Clock == nil || s.Repository == nil || limit <= 0 {
-		return 0, errors.New("economy: incomplete completion service")
-	}
-	return s.Repository.CompleteDue(ctx, s.Clock.Now().UTC(), limit, s.Catalogue)
 }
 
 func (s Service) validatePrincipal(principal appauth.Principal) error {
