@@ -19,12 +19,13 @@ import (
 	appbootstrap "universeatwar/internal/app/bootstrap"
 	appeconomy "universeatwar/internal/app/economy"
 	appregistration "universeatwar/internal/app/registration"
+	appresearch "universeatwar/internal/app/research"
 	appserverstate "universeatwar/internal/app/serverstate"
 	appsetup "universeatwar/internal/app/setup"
 	appsimulation "universeatwar/internal/app/simulation"
 	"universeatwar/internal/auth"
 	appclock "universeatwar/internal/clock"
-	"universeatwar/internal/domain/building"
+	"universeatwar/internal/domain/catalogue"
 	"universeatwar/internal/observability"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 	webhandler "universeatwar/internal/web"
@@ -212,20 +213,30 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Clock:      clock,
 		Repository: storagesqlite.NewSetupRepository(database.Write()),
 	}
-	catalogue := building.DefaultCatalogue()
-	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogue)
+	catalogues := catalogue.Default()
+	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)
+	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	events.Logger = logger
 	economyRepository.RegisterHandlers(events)
+	researchRepository.RegisterHandlers(events)
 	worker := appsimulation.NewWorker(clock, events)
 	worker.Logger = logger
 	economy := appeconomy.Service{
 		Clock:      clock,
 		Repository: economyRepository,
-		Catalogue:  catalogue,
+		Catalogue:  catalogues.Buildings,
 		Completer:  events,
 		Wake:       worker.Wake,
 	}
+	research := appresearch.Service{
+		Clock:      clock,
+		Repository: researchRepository,
+		Catalogues: catalogues,
+		Completer:  events,
+		Wake:       worker.Wake,
+	}
+	_ = research
 	workerContext, stopWorker := context.WithCancel(ctx)
 	defer stopWorker()
 	workerErrors := make(chan error, 1)

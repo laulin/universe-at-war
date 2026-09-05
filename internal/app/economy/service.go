@@ -13,6 +13,7 @@ import (
 	"universeatwar/internal/domain/economy"
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
+	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 )
 
@@ -23,6 +24,7 @@ var (
 	ErrPlanetNotFound = errors.New("economy: planet does not belong to this account")
 	ErrUniverseFull   = errors.New("economy: universe has no free position")
 	ErrQueueBusy      = errors.New("economy: a construction is already active")
+	ErrFacilityBusy   = errors.New("economy: the facility is in use by another activity")
 	ErrInvalidName    = errors.New("economy: player name must contain 3 to 32 characters")
 	ErrInvalidRequest = errors.New("economy: invalid construction request")
 )
@@ -54,6 +56,7 @@ type Planet struct {
 	Energy             economy.Energy
 	Levels             building.Levels
 	Researches         research.Levels
+	Units              unit.Inventory
 	ActiveQueue        *Queue
 	Rules              rules.Ruleset
 }

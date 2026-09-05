@@ -1,11 +1,13 @@
 package tests
 
 import (
+	"context"
 	"testing"
 
 	appeconomy "universeatwar/internal/app/economy"
+	appresearch "universeatwar/internal/app/research"
 	appclock "universeatwar/internal/clock"
-	"universeatwar/internal/domain/building"
+	"universeatwar/internal/domain/catalogue"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 
@@ -16,14 +18,17 @@ type world struct {
 	Clock    *appclock.Fake
 	Events   *storagesqlite.EventProcessor
 	Economy  appeconomy.Service
+	Research appresearch.Service
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
 	t.Helper()
-	catalogue := building.DefaultCatalogue()
-	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogue)
+	catalogues := catalogue.Default()
+	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)
+	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	economyRepository.RegisterHandlers(events)
+	researchRepository.RegisterHandlers(events)
 	return &world{
 		Database: database,
 		Clock:    clock,
@@ -31,8 +36,53 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		Economy: appeconomy.Service{
 			Clock:      clock,
 			Repository: economyRepository,
-			Catalogue:  catalogue,
+			Catalogue:  catalogues.Buildings,
 			Completer:  events,
 		},
+		Research: appresearch.Service{
+			Clock:      clock,
+			Repository: researchRepository,
+			Catalogues: catalogues,
+			Completer:  events,
+		},
+	}
+}
+
+func setBuilding(t *testing.T, ctx context.Context, database *storagesqlite.Database, planetID int64, id string, level int) {
+	t.Helper()
+	if _, err := database.Write().ExecContext(ctx, `
+		INSERT INTO planet_buildings(planet_id, building_id, level) VALUES (?, ?, ?)
+		ON CONFLICT(planet_id, building_id) DO UPDATE SET level = excluded.level
+	`, planetID, id, level); err != nil {
+		t.Fatalf("set building %s: %v", id, err)
+	}
+}
+
+func setResearch(t *testing.T, ctx context.Context, database *storagesqlite.Database, playerID int64, id string, level int) {
+	t.Helper()
+	if _, err := database.Write().ExecContext(ctx, `
+		INSERT INTO player_research(player_id, research_id, level) VALUES (?, ?, ?)
+		ON CONFLICT(player_id, research_id) DO UPDATE SET level = excluded.level
+	`, playerID, id, level); err != nil {
+		t.Fatalf("set research %s: %v", id, err)
+	}
+}
+
+func setUnits(t *testing.T, ctx context.Context, database *storagesqlite.Database, planetID int64, id string, quantity int64) {
+	t.Helper()
+	if _, err := database.Write().ExecContext(ctx, `
+		INSERT INTO planet_units(planet_id, unit_id, quantity) VALUES (?, ?, ?)
+		ON CONFLICT(planet_id, unit_id) DO UPDATE SET quantity = excluded.quantity
+	`, planetID, id, quantity); err != nil {
+		t.Fatalf("set units %s: %v", id, err)
+	}
+}
+
+func setResources(t *testing.T, ctx context.Context, database *storagesqlite.Database, planetID int64, metal, crystal, deuterium int64) {
+	t.Helper()
+	if _, err := database.Write().ExecContext(ctx, `
+		UPDATE planet_resources SET metal = ?, crystal = ?, deuterium = ? WHERE planet_id = ?
+	`, metal, crystal, deuterium, planetID); err != nil {
+		t.Fatalf("set resources: %v", err)
 	}
 }

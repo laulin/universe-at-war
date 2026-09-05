@@ -14,7 +14,9 @@ import (
 	appeconomy "universeatwar/internal/app/economy"
 	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
+	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 )
 
@@ -245,6 +247,9 @@ func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, pl
 	if planet.ActiveQueue != nil {
 		return appeconomy.Queue{}, appeconomy.ErrQueueBusy
 	}
+	if err := facilityIsIdle(ctx, tx, planet.ID, id); err != nil {
+		return appeconomy.Queue{}, err
+	}
 	plan, err := catalogue.Plan(id, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
 	if err != nil {
 		return appeconomy.Queue{}, err
@@ -392,6 +397,14 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 	if err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
+	planet.Researches, err = loadResearchLevels(ctx, tx, planet.ID)
+	if err != nil {
+		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
+	}
+	planet.Units, err = loadUnits(ctx, tx, planet.ID)
+	if err != nil {
+		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
+	}
 	planet.Rules = configured
 	if err := enrichEconomy(&planet); err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
@@ -449,11 +462,101 @@ func loadLevels(ctx context.Context, tx *sql.Tx, planetID int64, catalogue build
 	return levels, nil
 }
 
+// facilityIsIdle refuses to upgrade a facility that is currently working: the
+// laboratory during a research, the shipyard and the nanite factory during a
+// production order.
+func facilityIsIdle(ctx context.Context, tx *sql.Tx, planetID int64, id building.ID) error {
+	var busy bool
+	switch id {
+	case building.ResearchLab:
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM research_queue q
+				JOIN planets p ON p.owner_player_id = q.player_id
+				WHERE p.id = ? AND q.state = 'active'
+			)
+		`, planetID).Scan(&busy); err != nil {
+			return fmt.Errorf("economy repository: inspect research queue: %w", err)
+		}
+	case building.Shipyard, building.NaniteFactory:
+		if err := tx.QueryRowContext(ctx,
+			"SELECT EXISTS(SELECT 1 FROM production_orders WHERE planet_id = ? AND state = 'active')",
+			planetID).Scan(&busy); err != nil {
+			return fmt.Errorf("economy repository: inspect production orders: %w", err)
+		}
+	default:
+		return nil
+	}
+	if busy {
+		return appeconomy.ErrFacilityBusy
+	}
+	return nil
+}
+
+// playerOfPlanet returns the player owning a planet.
+func playerOfPlanet(ctx context.Context, tx *sql.Tx, planetID int64) (int64, error) {
+	var playerID int64
+	if err := tx.QueryRowContext(ctx, "SELECT owner_player_id FROM planets WHERE id = ?", planetID).Scan(&playerID); err != nil {
+		return 0, fmt.Errorf("economy repository: read planet owner: %w", err)
+	}
+	return playerID, nil
+}
+
+// loadResearchLevels reads the technology levels of the player owning a planet.
+func loadResearchLevels(ctx context.Context, tx *sql.Tx, planetID int64) (research.Levels, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT r.research_id, r.level
+		FROM player_research r
+		JOIN planets p ON p.owner_player_id = r.player_id
+		WHERE p.id = ?
+	`, planetID)
+	if err != nil {
+		return nil, fmt.Errorf("economy repository: read research levels: %w", err)
+	}
+	defer rows.Close()
+	levels := research.Levels{}
+	for rows.Next() {
+		var id string
+		var level int
+		if err := rows.Scan(&id, &level); err != nil {
+			return nil, fmt.Errorf("economy repository: scan research level: %w", err)
+		}
+		levels[research.ID(id)] = level
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("economy repository: iterate research levels: %w", err)
+	}
+	return levels, nil
+}
+
+// loadUnits reads the units stationed on a planet.
+func loadUnits(ctx context.Context, tx *sql.Tx, planetID int64) (unit.Inventory, error) {
+	rows, err := tx.QueryContext(ctx, "SELECT unit_id, quantity FROM planet_units WHERE planet_id = ?", planetID)
+	if err != nil {
+		return nil, fmt.Errorf("economy repository: read units: %w", err)
+	}
+	defer rows.Close()
+	inventory := unit.Inventory{}
+	for rows.Next() {
+		var id string
+		var quantity int64
+		if err := rows.Scan(&id, &quantity); err != nil {
+			return nil, fmt.Errorf("economy repository: scan unit: %w", err)
+		}
+		inventory[unit.ID(id)] = quantity
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("economy repository: iterate units: %w", err)
+	}
+	return inventory, nil
+}
+
 func enrichEconomy(planet *appeconomy.Planet) error {
 	levels := economy.Levels{
 		MetalMine: planet.Levels[building.MetalMine], CrystalMine: planet.Levels[building.CrystalMine],
 		DeuteriumSynthesizer: planet.Levels[building.DeuteriumSynthesizer], SolarPlant: planet.Levels[building.SolarPlant],
 		MetalStorage: planet.Levels[building.MetalStorage], CrystalStorage: planet.Levels[building.CrystalStorage], DeuteriumTank: planet.Levels[building.DeuteriumTank],
+		SolarSatellites: int(planet.Units[unit.SolarSatellite]),
 	}
 	var err error
 	planet.Rates, planet.Energy, err = economy.CalculateRates(planet.Rules, levels, planet.MaximumTemperature)
