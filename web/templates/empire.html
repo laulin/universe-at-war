@@ -1,0 +1,27 @@
+{{define "empire.html"}}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Créer un empire — Universe At War</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="panel" aria-labelledby="page-title">
+      <p class="eyebrow">Nouvelle présence stellaire</p>
+      <h1 id="page-title">Fonder votre empire</h1>
+      <p>Votre planète mère recevra 500 unités de métal et de cristal.</p>
+      {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+      <form method="post" action="/empire">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label for="name">Nom du commandant</label>
+        <input id="name" name="name" minlength="3" maxlength="32" required autofocus>
+        <button type="submit">Fonder l'empire</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
+{{end}}

@@ -16,7 +16,9 @@ import (
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
+	appeconomy "universeatwar/internal/app/economy"
 	appsetup "universeatwar/internal/app/setup"
+	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/server"
 	webassets "universeatwar/web"
@@ -55,12 +57,19 @@ type setupService interface {
 	Activate(context.Context, appauth.Principal, int64, rules.Ruleset) error
 }
 
+type economyService interface {
+	CreateEmpire(context.Context, appauth.Principal, string) (appeconomy.Planet, error)
+	Buildings(context.Context, appauth.Principal) (appeconomy.Planet, []appeconomy.BuildingChoice, error)
+	StartConstruction(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
+}
+
 // Dependencies are the application services required by the HTTP adapter.
 type Dependencies struct {
 	Authentication authenticationService
 	ServerState    stateService
 	CSRFSecrets    secretGenerator
 	Setup          setupService
+	Economy        economyService
 	SecureCookies  bool
 	LoginLimiter   loginRateLimiter
 }
@@ -71,6 +80,7 @@ type Handler struct {
 	serverState    stateService
 	csrfSecrets    secretGenerator
 	setup          setupService
+	economy        economyService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
 	templates      *template.Template
@@ -99,6 +109,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		serverState:    dependencies.ServerState,
 		csrfSecrets:    dependencies.CSRFSecrets,
 		setup:          dependencies.Setup,
+		economy:        dependencies.Economy,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
 		templates:      templates,
@@ -113,6 +124,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /logout", handler.logout)
 	handler.mux.HandleFunc("GET /setup/{step}", handler.setupPage)
 	handler.mux.HandleFunc("POST /setup/{step}", handler.saveSetupStep)
+	handler.mux.HandleFunc("POST /empire", handler.createEmpire)
+	handler.mux.HandleFunc("POST /planets/{planet}/buildings/{building}", handler.startBuilding)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(handler.mux), nil
 }
@@ -357,7 +370,146 @@ func (h *Handler) home(response http.ResponseWriter, request *http.Request) {
 		http.Redirect(response, request, "/setup/1", http.StatusSeeOther)
 		return
 	}
-	http.NotFound(response, request)
+	if h.economy == nil {
+		http.Error(response, "economy unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	planet, choices, err := h.economy.Buildings(request.Context(), principal)
+	if errors.Is(err, appeconomy.ErrNoEmpire) {
+		token, ok := h.ensureCSRF(response, request)
+		if !ok {
+			return
+		}
+		h.render(response, http.StatusOK, "empire.html", pageData{CSRFToken: token})
+		return
+	}
+	if err != nil {
+		http.Error(response, "economy unavailable", http.StatusInternalServerError)
+		return
+	}
+	h.renderEconomy(response, request, http.StatusOK, planet, choices, "")
+}
+
+func (h *Handler) createEmpire(response http.ResponseWriter, request *http.Request) {
+	principal, _, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if !h.validCSRF(response, request) {
+		return
+	}
+	if h.economy == nil {
+		http.NotFound(response, request)
+		return
+	}
+	_, err := h.economy.CreateEmpire(request.Context(), principal, request.PostFormValue("name"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, appeconomy.ErrEmpireExists) {
+			status = http.StatusConflict
+		}
+		h.render(response, status, "empire.html", pageData{CSRFToken: request.PostFormValue("csrf_token"), Error: "Impossible de créer cet empire."})
+		return
+	}
+	http.Redirect(response, request, "/", http.StatusSeeOther)
+}
+
+func (h *Handler) startBuilding(response http.ResponseWriter, request *http.Request) {
+	principal, _, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if !h.validCSRF(response, request) {
+		return
+	}
+	planetID, err := strconv.ParseInt(request.PathValue("planet"), 10, 64)
+	if err != nil {
+		http.NotFound(response, request)
+		return
+	}
+	_, err = h.economy.StartConstruction(request.Context(), principal, planetID, building.ID(request.PathValue("building")), request.PostFormValue("idempotency_key"))
+	if err != nil {
+		planet, choices, loadErr := h.economy.Buildings(request.Context(), principal)
+		if loadErr != nil {
+			http.Error(response, "construction unavailable", http.StatusBadRequest)
+			return
+		}
+		h.renderEconomy(response, request, http.StatusBadRequest, planet, choices, buildingError(err))
+		return
+	}
+	http.Redirect(response, request, "/", http.StatusSeeOther)
+}
+
+type buildingPageChoice struct {
+	ID             building.ID
+	Name           string
+	Level          int
+	CostMetal      int64
+	CostCrystal    int64
+	CostDeuterium  int64
+	Duration       time.Duration
+	CanStart       bool
+	Reason         string
+	IdempotencyKey string
+}
+
+type economyPageData struct {
+	CSRFToken string
+	Error     string
+	Planet    appeconomy.Planet
+	Choices   []buildingPageChoice
+}
+
+func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Request, status int, planet appeconomy.Planet, choices []appeconomy.BuildingChoice, message string) {
+	token, ok := h.ensureCSRF(response, request)
+	if !ok {
+		return
+	}
+	views := make([]buildingPageChoice, 0, len(choices))
+	for _, choice := range choices {
+		reason := choice.Reason
+		if planet.ActiveQueue != nil {
+			reason = "Une construction est déjà en cours."
+		} else if choice.Available && !choice.Affordable {
+			reason = "Ressources insuffisantes."
+		}
+		views = append(views, buildingPageChoice{
+			ID: choice.Definition.ID, Name: buildingName(choice.Definition.ID), Level: choice.Level,
+			CostMetal: choice.Plan.Cost.Metal, CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
+			Duration: choice.Plan.Duration, CanStart: choice.Available && choice.Affordable,
+			Reason: reason, IdempotencyKey: fmt.Sprintf("%s:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
+		})
+	}
+	response.Header().Set("Content-Type", "text/html; charset=utf-8")
+	response.WriteHeader(status)
+	_ = h.templates.ExecuteTemplate(response, "economy.html", economyPageData{CSRFToken: token, Error: message, Planet: planet, Choices: views})
+}
+
+func buildingError(err error) string {
+	switch {
+	case errors.Is(err, appeconomy.ErrQueueBusy):
+		return "Une construction est déjà en cours."
+	case errors.Is(err, appeconomy.ErrInvalidRequest):
+		return "La demande de construction est invalide."
+	default:
+		return "La construction ne peut pas démarrer : vérifiez les ressources et les prérequis."
+	}
+}
+
+func buildingName(id building.ID) string {
+	names := map[building.ID]string{
+		building.MetalMine: "Mine de métal", building.CrystalMine: "Mine de cristal",
+		building.DeuteriumSynthesizer: "Synthétiseur de deutérium", building.SolarPlant: "Centrale solaire",
+		building.MetalStorage: "Hangar de métal", building.CrystalStorage: "Hangar de cristal",
+		building.DeuteriumTank: "Réservoir de deutérium", building.RoboticsFactory: "Usine de robots",
+		building.NaniteFactory: "Usine de nanites", building.Shipyard: "Chantier spatial",
+		building.ResearchLab: "Laboratoire de recherche", building.MissileSilo: "Silo à missiles",
+		building.Terraformer: "Terraformeur",
+	}
+	if name := names[id]; name != "" {
+		return name
+	}
+	return string(id)
 }
 
 func (h *Handler) requirePrincipal(response http.ResponseWriter, request *http.Request) (appauth.Principal, string, bool) {

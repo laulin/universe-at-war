@@ -71,12 +71,14 @@ type Repository interface {
 	Planet(context.Context, int64, time.Time, building.Catalogue) (Planet, error)
 	StartConstruction(context.Context, int64, int64, building.ID, string, time.Time, building.Catalogue) (Queue, error)
 	CompleteDue(context.Context, time.Time, int, building.Catalogue) (int, error)
+	NextDue(context.Context) (time.Time, bool, error)
 }
 
 type Service struct {
 	Clock      domainclock.Clock
 	Repository Repository
 	Catalogue  building.Catalogue
+	Wake       func()
 }
 
 func (s Service) CreateEmpire(ctx context.Context, principal appauth.Principal, name string) (Planet, error) {
@@ -94,7 +96,11 @@ func (s Service) Planet(ctx context.Context, principal appauth.Principal) (Plane
 	if err := s.validatePrincipal(principal); err != nil {
 		return Planet{}, err
 	}
-	return s.Repository.Planet(ctx, principal.AccountID, s.Clock.Now().UTC(), s.Catalogue)
+	now := s.Clock.Now().UTC()
+	if _, err := s.Repository.CompleteDue(ctx, now, 100, s.Catalogue); err != nil {
+		return Planet{}, err
+	}
+	return s.Repository.Planet(ctx, principal.AccountID, now, s.Catalogue)
 }
 
 func (s Service) Buildings(ctx context.Context, principal appauth.Principal) (Planet, []BuildingChoice, error) {
@@ -125,7 +131,18 @@ func (s Service) StartConstruction(ctx context.Context, principal appauth.Princi
 	if planetID <= 0 || strings.TrimSpace(idempotencyKey) == "" || len(idempotencyKey) > 128 {
 		return Queue{}, ErrInvalidRequest
 	}
-	return s.Repository.StartConstruction(ctx, principal.AccountID, planetID, id, idempotencyKey, s.Clock.Now().UTC(), s.Catalogue)
+	queue, err := s.Repository.StartConstruction(ctx, principal.AccountID, planetID, id, idempotencyKey, s.Clock.Now().UTC(), s.Catalogue)
+	if err == nil && s.Wake != nil {
+		s.Wake()
+	}
+	return queue, err
+}
+
+func (s Service) NextDue(ctx context.Context) (time.Time, bool, error) {
+	if s.Repository == nil {
+		return time.Time{}, false, errors.New("economy: incomplete event service")
+	}
+	return s.Repository.NextDue(ctx)
 }
 
 func (s Service) CompleteDue(ctx context.Context, limit int) (int, error) {

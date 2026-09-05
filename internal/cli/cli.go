@@ -16,10 +16,13 @@ import (
 	appadmin "universeatwar/internal/app/administration"
 	appauth "universeatwar/internal/app/authentication"
 	appbootstrap "universeatwar/internal/app/bootstrap"
+	appeconomy "universeatwar/internal/app/economy"
 	appserverstate "universeatwar/internal/app/serverstate"
 	appsetup "universeatwar/internal/app/setup"
+	appsimulation "universeatwar/internal/app/simulation"
 	"universeatwar/internal/auth"
 	appclock "universeatwar/internal/clock"
+	"universeatwar/internal/domain/building"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 	webhandler "universeatwar/internal/web"
 )
@@ -186,11 +189,23 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Clock:      clock,
 		Repository: storagesqlite.NewSetupRepository(database.Write()),
 	}
+	economy := appeconomy.Service{
+		Clock:      clock,
+		Repository: storagesqlite.NewEconomyRepository(database.Write()),
+		Catalogue:  building.DefaultCatalogue(),
+	}
+	worker := appsimulation.NewWorker(clock, &economy)
+	economy.Wake = worker.Wake
+	workerContext, stopWorker := context.WithCancel(ctx)
+	defer stopWorker()
+	workerErrors := make(chan error, 1)
+	go func() { workerErrors <- worker.Run(workerContext) }()
 	handler, err := webhandler.New(webhandler.Dependencies{
 		Authentication: authentication,
 		ServerState:    states,
 		CSRFSecrets:    auth.NewSecretGenerator(random, 32),
 		Setup:          setup,
+		Economy:        economy,
 		SecureCookies:  *secureCookie,
 	})
 	if err != nil {
@@ -211,6 +226,10 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	fmt.Fprintf(r.Stdout, "Listening on http://%s\n", *listenAddress)
 	if err := serve(ctx, server); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return r.commandError("serve", err)
+	}
+	stopWorker()
+	if err := <-workerErrors; err != nil {
+		return r.commandError("simulation", err)
 	}
 	return 0
 }

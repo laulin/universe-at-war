@@ -56,3 +56,18 @@ button { margin-top: .5rem; background: #147da2; color: white; font-weight: 700;
 button:hover { background: #1894bd; }
 input:focus-visible, button:focus-visible { outline: .2rem solid #80e0ff; outline-offset: .15rem; }
 .alert { padding: .75rem; border-left: .25rem solid #ff677d; background: #341521; }
+
+.game-header, .game-shell { width: min(100% - 2rem, 76rem); margin-inline: auto; }
+.game-header { display: flex; justify-content: space-between; align-items: center; padding-block: 1.25rem; border-bottom: 1px solid #294967; }
+.game-header h1 { margin: 0; }
+.game-header small { color: #78d9ff; font-size: .6em; }
+.game-header form { margin: 0; }
+.game-shell { padding-block: 1.5rem 4rem; }
+.resource-grid, .building-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+.resource-grid article, .building-card, .panel-wide { padding: 1rem; border: 1px solid #294967; border-radius: .6rem; background: #0c1a2a; }
+.resource-grid h2, .resource-grid p { margin: .2rem 0; }
+.resource-grid strong { color: #80e0ff; font-size: 1.6rem; }
+.building-card h3 { display: flex; justify-content: space-between; gap: 1rem; }
+.building-card h3 span, .muted { color: #9bb0c5; font-weight: 400; }
+.building-card form { margin-top: .75rem; }
+.queue { margin-block: 1.5rem; }

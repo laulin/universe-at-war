@@ -27,6 +27,22 @@ func NewEconomyRepository(write *sql.DB) *EconomyRepository {
 	return &EconomyRepository{write: write}
 }
 
+func (r *EconomyRepository) NextDue(ctx context.Context) (time.Time, bool, error) {
+	var value string
+	err := r.write.QueryRowContext(ctx, `SELECT due_at FROM scheduled_events WHERE state = 'pending' AND event_type = 'building_completed' ORDER BY due_at, priority, id LIMIT 1`).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("economy repository: next due event: %w", err)
+	}
+	dueAt, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("economy repository: parse next due event: %w", err)
+	}
+	return dueAt, true, nil
+}
+
 func (r *EconomyRepository) CreateEmpire(ctx context.Context, accountID int64, name string, now time.Time) (appeconomy.Planet, error) {
 	tx, err := r.write.BeginTx(ctx, nil)
 	if err != nil {
