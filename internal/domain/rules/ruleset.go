@@ -13,18 +13,30 @@ import (
 	"time"
 )
 
+// CurrentSchemaVersion is the ruleset document layout produced by this build.
+// Older documents decode on top of the current defaults; a newer one is
+// refused so a downgrade never corrupts a saved universe.
+const CurrentSchemaVersion = 2
+
+// DefaultCatalogueVersion names the content catalogue shipped with this build.
+const DefaultCatalogueVersion = "classic-1"
+
+// ErrFutureSchema reports a document written by a newer application.
+var ErrFutureSchema = errors.New("rules: document schema is newer than this application")
+
 // Ruleset groups every setup category. JSON field names are stable persisted
 // identifiers, never translated labels.
 type Ruleset struct {
-	Identity    IdentitySettings    `json:"identity"`
-	Topology    TopologySettings    `json:"topology"`
-	Time        TimeSettings        `json:"time"`
-	Economy     EconomySettings     `json:"economy"`
-	Combat      CombatSettings      `json:"combat"`
-	Progression ProgressionSettings `json:"progression"`
-	Team        TeamSettings        `json:"team"`
-	AI          AISettings          `json:"ai"`
-	Protection  ProtectionSettings  `json:"protection"`
+	SchemaVersion int                 `json:"schema_version"`
+	Identity      IdentitySettings    `json:"identity"`
+	Topology      TopologySettings    `json:"topology"`
+	Time          TimeSettings        `json:"time"`
+	Economy       EconomySettings     `json:"economy"`
+	Combat        CombatSettings      `json:"combat"`
+	Progression   ProgressionSettings `json:"progression"`
+	Team          TeamSettings        `json:"team"`
+	AI            AISettings          `json:"ai"`
+	Protection    ProtectionSettings  `json:"protection"`
 }
 
 type IdentitySettings struct {
@@ -94,6 +106,7 @@ type ProgressionSettings struct {
 	LaboratoryBonus        float64 `json:"laboratory_bonus"`
 	ResearchNetworkEnabled bool    `json:"research_network_enabled"`
 	MaximumColonies        int     `json:"maximum_colonies"`
+	CatalogueVersion       string  `json:"catalogue_version"`
 }
 
 type TeamSettings struct {
@@ -134,6 +147,7 @@ type ProtectionSettings struct {
 // Default provides a conservative local campaign profile.
 func Default() Ruleset {
 	return Ruleset{
+		SchemaVersion: CurrentSchemaVersion,
 		Identity: IdentitySettings{
 			Name: "Universe At War", Language: "fr", Timezone: "Europe/Paris",
 			Description: "Univers spatial persistant local", NetworkVisibility: "local",
@@ -164,7 +178,7 @@ func Default() Ruleset {
 		Progression: ProgressionSettings{
 			BuildingCostMultiplier: 1, ResearchCostMultiplier: 1, ShipCostMultiplier: 1,
 			DefenseCostMultiplier: 1, LaboratoryBonus: 1, ResearchNetworkEnabled: true,
-			MaximumColonies: 9,
+			MaximumColonies: 9, CatalogueVersion: DefaultCatalogueVersion,
 		},
 		Team: TeamSettings{
 			AlliancesEnabled: true, MaximumAllianceSize: 20, ACSEnabled: true,
@@ -187,6 +201,9 @@ func Default() Ruleset {
 
 // Validate rejects configurations that would make the universe inconsistent.
 func (r Ruleset) Validate() error {
+	if r.SchemaVersion < 1 || r.SchemaVersion > CurrentSchemaVersion {
+		return ErrFutureSchema
+	}
 	if strings.TrimSpace(r.Identity.Name) == "" {
 		return errors.New("rules: universe name is required")
 	}
@@ -260,6 +277,9 @@ func (r Ruleset) Validate() error {
 	if r.Progression.MaximumColonies <= 0 {
 		return errors.New("rules: maximum colonies must be positive")
 	}
+	if strings.TrimSpace(r.Progression.CatalogueVersion) == "" {
+		return errors.New("rules: catalogue version is required")
+	}
 	if !oneOf(r.Team.StartMode, "free", "predefined_teams", "humans_vs_ai", "pvpve") {
 		return errors.New("rules: invalid team start mode")
 	}
@@ -290,23 +310,31 @@ func (r Ruleset) Validate() error {
 
 // Encode returns the canonical persisted representation.
 func Encode(r Ruleset) ([]byte, error) {
+	r.SchemaVersion = CurrentSchemaVersion
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
 	return json.Marshal(r)
 }
 
-// Decode strictly parses and validates a persisted ruleset.
+// Decode strictly parses a persisted ruleset on top of the current defaults, so
+// a document written before a section existed keeps decoding. Unknown fields
+// stay refused: they can only come from a newer, incompatible application.
 func Decode(document []byte) (Ruleset, error) {
 	decoder := json.NewDecoder(bytes.NewReader(document))
 	decoder.DisallowUnknownFields()
-	var ruleset Ruleset
+	ruleset := Default()
+	ruleset.SchemaVersion = 1
 	if err := decoder.Decode(&ruleset); err != nil {
 		return Ruleset{}, fmt.Errorf("rules: decode: %w", err)
 	}
 	if err := ensureJSONEnd(decoder); err != nil {
 		return Ruleset{}, err
 	}
+	if ruleset.SchemaVersion > CurrentSchemaVersion {
+		return Ruleset{}, ErrFutureSchema
+	}
+	ruleset.SchemaVersion = CurrentSchemaVersion
 	if err := ruleset.Validate(); err != nil {
 		return Ruleset{}, err
 	}

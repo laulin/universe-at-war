@@ -135,6 +135,7 @@
           <dt>Équipes</dt><dd>alliances {{if .Rules.Team.AlliancesEnabled}}activées{{else}}désactivées{{end}}, ACS {{if .Rules.Team.ACSEnabled}}activé{{else}}désactivé{{end}}</dd>
           <dt>IA</dt><dd>{{.Rules.AI.Total}} au total, difficulté {{.Rules.AI.Difficulty}}</dd>
           <dt>Inscriptions</dt><dd>{{.Rules.Identity.RegistrationPolicy}}, limite {{.Rules.Protection.PlayerLimit}} joueurs</dd>
+          <dt>Catalogue</dt><dd>{{.Rules.Progression.CatalogueVersion}} (bâtiments, recherches et unités)</dd>
         </dl>
         <label class="check confirm"><input type="checkbox" name="confirm" value="yes" required> Je confirme la création définitive de cet univers.</label>
       </section>

@@ -1,6 +1,9 @@
 package rules
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"math"
 	"testing"
 )
@@ -39,5 +42,52 @@ func TestRulesetValidationRejectsImpossibleValues(t *testing.T) {
 				t.Fatal("Validate() error = nil, want validation error")
 			}
 		})
+	}
+}
+
+func TestDecodeFillsSectionsMissingFromOlderDocuments(t *testing.T) {
+	document, err := Encode(Default())
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	var generic map[string]any
+	if err := json.Unmarshal(document, &generic); err != nil {
+		t.Fatalf("unmarshal document: %v", err)
+	}
+	delete(generic, "schema_version")
+	progression, ok := generic["progression"].(map[string]any)
+	if !ok {
+		t.Fatal("progression section is missing from the encoded document")
+	}
+	delete(progression, "catalogue_version")
+	legacy, err := json.Marshal(generic)
+	if err != nil {
+		t.Fatalf("marshal legacy document: %v", err)
+	}
+
+	decoded, err := Decode(legacy)
+	if err != nil {
+		t.Fatalf("Decode(legacy) error = %v", err)
+	}
+	if decoded.SchemaVersion != CurrentSchemaVersion {
+		t.Fatalf("schema version = %d, want %d", decoded.SchemaVersion, CurrentSchemaVersion)
+	}
+	if decoded.Progression.CatalogueVersion != DefaultCatalogueVersion {
+		t.Fatalf("catalogue version = %q, want %q", decoded.Progression.CatalogueVersion, DefaultCatalogueVersion)
+	}
+}
+
+func TestDecodeRejectsFutureSchemaAndUnknownFields(t *testing.T) {
+	document, err := Encode(Default())
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	future := bytes.Replace(document, []byte(`"schema_version":2`), []byte(`"schema_version":99`), 1)
+	if _, err := Decode(future); !errors.Is(err, ErrFutureSchema) {
+		t.Fatalf("Decode(future schema) error = %v, want ErrFutureSchema", err)
+	}
+	unknown := bytes.Replace(document, []byte(`"schema_version":2`), []byte(`"schema_version":2,"mystery":1`), 1)
+	if _, err := Decode(unknown); err == nil {
+		t.Fatal("Decode(unknown field) accepted a document with an unknown field")
 	}
 }
