@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	appeconomy "universeatwar/internal/app/economy"
@@ -95,4 +96,18 @@ func setResources(t *testing.T, ctx context.Context, database *storagesqlite.Dat
 	`, metal, crystal, deuterium, planetID); err != nil {
 		t.Fatalf("set resources: %v", err)
 	}
+}
+
+// benchmarkDatabase prepares an empty universe for a benchmark.
+func benchmarkDatabase(b *testing.B, ctx context.Context) *storagesqlite.Database {
+	b.Helper()
+	database, err := storagesqlite.Open(ctx, filepath.Join(b.TempDir(), "benchmark.db"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = database.Close() })
+	if err := database.Migrate(ctx); err != nil {
+		b.Fatal(err)
+	}
+	return database
 }

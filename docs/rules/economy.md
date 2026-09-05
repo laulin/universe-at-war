@@ -65,6 +65,11 @@ La capacité d'un stockage de niveau `L` est :
 floor(base_storage * 2^L)
 ```
 
+Un stock supérieur à la capacité est ramené à la capacité au règlement suivant :
+le plafond s'applique au stock, pas seulement à sa croissance. Toute livraison
+extérieure — transport, butin, production — doit donc plafonner explicitement ce
+qu'elle dépose, sous peine de perte silencieuse.
+
 ## Constantes et incertitudes
 
 Les coefficients 30/20/10, le facteur de température du deutérium et les
