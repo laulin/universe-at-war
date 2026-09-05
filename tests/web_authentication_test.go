@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -134,6 +135,22 @@ func TestWebBootstrapAuthenticationFlow(t *testing.T) {
 	rotatedCookie := responseCookie(t, changeResponse.Result(), "uaw_session")
 	if rotatedCookie.Value == sessionCookie.Value {
 		t.Fatal("password change did not rotate the session cookie")
+	}
+
+	logoutRequest := postFormRequest("/logout", url.Values{"csrf_token": {changeToken}})
+	logoutRequest.AddCookie(rotatedCookie)
+	logoutRequest.AddCookie(csrfCookie)
+	logoutResponse := httptest.NewRecorder()
+	handler.ServeHTTP(logoutResponse, logoutRequest)
+	if logoutResponse.Code != http.StatusSeeOther || logoutResponse.Header().Get("Location") != "/login" {
+		t.Fatalf("POST /logout = %d %q", logoutResponse.Code, logoutResponse.Header().Get("Location"))
+	}
+	cleared := responseCookie(t, logoutResponse.Result(), "uaw_session")
+	if cleared.MaxAge >= 0 {
+		t.Fatalf("logout cookie MaxAge = %d, want deletion", cleared.MaxAge)
+	}
+	if _, err := authentication.Resolve(ctx, rotatedCookie.Value); !errors.Is(err, appauth.ErrInvalidSession) {
+		t.Fatalf("Resolve(logged out session) error = %v, want ErrInvalidSession", err)
 	}
 }
 

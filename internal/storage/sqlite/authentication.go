@@ -227,6 +227,37 @@ func (r *AuthenticationRepository) ChangePassword(ctx context.Context, change ap
 	return nil
 }
 
+func (r *AuthenticationRepository) RevokeSession(ctx context.Context, digest []byte, now time.Time) error {
+	transaction, err := r.write.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("authentication repository: begin logout: %w", err)
+	}
+	defer func() { _ = transaction.Rollback() }()
+	var accountID int64
+	err = transaction.QueryRowContext(ctx, "SELECT account_id FROM sessions WHERE token_digest = ?", digest).Scan(&accountID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("authentication repository: find logout session: %w", err)
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		UPDATE sessions SET revoked_at = ? WHERE token_digest = ? AND revoked_at IS NULL
+	`, timestamp(now), digest); err != nil {
+		return fmt.Errorf("authentication repository: revoke logout session: %w", err)
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		INSERT INTO audit_log(actor_account_id, action, target_type, target_id, occurred_at)
+		VALUES (?, 'logout', 'account', ?, ?)
+	`, accountID, accountID, timestamp(now)); err != nil {
+		return fmt.Errorf("authentication repository: audit logout: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("authentication repository: commit logout: %w", err)
+	}
+	return nil
+}
+
 type statementExecutor interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }

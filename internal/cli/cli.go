@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	appadmin "universeatwar/internal/app/administration"
 	appauth "universeatwar/internal/app/authentication"
 	appbootstrap "universeatwar/internal/app/bootstrap"
 	appserverstate "universeatwar/internal/app/serverstate"
@@ -55,6 +56,8 @@ func (r Runner) Run(ctx context.Context, arguments []string) int {
 		return r.runDoctor(ctx, arguments[1:])
 	case "serve":
 		return r.runServe(ctx, arguments[1:])
+	case "admin":
+		return r.runAdmin(ctx, arguments[1:])
 	case "help", "-h", "--help":
 		r.usage()
 		return 0
@@ -150,14 +153,8 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		return r.commandError("serve", err)
 	}
 
-	random := r.Random
-	if random == nil {
-		random = cryptorand.Reader
-	}
-	parameters := r.PasswordParameters
-	if parameters == (auth.Parameters{}) {
-		parameters = auth.DefaultParameters()
-	}
+	random := r.randomSource()
+	parameters := r.passwordParameters()
 	passwords := auth.NewPasswordHasher(parameters, random)
 	clock := appclock.System{}
 	bootstrap := appbootstrap.Service{
@@ -218,6 +215,45 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	return 0
 }
 
+func (r Runner) runAdmin(ctx context.Context, arguments []string) int {
+	if len(arguments) == 0 || arguments[0] != "reset-password" {
+		fmt.Fprintln(r.Stderr, "Usage: universe-at-war admin reset-password [options]")
+		return 2
+	}
+	flags := flag.NewFlagSet("admin reset-password", flag.ContinueOnError)
+	flags.SetOutput(r.Stderr)
+	databasePath := flags.String("database", r.databaseDefault(), "path to the SQLite database")
+	username := flags.String("username", "admin", "administrator username")
+	if err := flags.Parse(arguments[1:]); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		fmt.Fprintln(r.Stderr, "admin reset-password: unexpected positional arguments")
+		return 2
+	}
+	database, err := storagesqlite.Open(ctx, *databasePath)
+	if err != nil {
+		return r.commandError("admin reset-password", err)
+	}
+	defer database.Close()
+	if err := database.Migrate(ctx); err != nil {
+		return r.commandError("admin reset-password", err)
+	}
+	random := r.randomSource()
+	service := appadmin.PasswordResetService{
+		Clock:      appclock.System{},
+		Passwords:  auth.NewPasswordHasher(r.passwordParameters(), random),
+		Secrets:    auth.NewSecretGenerator(random, 32),
+		Repository: storagesqlite.NewAdministrationRepository(database.Write()),
+	}
+	result, err := service.Reset(ctx, *username)
+	if err != nil {
+		return r.commandError("admin reset-password", err)
+	}
+	fmt.Fprintf(r.Stdout, "Administrator password reset.\nUsername: %s\nNew password: %s\nThis password will not be shown again.\n", result.Username, result.Password)
+	return 0
+}
+
 func (r Runner) commandError(command string, err error) int {
 	fmt.Fprintf(r.Stderr, "%s: %v\n", command, err)
 	return 1
@@ -230,6 +266,8 @@ Commands:
   serve    start the local Universe At War server
   migrate  apply embedded SQLite migrations
   doctor   verify database schema and integrity
+  admin reset-password
+           replace an administrator password from the local machine
   version  print application version`)
 }
 
@@ -245,6 +283,20 @@ func (r Runner) listenDefault() string {
 		return r.DefaultListen
 	}
 	return "127.0.0.1:8080"
+}
+
+func (r Runner) randomSource() io.Reader {
+	if r.Random != nil {
+		return r.Random
+	}
+	return cryptorand.Reader
+}
+
+func (r Runner) passwordParameters() auth.Parameters {
+	if r.PasswordParameters != (auth.Parameters{}) {
+		return r.PasswordParameters
+	}
+	return auth.DefaultParameters()
 }
 
 func isLoopbackAddress(address string) bool {

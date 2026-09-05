@@ -98,6 +98,7 @@ type Repository interface {
 	CreateSession(context.Context, SessionRecord) error
 	ResolveSession(context.Context, []byte, time.Time) (Principal, error)
 	ChangePassword(context.Context, PasswordChange) error
+	RevokeSession(context.Context, []byte, time.Time) error
 }
 
 // LoginResult contains the only copy of the opaque token returned to the
@@ -236,6 +237,18 @@ func (s Service) ChangePassword(ctx context.Context, token, currentPassword, new
 		return LoginResult{}, err
 	}
 	return LoginResult{Token: newToken, ExpiresAt: expiresAt}, nil
+}
+
+// Logout revokes an opaque session. Repeating the operation is safe.
+func (s Service) Logout(ctx context.Context, token string) error {
+	if err := s.validate(); err != nil {
+		return err
+	}
+	if token == "" {
+		return nil
+	}
+	digest := sha256.Sum256([]byte(token))
+	return s.Repository.RevokeSession(ctx, digest[:], s.Clock.Now().UTC())
 }
 
 func (s Service) newToken() (string, []byte, error) {

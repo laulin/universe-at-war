@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"universeatwar/internal/auth"
+	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 
 func TestVersionCommand(t *testing.T) {
@@ -135,5 +136,53 @@ func TestServeReturnsListenerErrors(t *testing.T) {
 	})
 	if code != 1 || !strings.Contains(stderr.String(), "listener failed") {
 		t.Fatalf("Run(serve) = %d, stderr %q", code, stderr.String())
+	}
+}
+
+func TestAdminResetPasswordReplacesCredential(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "campaign.db")
+	var stdout, stderr bytes.Buffer
+	runner := Runner{
+		Stdout:  &stdout,
+		Stderr:  &stderr,
+		Version: "test",
+		Random:  rand.Reader,
+		PasswordParameters: auth.Parameters{
+			MemoryKiB: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32,
+		},
+		ServeHTTP: func(context.Context, *http.Server) error { return http.ErrServerClosed },
+	}
+	if code := runner.Run(context.Background(), []string{"serve", "--database", databasePath, "--listen", "127.0.0.1:0"}); code != 0 {
+		t.Fatalf("Run(serve) code = %d, stderr = %q", code, stderr.String())
+	}
+	initialOutput := stdout.String()
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := runner.Run(context.Background(), []string{"admin", "reset-password", "--database", databasePath, "--username", "admin"}); code != 0 {
+		t.Fatalf("Run(admin reset-password) code = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "New password:") || stdout.String() == initialOutput {
+		t.Fatalf("reset output = %q, want a new one-time password", stdout.String())
+	}
+
+	ctx := context.Background()
+	database, err := storagesqlite.Open(ctx, databasePath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	assertSingleValueCLI(t, database, "SELECT must_change_password FROM password_credentials", 1)
+	assertSingleValueCLI(t, database, "SELECT COUNT(*) FROM audit_log WHERE action = 'admin_password_reset'", 1)
+}
+
+func assertSingleValueCLI(t *testing.T, database *storagesqlite.Database, query string, want int) {
+	t.Helper()
+	var got int
+	if err := database.Read().QueryRow(query).Scan(&got); err != nil {
+		t.Fatalf("query %q: %v", query, err)
+	}
+	if got != want {
+		t.Fatalf("query %q = %d, want %d", query, got, want)
 	}
 }

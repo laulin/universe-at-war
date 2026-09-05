@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
@@ -30,6 +32,7 @@ type authenticationService interface {
 	Login(context.Context, string, string) (appauth.LoginResult, error)
 	Resolve(context.Context, string) (appauth.Principal, error)
 	ChangePassword(context.Context, string, string, string) (appauth.LoginResult, error)
+	Logout(context.Context, string) error
 }
 
 type stateService interface {
@@ -38,6 +41,12 @@ type stateService interface {
 
 type secretGenerator interface {
 	Generate() (string, error)
+}
+
+type loginRateLimiter interface {
+	Allow(string) (time.Duration, bool)
+	Failure(string)
+	Success(string)
 }
 
 type setupService interface {
@@ -53,6 +62,7 @@ type Dependencies struct {
 	CSRFSecrets    secretGenerator
 	Setup          setupService
 	SecureCookies  bool
+	LoginLimiter   loginRateLimiter
 }
 
 // Handler serves the minimal bootstrap and authentication interface.
@@ -62,6 +72,7 @@ type Handler struct {
 	csrfSecrets    secretGenerator
 	setup          setupService
 	secureCookies  bool
+	loginLimiter   loginRateLimiter
 	templates      *template.Template
 	mux            *http.ServeMux
 }
@@ -79,12 +90,17 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	limiter := dependencies.LoginLimiter
+	if limiter == nil {
+		limiter = NewLoginLimiter(time.Now)
+	}
 	handler := &Handler{
 		authentication: dependencies.Authentication,
 		serverState:    dependencies.ServerState,
 		csrfSecrets:    dependencies.CSRFSecrets,
 		setup:          dependencies.Setup,
 		secureCookies:  dependencies.SecureCookies,
+		loginLimiter:   limiter,
 		templates:      templates,
 		mux:            http.NewServeMux(),
 	}
@@ -94,6 +110,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /login", handler.login)
 	handler.mux.HandleFunc("GET /password/change", handler.passwordChangePage)
 	handler.mux.HandleFunc("POST /password/change", handler.passwordChange)
+	handler.mux.HandleFunc("POST /logout", handler.logout)
 	handler.mux.HandleFunc("GET /setup/{step}", handler.setupPage)
 	handler.mux.HandleFunc("POST /setup/{step}", handler.saveSetupStep)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
@@ -122,9 +139,20 @@ func (h *Handler) login(response http.ResponseWriter, request *http.Request) {
 	if !h.validCSRF(response, request) {
 		return
 	}
+	loginKey := rateLimitKey(request, request.FormValue("username"))
+	if retry, allowed := h.loginLimiter.Allow(loginKey); !allowed {
+		seconds := int(retry.Round(time.Second) / time.Second)
+		if seconds < 1 {
+			seconds = 1
+		}
+		response.Header().Set("Retry-After", strconv.Itoa(seconds))
+		http.Error(response, "too many login attempts", http.StatusTooManyRequests)
+		return
+	}
 	result, err := h.authentication.Login(request.Context(), request.FormValue("username"), request.FormValue("password"))
 	if err != nil {
 		if errors.Is(err, appauth.ErrInvalidCredentials) {
+			h.loginLimiter.Failure(loginKey)
 			token, _ := request.Cookie(csrfCookieName)
 			h.render(response, http.StatusUnauthorized, "login.html", pageData{
 				CSRFToken: token.Value,
@@ -135,6 +163,7 @@ func (h *Handler) login(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "authentication unavailable", http.StatusInternalServerError)
 		return
 	}
+	h.loginLimiter.Success(loginKey)
 	h.setSessionCookie(response, result.Token, result.ExpiresAt)
 	if result.MustChangePassword {
 		http.Redirect(response, request, "/password/change", http.StatusSeeOther)
@@ -179,6 +208,25 @@ func (h *Handler) passwordChange(response http.ResponseWriter, request *http.Req
 	}
 	h.setSessionCookie(response, result.Token, result.ExpiresAt)
 	http.Redirect(response, request, "/setup/1", http.StatusSeeOther)
+}
+
+func (h *Handler) logout(response http.ResponseWriter, request *http.Request) {
+	_, sessionToken, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if !h.validCSRF(response, request) {
+		return
+	}
+	if err := h.authentication.Logout(request.Context(), sessionToken); err != nil {
+		http.Error(response, "logout unavailable", http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(response, &http.Cookie{
+		Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true,
+		Secure: h.secureCookies, SameSite: http.SameSiteLaxMode, MaxAge: -1,
+	})
+	http.Redirect(response, request, "/login", http.StatusSeeOther)
 }
 
 func (h *Handler) setupPage(response http.ResponseWriter, request *http.Request) {
@@ -396,4 +444,12 @@ func (h *Handler) securityHeaders(next http.Handler) http.Handler {
 type pageData struct {
 	CSRFToken string
 	Error     string
+}
+
+func rateLimitKey(request *http.Request, username string) string {
+	host, _, err := net.SplitHostPort(request.RemoteAddr)
+	if err != nil {
+		host = request.RemoteAddr
+	}
+	return host + "|" + strings.ToLower(strings.TrimSpace(username))
 }
