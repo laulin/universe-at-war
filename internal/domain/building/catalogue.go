@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/prerequisite"
 	"universeatwar/internal/domain/rules"
 )
 
@@ -28,19 +29,21 @@ const (
 	Terraformer          ID = "terraformer"
 )
 
-// Requirement is a minimum completed building level.
-type Requirement struct {
-	Building ID
-	Level    int
-}
-
 // Definition contains all data needed by generic construction algorithms.
 type Definition struct {
 	ID            ID
 	BaseCost      economy.Resources
 	Growth        float64
-	Prerequisites []Requirement
+	Prerequisites []prerequisite.Requirement
 	MaximumLevel  int
+}
+
+func requiresBuilding(id ID, level int) prerequisite.Requirement {
+	return prerequisite.Requirement{Kind: prerequisite.Building, ID: string(id), Level: level}
+}
+
+func requiresResearch(id string, level int) prerequisite.Requirement {
+	return prerequisite.Requirement{Kind: prerequisite.Research, ID: id, Level: level}
 }
 
 type Catalogue struct {
@@ -49,6 +52,15 @@ type Catalogue struct {
 
 // Levels maps stable building identifiers to completed levels.
 type Levels map[ID]int
+
+// Generic converts the levels for the shared requirement checker.
+func (l Levels) Generic() prerequisite.Levels {
+	generic := make(prerequisite.Levels, len(l))
+	for id, level := range l {
+		generic[string(id)] = level
+	}
+	return generic
+}
 
 // Plan is the immutable calculation captured when construction starts.
 type Plan struct {
@@ -68,11 +80,11 @@ func DefaultCatalogue() Catalogue {
 		{ID: CrystalStorage, BaseCost: economy.Resources{Metal: 1000, Crystal: 500}, Growth: 2},
 		{ID: DeuteriumTank, BaseCost: economy.Resources{Metal: 1000, Crystal: 1000}, Growth: 2},
 		{ID: RoboticsFactory, BaseCost: economy.Resources{Metal: 400, Crystal: 120, Deuterium: 200}, Growth: 2},
-		{ID: NaniteFactory, BaseCost: economy.Resources{Metal: 1_000_000, Crystal: 500_000, Deuterium: 100_000}, Growth: 2, Prerequisites: []Requirement{{Building: RoboticsFactory, Level: 10}}},
-		{ID: Shipyard, BaseCost: economy.Resources{Metal: 400, Crystal: 200, Deuterium: 100}, Growth: 2, Prerequisites: []Requirement{{Building: RoboticsFactory, Level: 2}}},
+		{ID: NaniteFactory, BaseCost: economy.Resources{Metal: 1_000_000, Crystal: 500_000, Deuterium: 100_000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(RoboticsFactory, 10), requiresResearch("computer_technology", 10)}},
+		{ID: Shipyard, BaseCost: economy.Resources{Metal: 400, Crystal: 200, Deuterium: 100}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(RoboticsFactory, 2)}},
 		{ID: ResearchLab, BaseCost: economy.Resources{Metal: 200, Crystal: 400, Deuterium: 200}, Growth: 2},
-		{ID: MissileSilo, BaseCost: economy.Resources{Metal: 20_000, Crystal: 20_000, Deuterium: 1000}, Growth: 2, Prerequisites: []Requirement{{Building: Shipyard, Level: 1}}},
-		{ID: Terraformer, BaseCost: economy.Resources{Crystal: 50_000, Deuterium: 100_000}, Growth: 2, Prerequisites: []Requirement{{Building: NaniteFactory, Level: 1}}},
+		{ID: MissileSilo, BaseCost: economy.Resources{Metal: 20_000, Crystal: 20_000, Deuterium: 1000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(Shipyard, 1)}},
+		{ID: Terraformer, BaseCost: economy.Resources{Crystal: 50_000, Deuterium: 100_000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(NaniteFactory, 1), requiresResearch("energy_technology", 12)}},
 	}
 	indexed := make(map[ID]Definition, len(definitions))
 	for _, definition := range definitions {
@@ -134,7 +146,7 @@ func (c Catalogue) Duration(cost economy.Resources, roboticsLevel, naniteLevel i
 }
 
 // Plan validates fields and prerequisites and calculates the next level.
-func (c Catalogue) Plan(id ID, levels Levels, usedFields, totalFields int, configured rules.Ruleset) (Plan, error) {
+func (c Catalogue) Plan(id ID, levels Levels, researches prerequisite.Levels, usedFields, totalFields int, configured rules.Ruleset) (Plan, error) {
 	if err := configured.Validate(); err != nil {
 		return Plan{}, err
 	}
@@ -150,10 +162,8 @@ func (c Catalogue) Plan(id ID, levels Levels, usedFields, totalFields int, confi
 			return Plan{}, errors.New("building: invalid levels")
 		}
 	}
-	for _, prerequisite := range definition.Prerequisites {
-		if levels[prerequisite.Building] < prerequisite.Level {
-			return Plan{}, errors.New("building: prerequisites are not met")
-		}
+	if err := prerequisite.Check(definition.Prerequisites, prerequisite.State{Buildings: levels.Generic(), Researches: researches}); err != nil {
+		return Plan{}, err
 	}
 	target := levels[id] + 1
 	cost, err := c.Cost(id, target, configured.Progression.BuildingCostMultiplier)
@@ -173,4 +183,20 @@ func costComponent(base int64, factor float64) (int64, error) {
 		return 0, errors.New("building: cost overflow")
 	}
 	return int64(math.Floor(value)), nil
+}
+
+// RequirementEdges exposes the building graph for validation.
+func (c Catalogue) RequirementEdges() map[prerequisite.Node][]prerequisite.Node {
+	edges := make(map[prerequisite.Node][]prerequisite.Node, len(c.definitions))
+	for id, definition := range c.definitions {
+		node := prerequisite.Node{Kind: prerequisite.Building, ID: string(id)}
+		var dependencies []prerequisite.Node
+		for _, requirement := range definition.Prerequisites {
+			if requirement.Kind == prerequisite.Building {
+				dependencies = append(dependencies, requirement.Node())
+			}
+		}
+		edges[node] = dependencies
+	}
+	return edges
 }

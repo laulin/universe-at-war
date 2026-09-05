@@ -11,6 +11,7 @@ import (
 	"universeatwar/internal/domain/building"
 	domainclock "universeatwar/internal/domain/clock"
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/universe"
 )
@@ -52,6 +53,7 @@ type Planet struct {
 	Rates              economy.Rates
 	Energy             economy.Energy
 	Levels             building.Levels
+	Researches         research.Levels
 	ActiveQueue        *Queue
 	Rules              rules.Ruleset
 }
@@ -138,7 +140,7 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 	choices := make([]BuildingChoice, 0, len(s.Catalogue.Definitions()))
 	for _, definition := range s.Catalogue.Definitions() {
 		choice := BuildingChoice{Definition: definition, Level: planet.Levels[definition.ID]}
-		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Levels, planet.UsedFields, planet.TotalFields, planet.Rules)
+		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
 		if planErr == nil {
 			choice.Plan = plan
 			choice.Available = planet.ActiveQueue == nil

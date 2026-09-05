@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/prerequisite"
 	"universeatwar/internal/domain/rules"
 )
 
@@ -44,18 +45,25 @@ func TestValidateStart(t *testing.T) {
 	catalogue := DefaultCatalogue()
 	configured := rules.Default()
 	levels := Levels{RoboticsFactory: 9}
-	if _, err := catalogue.Plan(NaniteFactory, levels, 20, 100, configured); err == nil {
+	researches := prerequisite.Levels{"computer_technology": 10}
+	if _, err := catalogue.Plan(NaniteFactory, levels, researches, 20, 100, configured); err == nil {
 		t.Fatal("missing prerequisite accepted")
 	}
 	levels[RoboticsFactory] = 10
-	plan, err := catalogue.Plan(NaniteFactory, levels, 20, 100, configured)
+	if _, err := catalogue.Plan(NaniteFactory, levels, prerequisite.Levels{"computer_technology": 9}, 20, 100, configured); err == nil {
+		t.Fatal("missing research prerequisite accepted")
+	}
+	plan, err := catalogue.Plan(NaniteFactory, levels, researches, 20, 100, configured)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if plan.TargetLevel != 1 || plan.Cost != (economy.Resources{Metal: 1_000_000, Crystal: 500_000, Deuterium: 100_000}) {
 		t.Fatalf("plan = %#v", plan)
 	}
-	if _, err := catalogue.Plan(MetalMine, Levels{}, 1, 1, configured); err == nil {
+	if _, err := catalogue.Plan(MetalMine, Levels{}, nil, 1, 1, configured); err == nil {
 		t.Fatal("full planet accepted")
+	}
+	if err := prerequisite.ValidateGraph(catalogue.RequirementEdges()); err != nil {
+		t.Fatalf("default building graph invalid: %v", err)
 	}
 }

@@ -245,7 +245,7 @@ func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, pl
 	if planet.ActiveQueue != nil {
 		return appeconomy.Queue{}, appeconomy.ErrQueueBusy
 	}
-	plan, err := catalogue.Plan(id, planet.Levels, planet.UsedFields, planet.TotalFields, planet.Rules)
+	plan, err := catalogue.Plan(id, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
 	if err != nil {
 		return appeconomy.Queue{}, err
 	}
