@@ -98,3 +98,6 @@ input:focus-visible, button:focus-visible { outline: .2rem solid #80e0ff; outlin
 .game-footer { width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: 1rem 2rem; color: #9bb0c5; border-top: 1px solid #294967; }
 
 .notice { padding: .75rem; border-left: .25rem solid #37bde8; background: #0f2a3a; }
+
+.building-card label { font-size: .85rem; color: #9bb0c5; margin-top: .5rem; }
+.building-card input[type="number"] { width: 100%; }

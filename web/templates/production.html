@@ -1,0 +1,41 @@
+{{define "title"}}{{.Title}}{{end}}
+{{define "content"}}
+  <section class="resource-grid" aria-label="Ressources">
+    <article><h2>Métal</h2><strong>{{.Planet.Stock.Metal}}</strong></article>
+    <article><h2>Cristal</h2><strong>{{.Planet.Stock.Crystal}}</strong></article>
+    <article><h2>Deutérium</h2><strong>{{.Planet.Stock.Deuterium}}</strong></article>
+    <article><h2>Énergie</h2><strong>{{.Planet.Energy.Produced}} / {{.Planet.Energy.Consumed}}</strong></article>
+  </section>
+  {{with .Active}}
+  <section class="queue panel-wide" aria-labelledby="running-title">
+    <p class="eyebrow">Production en cours</p>
+    <h2 id="running-title">{{$.ActiveName}}</h2>
+    <p>{{.Delivered}} / {{.Quantity}} livrés — fin prévue à {{.CompletesAt.Format "15:04:05"}} UTC
+      (<time datetime="{{$.CompletesAt}}" data-countdown data-done="terminée" aria-live="off">{{.CompletesAt.Format "15:04:05"}}</time>)</p>
+  </section>
+  {{end}}
+  <section aria-labelledby="production-title">
+    <p class="eyebrow">{{.Title}}</p>
+    <h2 id="production-title">Unités disponibles</h2>
+    <div class="building-grid">
+    {{range .Choices}}
+      <article class="building-card">
+        <h3>{{.Name}} <span>{{.Owned}} en stock</span></h3>
+        {{if .Duration}}
+        <p>M {{.CostMetal}} · C {{.CostCrystal}} · D {{.CostDeuterium}}</p>
+        <p>Durée unitaire : {{.Duration}}</p>
+        {{end}}
+        {{if .CanOrder}}
+        <form method="post" action="/planets/{{$.Planet.ID}}/{{$.Action}}/{{.ID}}">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+          <label for="quantity-{{.ID}}">Quantité (max {{.Maximum}})</label>
+          <input id="quantity-{{.ID}}" name="quantity" type="number" min="1" max="{{.Maximum}}" value="1" required>
+          <button type="submit">Produire</button>
+        </form>
+        {{else}}<p class="muted">{{.Reason}}</p>{{end}}
+      </article>
+    {{end}}
+    </div>
+  </section>
+{{end}}

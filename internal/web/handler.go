@@ -20,10 +20,14 @@ import (
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	appregistration "universeatwar/internal/app/registration"
+	appresearch "universeatwar/internal/app/research"
 	appsetup "universeatwar/internal/app/setup"
+	appshipyard "universeatwar/internal/app/shipyard"
 	"universeatwar/internal/domain/building"
+	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/server"
+	"universeatwar/internal/domain/unit"
 	webassets "universeatwar/web"
 )
 
@@ -72,6 +76,17 @@ type economyService interface {
 	StartConstruction(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
 }
 
+type researchService interface {
+	Overview(context.Context, appauth.Principal, int64) (appresearch.Overview, error)
+	Start(context.Context, appauth.Principal, int64, research.ID, string) (appresearch.Queue, error)
+}
+
+type shipyardService interface {
+	Ships(context.Context, appauth.Principal, int64) (appshipyard.Overview, error)
+	Defenses(context.Context, appauth.Principal, int64) (appshipyard.Overview, error)
+	OrderFamily(context.Context, appauth.Principal, int64, unit.ID, unit.Family, int64, string) (appshipyard.Order, error)
+}
+
 // Dependencies are the application services required by the HTTP adapter.
 type Dependencies struct {
 	Authentication authenticationService
@@ -79,6 +94,8 @@ type Dependencies struct {
 	CSRFSecrets    secretGenerator
 	Setup          setupService
 	Economy        economyService
+	Research       researchService
+	Shipyard       shipyardService
 	Registration   registrationService
 	Logger         *slog.Logger
 	SecureCookies  bool
@@ -92,6 +109,8 @@ type Handler struct {
 	csrfSecrets    secretGenerator
 	setup          setupService
 	economy        economyService
+	research       researchService
+	shipyard       shipyardService
 	registration   registrationService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
@@ -102,7 +121,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy"}
+	gamePages  = []string{"overview", "economy", "research", "production"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register"}
 )
 
@@ -153,6 +172,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		csrfSecrets:    dependencies.CSRFSecrets,
 		setup:          dependencies.Setup,
 		economy:        dependencies.Economy,
+		research:       dependencies.Research,
+		shipyard:       dependencies.Shipyard,
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
@@ -175,6 +196,12 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /planets/switch", handler.switchBody)
 	handler.mux.HandleFunc("GET /planets/{planet}", handler.planetPage)
 	handler.mux.HandleFunc("POST /planets/{planet}/buildings/{building}", handler.startBuilding)
+	handler.mux.HandleFunc("GET /planets/{planet}/research", handler.researchPage)
+	handler.mux.HandleFunc("POST /planets/{planet}/research/{research}", handler.startResearch)
+	handler.mux.HandleFunc("GET /planets/{planet}/shipyard", handler.shipyardPage)
+	handler.mux.HandleFunc("POST /planets/{planet}/shipyard/{unit}", handler.orderShips)
+	handler.mux.HandleFunc("GET /planets/{planet}/defense", handler.defensePage)
+	handler.mux.HandleFunc("POST /planets/{planet}/defense/{unit}", handler.orderDefenses)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(requestID(requestLogger(dependencies.Logger, handler.mux))), nil
 }
@@ -678,22 +705,6 @@ func buildingError(err error) string {
 	default:
 		return "La construction ne peut pas démarrer : vérifiez les ressources et les prérequis."
 	}
-}
-
-func buildingName(id building.ID) string {
-	names := map[building.ID]string{
-		building.MetalMine: "Mine de métal", building.CrystalMine: "Mine de cristal",
-		building.DeuteriumSynthesizer: "Synthétiseur de deutérium", building.SolarPlant: "Centrale solaire",
-		building.MetalStorage: "Hangar de métal", building.CrystalStorage: "Hangar de cristal",
-		building.DeuteriumTank: "Réservoir de deutérium", building.RoboticsFactory: "Usine de robots",
-		building.NaniteFactory: "Usine de nanites", building.Shipyard: "Chantier spatial",
-		building.ResearchLab: "Laboratoire de recherche", building.MissileSilo: "Silo à missiles",
-		building.Terraformer: "Terraformeur",
-	}
-	if name := names[id]; name != "" {
-		return name
-	}
-	return string(id)
 }
 
 func (h *Handler) requirePrincipal(response http.ResponseWriter, request *http.Request) (appauth.Principal, string, bool) {

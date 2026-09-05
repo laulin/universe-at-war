@@ -246,7 +246,6 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Completer:  events,
 		Wake:       worker.Wake,
 	}
-	_, _ = research, shipyard
 	workerContext, stopWorker := context.WithCancel(ctx)
 	defer stopWorker()
 	workerErrors := make(chan error, 1)
@@ -257,6 +256,8 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		CSRFSecrets:    auth.NewSecretGenerator(random, 32),
 		Setup:          setup,
 		Economy:        economy,
+		Research:       research,
+		Shipyard:       shipyard,
 		Registration:   registration,
 		Logger:         logger,
 		SecureCookies:  *secureCookie,

@@ -13,7 +13,12 @@
     {{if .Bodies}}
     <nav aria-label="Navigation principale">
       <a href="/"{{if eq .Section "overview"}} aria-current="page"{{end}}>Empire</a>
-      {{with .Current}}<a href="/planets/{{.ID}}"{{if eq $.Section "planet"}} aria-current="page"{{end}}>Planète</a>{{end}}
+      {{with .Current}}
+      <a href="/planets/{{.ID}}"{{if eq $.Section "planet"}} aria-current="page"{{end}}>Planète</a>
+      <a href="/planets/{{.ID}}/research"{{if eq $.Section "research"}} aria-current="page"{{end}}>Recherche</a>
+      <a href="/planets/{{.ID}}/shipyard"{{if eq $.Section "shipyard"}} aria-current="page"{{end}}>Chantier</a>
+      <a href="/planets/{{.ID}}/defense"{{if eq $.Section "defense"}} aria-current="page"{{end}}>Défense</a>
+      {{end}}
     </nav>
     <form class="body-picker" method="get" action="/planets/switch">
       <label for="body-picker">Corps actif</label>

@@ -36,7 +36,11 @@ Si la politique d'inscription de l'univers vaut `open`, la page de connexion
 propose de créer un compte joueur ; sinon le parcours reste totalement fermé.
 
 Une fois l'univers lancé, la page principale liste les corps de l'empire et
-chaque planète a sa propre page. La page principale propose de fonder un empire. La
+propose de fonder un empire si le compte n'en a pas encore. Chaque planète a sa
+page de bâtiments, une page de recherche, un chantier spatial et une page de
+défense. Les recherches, les vaisseaux et les défenses suivent les mêmes règles
+transactionnelles que les bâtiments : coût débité au démarrage, achèvement par
+événement planifié, reprise après redémarrage. La
 planète mère affiche les productions, stockages, énergie et cases, ainsi que le
 catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
 worker reprend automatiquement les événements après un redémarrage.

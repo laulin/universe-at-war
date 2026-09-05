@@ -1,0 +1,39 @@
+{{define "title"}}Recherche{{end}}
+{{define "content"}}
+  <section class="resource-grid" aria-label="Ressources">
+    <article><h2>Métal</h2><strong>{{.Planet.Stock.Metal}}</strong></article>
+    <article><h2>Cristal</h2><strong>{{.Planet.Stock.Crystal}}</strong></article>
+    <article><h2>Deutérium</h2><strong>{{.Planet.Stock.Deuterium}}</strong></article>
+    <article><h2>Énergie</h2><strong>{{.Planet.Energy.Produced}} / {{.Planet.Energy.Consumed}}</strong><p>Laboratoire niveau {{.Laboratory}}</p></article>
+  </section>
+  {{with .Active}}
+  <section class="queue panel-wide" aria-labelledby="running-title">
+    <p class="eyebrow">Recherche en cours</p>
+    <h2 id="running-title">{{$.ActiveName}} niveau {{.TargetLevel}}</h2>
+    <p>Fin prévue à {{.CompletesAt.Format "15:04:05"}} UTC —
+      <time datetime="{{$.CompletesAt}}" data-countdown data-done="terminée" aria-live="off">{{.CompletesAt.Format "15:04:05"}}</time></p>
+  </section>
+  {{end}}
+  <section aria-labelledby="research-title">
+    <p class="eyebrow">Progression technologique</p>
+    <h2 id="research-title">Recherches</h2>
+    <div class="building-grid">
+    {{range .Choices}}
+      <article class="building-card">
+        <h3>{{.Name}} <span>niv. {{.Level}}</span></h3>
+        {{if .Duration}}
+        <p>M {{.CostMetal}} · C {{.CostCrystal}} · D {{.CostDeuterium}}{{if .Energy}} · énergie {{.Energy}}{{end}}</p>
+        <p>Durée : {{.Duration}}</p>
+        {{end}}
+        {{if .CanStart}}
+        <form method="post" action="/planets/{{$.Planet.ID}}/research/{{.ID}}">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+          <button type="submit">Rechercher</button>
+        </form>
+        {{else}}<p class="muted">{{.Reason}}</p>{{end}}
+      </article>
+    {{end}}
+    </div>
+  </section>
+{{end}}
