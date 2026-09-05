@@ -1,48 +1,31 @@
-{{define "economy.html"}}
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Planet.Name}} — Universe At War</title>
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body>
-  <header class="game-header">
-    <div><p class="eyebrow">{{.Planet.PlayerName}}</p><h1>{{.Planet.Name}} <small>[{{.Planet.Coordinate}}]</small></h1></div>
-    <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Déconnexion</button></form>
-  </header>
-  <main class="game-shell">
-    {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
-    <section class="resource-grid" aria-label="Ressources">
-      <article><h2>Métal</h2><strong>{{.Planet.Stock.Metal}}</strong><p>+{{.Planet.Rates.Metal}}/h · capacité {{.Planet.Capacity.Metal}}</p></article>
-      <article><h2>Cristal</h2><strong>{{.Planet.Stock.Crystal}}</strong><p>+{{.Planet.Rates.Crystal}}/h · capacité {{.Planet.Capacity.Crystal}}</p></article>
-      <article><h2>Deutérium</h2><strong>{{.Planet.Stock.Deuterium}}</strong><p>+{{.Planet.Rates.Deuterium}}/h · capacité {{.Planet.Capacity.Deuterium}}</p></article>
-      <article><h2>Énergie</h2><strong>{{.Planet.Energy.Produced}} / {{.Planet.Energy.Consumed}}</strong><p>{{.Planet.UsedFields}} / {{.Planet.TotalFields}} cases utilisées</p></article>
-    </section>
-    {{with .Planet.ActiveQueue}}
-    <section class="queue panel-wide"><p class="eyebrow">Construction en cours</p><h2>{{.Building}} niveau {{.TargetLevel}}</h2><p>Achèvement prévu à {{.CompletesAt.Format "15:04:05"}} UTC.</p></section>
+{{define "title"}}{{.Planet.Name}}{{end}}
+{{define "content"}}
+  <section class="resource-grid" aria-label="Ressources">
+    <article><h2>Métal</h2><strong>{{.Planet.Stock.Metal}}</strong><p>+{{.Planet.Rates.Metal}}/h · capacité {{.Planet.Capacity.Metal}}</p></article>
+    <article><h2>Cristal</h2><strong>{{.Planet.Stock.Crystal}}</strong><p>+{{.Planet.Rates.Crystal}}/h · capacité {{.Planet.Capacity.Crystal}}</p></article>
+    <article><h2>Deutérium</h2><strong>{{.Planet.Stock.Deuterium}}</strong><p>+{{.Planet.Rates.Deuterium}}/h · capacité {{.Planet.Capacity.Deuterium}}</p></article>
+    <article><h2>Énergie</h2><strong>{{.Planet.Energy.Produced}} / {{.Planet.Energy.Consumed}}</strong><p>{{.Planet.UsedFields}} / {{.Planet.TotalFields}} cases utilisées</p></article>
+  </section>
+  {{with .Planet.ActiveQueue}}
+  <section class="queue panel-wide"><p class="eyebrow">Construction en cours</p><h2>{{.Building}} niveau {{.TargetLevel}}</h2><p>Achèvement prévu à {{.CompletesAt.Format "15:04:05"}} UTC.</p></section>
+  {{end}}
+  <section aria-labelledby="buildings-title">
+    <p class="eyebrow">Infrastructure planétaire</p>
+    <h2 id="buildings-title">Bâtiments</h2>
+    <div class="building-grid">
+    {{range .Choices}}
+      <article class="building-card">
+        <h3>{{.Name}} <span>niv. {{.Level}}</span></h3>
+        {{if .Duration}}<p>M {{.CostMetal}} · C {{.CostCrystal}} · D {{.CostDeuterium}}</p><p>Durée : {{.Duration}}</p>{{end}}
+        {{if .CanStart}}
+        <form method="post" action="/planets/{{$.Planet.ID}}/buildings/{{.ID}}">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+          <button type="submit">Construire</button>
+        </form>
+        {{else}}<p class="muted">{{.Reason}}</p>{{end}}
+      </article>
     {{end}}
-    <section aria-labelledby="buildings-title">
-      <p class="eyebrow">Infrastructure planétaire</p>
-      <h2 id="buildings-title">Bâtiments</h2>
-      <div class="building-grid">
-      {{range .Choices}}
-        <article class="building-card">
-          <h3>{{.Name}} <span>niv. {{.Level}}</span></h3>
-          {{if .Duration}}<p>M {{.CostMetal}} · C {{.CostCrystal}} · D {{.CostDeuterium}}</p><p>Durée : {{.Duration}}</p>{{end}}
-          {{if .CanStart}}
-          <form method="post" action="/planets/{{$.Planet.ID}}/buildings/{{.ID}}">
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-            <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
-            <button type="submit">Construire</button>
-          </form>
-          {{else}}<p class="muted">{{.Reason}}</p>{{end}}
-        </article>
-      {{end}}
-      </div>
-    </section>
-  </main>
-</body>
-</html>
+    </div>
+  </section>
 {{end}}

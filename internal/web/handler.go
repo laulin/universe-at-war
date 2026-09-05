@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -84,8 +85,39 @@ type Handler struct {
 	economy        economyService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
-	templates      *template.Template
+	clock          func() time.Time
+	pages          map[string]*template.Template
 	mux            *http.ServeMux
+}
+
+// gamePages share the navigation shell; the others keep a bare centred panel.
+var (
+	gamePages  = []string{"overview", "economy"}
+	plainPages = []string{"login", "password-change", "empire", "setup"}
+)
+
+// parsePages clones the right base template per page so that every page may
+// define its own "content" block without colliding with its neighbours.
+func parsePages() (map[string]*template.Template, error) {
+	pages := map[string]*template.Template{}
+	for base, names := range map[string][]string{"layout": gamePages, "shell": plainPages} {
+		root, err := template.ParseFS(webassets.Files, "templates/"+base+".html")
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range names {
+			clone, err := root.Clone()
+			if err != nil {
+				return nil, err
+			}
+			page, err := clone.ParseFS(webassets.Files, "templates/"+name+".html")
+			if err != nil {
+				return nil, err
+			}
+			pages[name] = page
+		}
+	}
+	return pages, nil
 }
 
 // New builds a handler and parses all embedded templates eagerly.
@@ -93,7 +125,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	if dependencies.Authentication == nil || dependencies.ServerState == nil || dependencies.CSRFSecrets == nil {
 		return nil, errors.New("web: incomplete dependencies")
 	}
-	templates, err := template.ParseFS(webassets.Files, "templates/*.html")
+	pages, err := parsePages()
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +145,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		economy:        dependencies.Economy,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
-		templates:      templates,
+		clock:          func() time.Time { return time.Now().UTC() },
+		pages:          pages,
 		mux:            http.NewServeMux(),
 	}
 	handler.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
@@ -126,6 +159,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /setup/{step}", handler.setupPage)
 	handler.mux.HandleFunc("POST /setup/{step}", handler.saveSetupStep)
 	handler.mux.HandleFunc("POST /empire", handler.createEmpire)
+	handler.mux.HandleFunc("GET /planets/switch", handler.switchBody)
 	handler.mux.HandleFunc("GET /planets/{planet}", handler.planetPage)
 	handler.mux.HandleFunc("POST /planets/{planet}/buildings/{building}", handler.startBuilding)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
@@ -147,7 +181,7 @@ func (h *Handler) loginPage(response http.ResponseWriter, request *http.Request)
 	if !ok {
 		return
 	}
-	h.render(response, http.StatusOK, "login.html", pageData{CSRFToken: token})
+	h.render(response, http.StatusOK, "login", pageData{pageShell{CSRFToken: token}})
 }
 
 func (h *Handler) login(response http.ResponseWriter, request *http.Request) {
@@ -169,7 +203,7 @@ func (h *Handler) login(response http.ResponseWriter, request *http.Request) {
 		if errors.Is(err, appauth.ErrInvalidCredentials) {
 			h.loginLimiter.Failure(loginKey)
 			token, _ := request.Cookie(csrfCookieName)
-			h.render(response, http.StatusUnauthorized, "login.html", pageData{
+			h.render(response, http.StatusUnauthorized, "login", pageData{
 				CSRFToken: token.Value,
 				Error:     "Identifiant ou mot de passe incorrect.",
 			})
@@ -195,7 +229,7 @@ func (h *Handler) passwordChangePage(response http.ResponseWriter, request *http
 	if !ok {
 		return
 	}
-	h.render(response, http.StatusOK, "password-change.html", pageData{CSRFToken: token})
+	h.render(response, http.StatusOK, "password-change", pageData{pageShell{CSRFToken: token}})
 }
 
 func (h *Handler) passwordChange(response http.ResponseWriter, request *http.Request) {
@@ -218,7 +252,7 @@ func (h *Handler) passwordChange(response http.ResponseWriter, request *http.Req
 		if errors.Is(err, appauth.ErrWeakPassword) {
 			message = "Le nouveau mot de passe doit contenir au moins 12 caractères."
 		}
-		h.render(response, http.StatusBadRequest, "password-change.html", pageData{CSRFToken: csrfCookie.Value, Error: message})
+		h.render(response, http.StatusBadRequest, "password-change", pageData{pageShell{CSRFToken: csrfCookie.Value, Error: message}})
 		return
 	}
 	h.setSessionCookie(response, result.Token, result.ExpiresAt)
@@ -382,14 +416,14 @@ func (h *Handler) home(response http.ResponseWriter, request *http.Request) {
 		if !ok {
 			return
 		}
-		h.render(response, http.StatusOK, "empire.html", pageData{CSRFToken: token})
+		h.render(response, http.StatusOK, "empire", pageData{pageShell{CSRFToken: token}})
 		return
 	}
 	if err != nil {
 		http.Error(response, "economy unavailable", http.StatusInternalServerError)
 		return
 	}
-	h.renderOverview(response, request, http.StatusOK, planets)
+	h.renderOverview(response, request, http.StatusOK, principal, planets)
 }
 
 // planetPage renders one planet of the signed-in account. A planet owned by
@@ -407,7 +441,7 @@ func (h *Handler) planetPage(response http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
-	planet, choices, err := h.economy.Buildings(request.Context(), principal, planetID)
+	planets, planet, choices, err := h.planetView(request.Context(), principal, planetID)
 	if errors.Is(err, appeconomy.ErrPlanetNotFound) || errors.Is(err, appeconomy.ErrNoEmpire) {
 		http.NotFound(response, request)
 		return
@@ -416,7 +450,35 @@ func (h *Handler) planetPage(response http.ResponseWriter, request *http.Request
 		http.Error(response, "economy unavailable", http.StatusInternalServerError)
 		return
 	}
-	h.renderEconomy(response, request, http.StatusOK, planet, choices, "")
+	h.renderEconomy(response, request, http.StatusOK, principal, planets, planet, choices, "")
+}
+
+// planetView loads the bodies of the account and the selected planet, so the
+// navigation shell and the page itself always agree.
+func (h *Handler) planetView(ctx context.Context, principal appauth.Principal, planetID int64) ([]appeconomy.Planet, appeconomy.Planet, []appeconomy.BuildingChoice, error) {
+	planets, err := h.economy.Planets(ctx, principal)
+	if err != nil {
+		return nil, appeconomy.Planet{}, nil, err
+	}
+	planet, choices, err := h.economy.Buildings(ctx, principal, planetID)
+	if err != nil {
+		return nil, appeconomy.Planet{}, nil, err
+	}
+	return planets, planet, choices, nil
+}
+
+// switchBody redirects the body selector to the chosen planet so the selector
+// works without JavaScript.
+func (h *Handler) switchBody(response http.ResponseWriter, request *http.Request) {
+	if _, _, ok := h.requirePrincipal(response, request); !ok {
+		return
+	}
+	planetID, err := strconv.ParseInt(request.URL.Query().Get("planet"), 10, 64)
+	if err != nil || planetID <= 0 {
+		http.Redirect(response, request, "/", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(response, request, fmt.Sprintf("/planets/%d", planetID), http.StatusSeeOther)
 }
 
 func (h *Handler) planetParameter(response http.ResponseWriter, request *http.Request) (int64, bool) {
@@ -446,7 +508,7 @@ func (h *Handler) createEmpire(response http.ResponseWriter, request *http.Reque
 		if errors.Is(err, appeconomy.ErrEmpireExists) {
 			status = http.StatusConflict
 		}
-		h.render(response, status, "empire.html", pageData{CSRFToken: request.PostFormValue("csrf_token"), Error: "Impossible de créer cet empire."})
+		h.render(response, status, "empire", pageData{pageShell{CSRFToken: request.PostFormValue("csrf_token"), Error: "Impossible de créer cet empire."}})
 		return
 	}
 	http.Redirect(response, request, "/", http.StatusSeeOther)
@@ -470,12 +532,12 @@ func (h *Handler) startBuilding(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	if err != nil {
-		planet, choices, loadErr := h.economy.Buildings(request.Context(), principal, planetID)
+		planets, planet, choices, loadErr := h.planetView(request.Context(), principal, planetID)
 		if loadErr != nil {
 			http.Error(response, "construction unavailable", http.StatusBadRequest)
 			return
 		}
-		h.renderEconomy(response, request, http.StatusBadRequest, planet, choices, buildingError(err))
+		h.renderEconomy(response, request, http.StatusBadRequest, principal, planets, planet, choices, buildingError(err))
 		return
 	}
 	http.Redirect(response, request, fmt.Sprintf("/planets/%d", planetID), http.StatusSeeOther)
@@ -495,28 +557,26 @@ type buildingPageChoice struct {
 }
 
 type overviewPageData struct {
-	CSRFToken string
-	Planets   []appeconomy.Planet
+	pageShell
+	Planets []appeconomy.Planet
 }
 
-func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Request, status int, planets []appeconomy.Planet) {
+func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Request, status int, principal appauth.Principal, planets []appeconomy.Planet) {
 	token, ok := h.ensureCSRF(response, request)
 	if !ok {
 		return
 	}
-	response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	response.WriteHeader(status)
-	_ = h.templates.ExecuteTemplate(response, "overview.html", overviewPageData{CSRFToken: token, Planets: planets})
+	shell := h.gameShell(token, principal, "overview", planets, 0)
+	h.render(response, status, "overview", overviewPageData{pageShell: shell, Planets: planets})
 }
 
 type economyPageData struct {
-	CSRFToken string
-	Error     string
-	Planet    appeconomy.Planet
-	Choices   []buildingPageChoice
+	pageShell
+	Planet  appeconomy.Planet
+	Choices []buildingPageChoice
 }
 
-func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Request, status int, planet appeconomy.Planet, choices []appeconomy.BuildingChoice, message string) {
+func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Request, status int, principal appauth.Principal, planets []appeconomy.Planet, planet appeconomy.Planet, choices []appeconomy.BuildingChoice, message string) {
 	token, ok := h.ensureCSRF(response, request)
 	if !ok {
 		return
@@ -536,9 +596,9 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 			Reason: reason, IdempotencyKey: fmt.Sprintf("%s:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
 		})
 	}
-	response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	response.WriteHeader(status)
-	_ = h.templates.ExecuteTemplate(response, "economy.html", economyPageData{CSRFToken: token, Error: message, Planet: planet, Choices: views})
+	shell := h.gameShell(token, principal, "planet", planets, planet.ID)
+	shell.Error = message
+	h.render(response, status, "economy", economyPageData{pageShell: shell, Planet: planet, Choices: views})
 }
 
 func buildingError(err error) string {
@@ -631,12 +691,19 @@ func (h *Handler) setSessionCookie(response http.ResponseWriter, token string, e
 	})
 }
 
-func (h *Handler) render(response http.ResponseWriter, status int, name string, data pageData) {
-	response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	response.WriteHeader(status)
-	if err := h.templates.ExecuteTemplate(response, name, data); err != nil {
+func (h *Handler) render(response http.ResponseWriter, status int, name string, data any) {
+	page, known := h.pages[name]
+	if !known {
+		http.Error(response, "page unavailable", http.StatusInternalServerError)
 		return
 	}
+	root := "layout"
+	if slices.Contains(plainPages, name) {
+		root = "shell"
+	}
+	response.Header().Set("Content-Type", "text/html; charset=utf-8")
+	response.WriteHeader(status)
+	_ = page.ExecuteTemplate(response, root, data)
 }
 
 func (h *Handler) securityHeaders(next http.Handler) http.Handler {
@@ -649,9 +716,45 @@ func (h *Handler) securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-type pageData struct {
+// pageShell carries everything the layout needs, whatever the page shows.
+type pageShell struct {
 	CSRFToken string
 	Error     string
+	Username  string
+	Section   string
+	Bodies    []bodyLink
+	Current   *bodyLink
+	Now       time.Time
+}
+
+// bodyLink is one entry of the celestial body selector.
+type bodyLink struct {
+	ID         int64
+	Name       string
+	Coordinate string
+	Current    bool
+}
+
+type pageData struct {
+	pageShell
+}
+
+// gameShell builds the navigation shell from the bodies of the account.
+func (h *Handler) gameShell(token string, principal appauth.Principal, section string, planets []appeconomy.Planet, currentID int64) pageShell {
+	shell := pageShell{CSRFToken: token, Username: principal.Username, Section: section, Now: h.clock()}
+	for _, planet := range planets {
+		link := bodyLink{ID: planet.ID, Name: planet.Name, Coordinate: planet.Coordinate.String(), Current: planet.ID == currentID}
+		shell.Bodies = append(shell.Bodies, link)
+		if link.Current {
+			current := link
+			shell.Current = &current
+		}
+	}
+	if shell.Current == nil && len(shell.Bodies) > 0 {
+		current := shell.Bodies[0]
+		shell.Current = &current
+	}
+	return shell
 }
 
 func rateLimitKey(request *http.Request, username string) string {

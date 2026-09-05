@@ -1,0 +1,39 @@
+{{define "layout"}}<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{template "title" .}} — Universe At War</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="game-header">
+    <a class="brand" href="/">Universe At War</a>
+    {{if .Bodies}}
+    <nav aria-label="Navigation principale">
+      <a href="/"{{if eq .Section "overview"}} aria-current="page"{{end}}>Empire</a>
+      {{with .Current}}<a href="/planets/{{.ID}}"{{if eq $.Section "planet"}} aria-current="page"{{end}}>Planète</a>{{end}}
+    </nav>
+    <form class="body-picker" method="get" action="/planets/switch">
+      <label for="body-picker">Corps actif</label>
+      <select id="body-picker" name="planet">
+        {{range .Bodies}}<option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.Name}} [{{.Coordinate}}]</option>{{end}}
+      </select>
+      <button type="submit">Aller</button>
+    </form>
+    {{end}}
+    <div class="session">
+      {{if .Username}}<span class="muted">{{.Username}}</span>{{end}}
+      <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Déconnexion</button></form>
+    </div>
+  </header>
+  <main class="game-shell">
+    {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+    {{template "content" .}}
+  </main>
+  <footer class="game-footer">
+    Heure serveur <time datetime="{{.Now.Format "2006-01-02T15:04:05Z07:00"}}" data-server-time>{{.Now.Format "15:04:05"}} UTC</time>
+  </footer>
+</body>
+</html>{{end}}

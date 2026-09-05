@@ -10,17 +10,14 @@ import (
 )
 
 type setupPageData struct {
-	CSRFToken string
-	Error     string
-	Step      int
-	Version   int64
-	Rules     rules.Ruleset
+	pageShell
+	Step    int
+	Version int64
+	Rules   rules.Ruleset
 }
 
 func (h *Handler) renderSetup(response http.ResponseWriter, status int, data setupPageData) {
-	response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	response.WriteHeader(status)
-	_ = h.templates.ExecuteTemplate(response, "setup.html", data)
+	h.render(response, status, "setup", data)
 }
 
 func updateRulesFromForm(step int, request *http.Request, configured *rules.Ruleset) error {
