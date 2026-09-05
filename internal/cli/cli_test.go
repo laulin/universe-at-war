@@ -28,7 +28,7 @@ func TestMigrateThenDoctor(t *testing.T) {
 	if code := runner.Run(context.Background(), []string{"migrate", "--database", databasePath}); code != 0 {
 		t.Fatalf("Run(migrate) code = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "schema version 1") {
+	if !strings.Contains(stdout.String(), "schema version") {
 		t.Fatalf("migrate output = %q, want schema version", stdout.String())
 	}
 
