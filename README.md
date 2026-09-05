@@ -17,12 +17,15 @@ la machine d'état du serveur. La spécification complète se trouve dans
 ## Commandes disponibles
 
 ```sh
+go run ./cmd/universe-at-war serve
 go run ./cmd/universe-at-war migrate --database universe-at-war.db
 go run ./cmd/universe-at-war doctor --database universe-at-war.db
 go run ./cmd/universe-at-war version
 ```
 
-La commande `migrate` applique les migrations embarquées. `doctor` vérifie la
+Au premier `serve`, le terminal affiche une seule fois l'identifiant et le mot
+de passe aléatoire de l'administrateur initial. La commande `migrate` applique
+les migrations embarquées. `doctor` vérifie la
 version du schéma, l'intégrité SQLite et les clés étrangères sans modifier les
 données.
 
@@ -38,4 +41,3 @@ make build
 La CI ajoute `staticcheck`, `govulncheck` et les compilations Linux, Windows et
 macOS. Les fonctionnalités métier sont développées en TDD, par tranches
 transactionnelles.
-

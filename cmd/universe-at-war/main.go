@@ -2,18 +2,31 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"universeatwar/internal/cli"
+	"universeatwar/internal/config"
 )
 
 var version = "dev"
 
 func main() {
-	runner := cli.Runner{
-		Stdout:  os.Stdout,
-		Stderr:  os.Stderr,
-		Version: version,
+	configuration, err := config.Load(os.Getenv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
 	}
-	os.Exit(runner.Run(context.Background(), os.Args[1:]))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	runner := cli.Runner{
+		Stdout:          os.Stdout,
+		Stderr:          os.Stderr,
+		Version:         version,
+		DefaultDatabase: configuration.DatabasePath,
+		DefaultListen:   configuration.ListenAddress,
+	}
+	os.Exit(runner.Run(ctx, os.Args[1:]))
 }
