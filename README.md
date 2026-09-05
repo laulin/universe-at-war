@@ -43,6 +43,12 @@ données. `admin reset-password` constitue la récupération locale : elle gén�
 un nouveau secret, invalide toutes les sessions du compte et exige un nouveau
 changement de mot de passe.
 
+## Plans d'implémentation
+
+Les jalons restants sont découpés en tâches exécutables dans
+[`docs/plans/`](docs/plans/README.md) : feuille de route, socle transverse et
+plans détaillés des recherches, du moteur de flotte et du combat.
+
 ## Qualité
 
 ```sh
