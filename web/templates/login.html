@@ -1,0 +1,30 @@
+{{define "login.html"}}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion — Universe At War</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="panel" aria-labelledby="page-title">
+      <p class="eyebrow">Centre de commandement</p>
+      <h1 id="page-title">Universe At War</h1>
+      <p>Connectez-vous pour administrer ou rejoindre cet univers.</p>
+      {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+      <form method="post" action="/login">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label for="username">Identifiant</label>
+        <input id="username" name="username" autocomplete="username" required autofocus>
+        <label for="password">Mot de passe</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Se connecter</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
+{{end}}
+
