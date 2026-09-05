@@ -102,6 +102,12 @@ func (c Catalogue) Definitions() []Definition {
 	return result
 }
 
+// Definition returns one entry of the catalogue.
+func (c Catalogue) Definition(id ID) (Definition, bool) {
+	definition, known := c.definitions[id]
+	return definition, known
+}
+
 func (c Catalogue) Cost(id ID, targetLevel int, multiplier float64) (economy.Resources, error) {
 	definition, ok := c.definitions[id]
 	if !ok {

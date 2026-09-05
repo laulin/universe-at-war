@@ -9,6 +9,7 @@ import (
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
+	"universeatwar/internal/domain/catalogue"
 	domainclock "universeatwar/internal/domain/clock"
 	"universeatwar/internal/domain/rules"
 )
@@ -70,6 +71,9 @@ func (s Service) Save(ctx context.Context, principal appauth.Principal, step int
 	if step < 1 || step > 9 {
 		return Draft{}, errors.New("setup: only steps 1 through 9 can be saved")
 	}
+	if err := catalogue.ValidateRuleset(updated); err != nil {
+		return Draft{}, err
+	}
 	document, err := rules.Encode(updated)
 	if err != nil {
 		return Draft{}, err
@@ -84,6 +88,9 @@ func (s Service) Save(ctx context.Context, principal appauth.Principal, step int
 // Activate creates an immutable ruleset version and starts the universe.
 func (s Service) Activate(ctx context.Context, principal appauth.Principal, expectedVersion int64, configured rules.Ruleset) error {
 	if err := s.authorize(principal); err != nil {
+		return err
+	}
+	if err := catalogue.ValidateRuleset(configured); err != nil {
 		return err
 	}
 	document, err := rules.Encode(configured)
