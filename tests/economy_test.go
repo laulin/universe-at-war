@@ -39,7 +39,7 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	}
 
 	clock.Advance(2 * time.Hour)
-	planet, err = service.Planet(ctx, principal)
+	planet, err = service.Planet(ctx, principal, 0)
 	if err != nil {
 		t.Fatalf("Planet() error = %v", err)
 	}
@@ -61,7 +61,7 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	if _, err := service.StartConstruction(ctx, principal, planet.ID, building.SolarPlant, "build-2"); !errors.Is(err, appeconomy.ErrQueueBusy) {
 		t.Fatalf("parallel queue error = %v", err)
 	}
-	planet, err = service.Planet(ctx, principal)
+	planet, err = service.Planet(ctx, principal, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	if err != nil || completed != 1 {
 		t.Fatalf("redelivered CompleteDue() = %d, %v", completed, err)
 	}
-	planet, err = service.Planet(ctx, principal)
+	planet, err = service.Planet(ctx, principal, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,4 +235,67 @@ func economyDatabase(t *testing.T, ctx context.Context, accountCount int) *stora
 		t.Fatal(err)
 	}
 	return database
+}
+
+func TestPlanetsListEveryOwnedBodyAndRejectForeignOnes(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
+	clock := appclock.NewFake(now)
+	database := economyDatabase(t, ctx, 2)
+	universe := newWorld(t, database, clock)
+	owner := appauth.Principal{AccountID: 1}
+	stranger := appauth.Principal{AccountID: 2}
+
+	home, err := universe.Economy.CreateEmpire(ctx, owner, "Alpha")
+	if err != nil {
+		t.Fatalf("CreateEmpire() error = %v", err)
+	}
+	if _, err := universe.Economy.CreateEmpire(ctx, stranger, "Beta"); err != nil {
+		t.Fatalf("second CreateEmpire() error = %v", err)
+	}
+	colony := insertColony(t, ctx, database, 1, "Colonie", 1, 2, 4)
+
+	clock.Advance(time.Hour)
+	planets, err := universe.Economy.Planets(ctx, owner)
+	if err != nil {
+		t.Fatalf("Planets() error = %v", err)
+	}
+	if len(planets) != 2 {
+		t.Fatalf("planets = %d, want 2", len(planets))
+	}
+	if planets[0].ID != home.ID || planets[1].ID != colony {
+		t.Fatalf("planets = %d and %d, want %d then %d", planets[0].ID, planets[1].ID, home.ID, colony)
+	}
+	if planets[1].Name != "Colonie" || planets[1].Stock.Metal != 530 {
+		t.Fatalf("colony projection = %#v", planets[1])
+	}
+
+	if _, err := universe.Economy.Planet(ctx, owner, colony); err != nil {
+		t.Fatalf("Planet(own colony) error = %v", err)
+	}
+	if _, err := universe.Economy.Planet(ctx, stranger, colony); !errors.Is(err, appeconomy.ErrPlanetNotFound) {
+		t.Fatalf("Planet(foreign planet) error = %v, want ErrPlanetNotFound", err)
+	}
+	if _, _, err := universe.Economy.Buildings(ctx, stranger, colony); !errors.Is(err, appeconomy.ErrPlanetNotFound) {
+		t.Fatalf("Buildings(foreign planet) error = %v, want ErrPlanetNotFound", err)
+	}
+}
+
+func insertColony(t *testing.T, ctx context.Context, database *storagesqlite.Database, playerID int64, name string, galaxy, system, position int) int64 {
+	t.Helper()
+	result, err := database.Write().ExecContext(ctx, `
+		INSERT INTO planets(owner_player_id, name, galaxy, system, position, total_fields, minimum_temperature, maximum_temperature, created_at)
+		VALUES (?, ?, ?, ?, ?, 190, 10, 50, '2042-09-10T11:12:13Z')
+	`, playerID, name, galaxy, system, position)
+	if err != nil {
+		t.Fatalf("insert colony: %v", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("colony id: %v", err)
+	}
+	if _, err := database.Write().ExecContext(ctx, "INSERT INTO planet_resources(planet_id, produced_at) VALUES (?, '2042-09-10T11:12:13Z')", id); err != nil {
+		t.Fatalf("insert colony resources: %v", err)
+	}
+	return id
 }

@@ -19,6 +19,7 @@ var (
 	ErrForbidden      = errors.New("economy: authenticated account required")
 	ErrEmpireExists   = errors.New("economy: account already owns an empire")
 	ErrNoEmpire       = errors.New("economy: account has no empire")
+	ErrPlanetNotFound = errors.New("economy: planet does not belong to this account")
 	ErrUniverseFull   = errors.New("economy: universe has no free position")
 	ErrQueueBusy      = errors.New("economy: a construction is already active")
 	ErrInvalidName    = errors.New("economy: player name must contain 3 to 32 characters")
@@ -68,7 +69,8 @@ type BuildingChoice struct {
 // Repository is the atomic persistence boundary for economic use cases.
 type Repository interface {
 	CreateEmpire(context.Context, int64, string, time.Time) (Planet, error)
-	Planet(context.Context, int64, time.Time, building.Catalogue) (Planet, error)
+	Planet(context.Context, int64, int64, time.Time, building.Catalogue) (Planet, error)
+	Planets(context.Context, int64, time.Time, building.Catalogue) ([]Planet, error)
 	StartConstruction(context.Context, int64, int64, building.ID, string, time.Time, building.Catalogue) (Queue, error)
 }
 
@@ -97,20 +99,39 @@ func (s Service) CreateEmpire(ctx context.Context, principal appauth.Principal, 
 	return s.Repository.CreateEmpire(ctx, principal.AccountID, name, s.Clock.Now().UTC())
 }
 
-func (s Service) Planet(ctx context.Context, principal appauth.Principal) (Planet, error) {
+// Planet returns one settled planet of the account. A zero identifier selects
+// the oldest planet, which is the home world until colonisation exists.
+func (s Service) Planet(ctx context.Context, principal appauth.Principal, planetID int64) (Planet, error) {
 	if err := s.validatePrincipal(principal); err != nil {
 		return Planet{}, err
 	}
-	if s.Completer != nil {
-		if _, err := s.Completer.CompleteDue(ctx, 100); err != nil {
-			return Planet{}, err
-		}
+	if err := s.settleDueEvents(ctx); err != nil {
+		return Planet{}, err
 	}
-	return s.Repository.Planet(ctx, principal.AccountID, s.Clock.Now().UTC(), s.Catalogue)
+	return s.Repository.Planet(ctx, principal.AccountID, planetID, s.Clock.Now().UTC(), s.Catalogue)
 }
 
-func (s Service) Buildings(ctx context.Context, principal appauth.Principal) (Planet, []BuildingChoice, error) {
-	planet, err := s.Planet(ctx, principal)
+// Planets returns every settled body of the account, oldest first.
+func (s Service) Planets(ctx context.Context, principal appauth.Principal) ([]Planet, error) {
+	if err := s.validatePrincipal(principal); err != nil {
+		return nil, err
+	}
+	if err := s.settleDueEvents(ctx); err != nil {
+		return nil, err
+	}
+	return s.Repository.Planets(ctx, principal.AccountID, s.Clock.Now().UTC(), s.Catalogue)
+}
+
+func (s Service) settleDueEvents(ctx context.Context) error {
+	if s.Completer == nil {
+		return nil
+	}
+	_, err := s.Completer.CompleteDue(ctx, 100)
+	return err
+}
+
+func (s Service) Buildings(ctx context.Context, principal appauth.Principal, planetID int64) (Planet, []BuildingChoice, error) {
+	planet, err := s.Planet(ctx, principal, planetID)
 	if err != nil {
 		return Planet{}, nil, err
 	}

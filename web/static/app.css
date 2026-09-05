@@ -71,3 +71,15 @@ input:focus-visible, button:focus-visible { outline: .2rem solid #80e0ff; outlin
 .building-card h3 span, .muted { color: #9bb0c5; font-weight: 400; }
 .building-card form { margin-top: .75rem; }
 .queue { margin-block: 1.5rem; }
+
+.bodies { width: 100%; border-collapse: collapse; }
+.bodies caption { text-align: left; color: #9bb0c5; padding-block: .5rem; }
+.bodies th, .bodies td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid #294967; }
+.bodies thead th { color: #78d9ff; text-transform: uppercase; letter-spacing: .06em; font-size: .8rem; }
+.bodies a { color: #80e0ff; }
+@media (max-width: 40rem) {
+  .bodies, .bodies tbody, .bodies tr, .bodies td, .bodies th { display: block; }
+  .bodies thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .bodies tr { border: 1px solid #294967; border-radius: .6rem; margin-bottom: 1rem; padding: .4rem; }
+  .bodies td, .bodies th { border-bottom: 0; }
+}

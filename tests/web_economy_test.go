@@ -82,30 +82,84 @@ func TestWebEconomyFlowIsPlayableAndCSRFProtected(t *testing.T) {
 		t.Fatalf("POST /empire = %d %q", created.Code, created.Body.String())
 	}
 
-	overviewRequest := httptest.NewRequest(http.MethodGet, "/", nil)
-	overviewRequest.AddCookie(session)
-	overviewRequest.AddCookie(csrfCookie)
-	overview := httptest.NewRecorder()
-	handler.ServeHTTP(overview, overviewRequest)
-	if overview.Code != http.StatusOK || !strings.Contains(overview.Body.String(), "Mine de métal") || !strings.Contains(overview.Body.String(), "500") {
-		t.Fatalf("economic GET / = %d %q", overview.Code, overview.Body.String())
+	overview := getPage(t, handler, "/", session, csrfCookie)
+	if !strings.Contains(overview, "Planète mère") || !strings.Contains(overview, `href="/planets/1"`) {
+		t.Fatalf("empire overview = %q", overview)
 	}
-	idempotencyKey := hiddenValue(t, overview.Body.String(), "idempotency_key")
+
+	planetPage := getPage(t, handler, "/planets/1", session, csrfCookie)
+	if !strings.Contains(planetPage, "Mine de métal") || !strings.Contains(planetPage, "500") {
+		t.Fatalf("planet page = %q", planetPage)
+	}
+	idempotencyKey := hiddenValue(t, planetPage, "idempotency_key")
 	build := postFormRequest("/planets/1/buildings/metal_mine", url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {idempotencyKey}})
 	build.AddCookie(session)
 	build.AddCookie(csrfCookie)
 	started := httptest.NewRecorder()
 	handler.ServeHTTP(started, build)
-	if started.Code != http.StatusSeeOther || started.Header().Get("Location") != "/" {
+	if started.Code != http.StatusSeeOther || started.Header().Get("Location") != "/planets/1" {
 		t.Fatalf("POST building = %d %q", started.Code, started.Body.String())
 	}
 
-	queuedRequest := httptest.NewRequest(http.MethodGet, "/", nil)
-	queuedRequest.AddCookie(session)
-	queuedRequest.AddCookie(csrfCookie)
-	queued := httptest.NewRecorder()
-	handler.ServeHTTP(queued, queuedRequest)
-	if queued.Code != http.StatusOK || !strings.Contains(queued.Body.String(), "Construction en cours") || !strings.Contains(queued.Body.String(), "440") {
-		t.Fatalf("queued GET / = %d %q", queued.Code, queued.Body.String())
+	queued := getPage(t, handler, "/planets/1", session, csrfCookie)
+	if !strings.Contains(queued, "Construction en cours") || !strings.Contains(queued, "440") {
+		t.Fatalf("queued planet page = %q", queued)
 	}
+}
+
+func TestWebPlanetOfAnotherAccountIsNotFound(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
+	database := economyDatabase(t, ctx, 2)
+	universe := newWorld(t, database, appclock.NewFake(now))
+	if _, err := universe.Economy.CreateEmpire(ctx, appauth.Principal{AccountID: 1}, "Alpha"); err != nil {
+		t.Fatalf("CreateEmpire() error = %v", err)
+	}
+	if _, err := universe.Economy.CreateEmpire(ctx, appauth.Principal{AccountID: 2}, "Beta"); err != nil {
+		t.Fatalf("CreateEmpire() error = %v", err)
+	}
+	handler, err := webhandler.New(webhandler.Dependencies{
+		Authentication: webAuthenticationStub{principal: appauth.Principal{AccountID: 2, Username: "player2"}},
+		ServerState:    runningStateStub{}, CSRFSecrets: sequenceSecret{value: "csrf-token"}, Economy: universe.Economy,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := &http.Cookie{Name: "uaw_session", Value: "session"}
+	csrfCookie := &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
+
+	request := httptest.NewRequest(http.MethodGet, "/planets/1", nil)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("GET foreign planet = %d, want 404", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), "Alpha") {
+		t.Fatalf("foreign planet response leaked its owner: %q", recorder.Body.String())
+	}
+
+	build := postFormRequest("/planets/1/buildings/metal_mine", url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {"key"}})
+	build.AddCookie(session)
+	build.AddCookie(csrfCookie)
+	denied := httptest.NewRecorder()
+	handler.ServeHTTP(denied, build)
+	if denied.Code != http.StatusNotFound {
+		t.Fatalf("POST on foreign planet = %d, want 404", denied.Code)
+	}
+}
+
+func getPage(t *testing.T, handler http.Handler, target string, cookies ...*http.Cookie) string {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, target, nil)
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("GET %s = %d %q", target, recorder.Code, recorder.Body.String())
+	}
+	return recorder.Body.String()
 }

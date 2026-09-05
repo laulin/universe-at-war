@@ -1,0 +1,41 @@
+{{define "overview.html"}}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Empire — Universe At War</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="game-header">
+    <div><p class="eyebrow">Vue d'ensemble</p><h1>Empire</h1></div>
+    <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Déconnexion</button></form>
+  </header>
+  <main class="game-shell">
+    <section aria-labelledby="bodies-title">
+      <p class="eyebrow">Corps célestes</p>
+      <h2 id="bodies-title">Planètes</h2>
+      <table class="bodies">
+        <caption>Ressources réglées à l'instant du serveur.</caption>
+        <thead>
+          <tr><th scope="col">Planète</th><th scope="col">Coordonnées</th><th scope="col">Métal</th><th scope="col">Cristal</th><th scope="col">Deutérium</th><th scope="col">Construction</th></tr>
+        </thead>
+        <tbody>
+        {{range .Planets}}
+          <tr>
+            <th scope="row"><a href="/planets/{{.ID}}">{{.Name}}</a></th>
+            <td>{{.Coordinate}}</td>
+            <td>{{.Stock.Metal}}</td>
+            <td>{{.Stock.Crystal}}</td>
+            <td>{{.Stock.Deuterium}}</td>
+            <td>{{with .ActiveQueue}}{{.Building}} niveau {{.TargetLevel}} — {{.CompletesAt.Format "15:04:05"}} UTC{{else}}aucune{{end}}</td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
+{{end}}

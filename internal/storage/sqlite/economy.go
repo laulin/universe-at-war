@@ -130,23 +130,82 @@ func firstFreeCoordinate(ctx context.Context, tx *sql.Tx, configured rules.Rules
 	return universe.Coordinate{}, appeconomy.ErrUniverseFull
 }
 
-func (r *EconomyRepository) Planet(ctx context.Context, accountID int64, now time.Time, catalogue building.Catalogue) (appeconomy.Planet, error) {
-	tx, err := r.write.BeginTx(ctx, nil)
-	if err != nil {
-		return appeconomy.Planet{}, fmt.Errorf("economy repository: begin planet: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	planet, _, state, err := loadPlanet(ctx, tx, accountID, 0, now, catalogue)
+// Planet settles and returns one planet of the account. A zero identifier
+// selects the oldest one.
+func (r *EconomyRepository) Planet(ctx context.Context, accountID, planetID int64, now time.Time, catalogue building.Catalogue) (appeconomy.Planet, error) {
+	var planet appeconomy.Planet
+	err := withWriteTx(ctx, r.write, "economy repository: planet", func(tx *sql.Tx) error {
+		loaded, _, state, err := loadPlanet(ctx, tx, accountID, planetID, now, catalogue)
+		if err != nil {
+			return err
+		}
+		if err := persistProduction(ctx, tx, loaded.ID, state); err != nil {
+			return err
+		}
+		planet = loaded
+		return nil
+	})
 	if err != nil {
 		return appeconomy.Planet{}, err
-	}
-	if err := persistProduction(ctx, tx, planet.ID, state); err != nil {
-		return appeconomy.Planet{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return appeconomy.Planet{}, fmt.Errorf("economy repository: commit planet: %w", err)
 	}
 	return planet, nil
+}
+
+// Planets settles and returns every body of the account, oldest first.
+func (r *EconomyRepository) Planets(ctx context.Context, accountID int64, now time.Time, catalogue building.Catalogue) ([]appeconomy.Planet, error) {
+	var planets []appeconomy.Planet
+	err := withWriteTx(ctx, r.write, "economy repository: planets", func(tx *sql.Tx) error {
+		identifiers, err := ownedPlanetIDs(ctx, tx, accountID)
+		if err != nil {
+			return err
+		}
+		planets = make([]appeconomy.Planet, 0, len(identifiers))
+		for _, planetID := range identifiers {
+			planet, _, state, err := loadPlanetByID(ctx, tx, planetID, now, catalogue)
+			if err != nil {
+				return err
+			}
+			if err := persistProduction(ctx, tx, planet.ID, state); err != nil {
+				return err
+			}
+			planets = append(planets, planet)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return planets, nil
+}
+
+// ownedPlanetIDs lists the planets of an account and refuses an account without
+// an empire, so no caller has to guess between an empty list and no player.
+func ownedPlanetIDs(ctx context.Context, tx *sql.Tx, accountID int64) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT p.id FROM planets p
+		JOIN players pl ON pl.id = p.owner_player_id
+		WHERE pl.account_id = ?
+		ORDER BY p.id
+	`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("economy repository: list planets: %w", err)
+	}
+	defer rows.Close()
+	var identifiers []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("economy repository: scan planet: %w", err)
+		}
+		identifiers = append(identifiers, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("economy repository: iterate planets: %w", err)
+	}
+	if len(identifiers) == 0 {
+		return nil, appeconomy.ErrNoEmpire
+	}
+	return identifiers, nil
 }
 
 func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, planetID int64, id building.ID, idempotencyKey string, now time.Time, catalogue building.Catalogue) (appeconomy.Queue, error) {
@@ -288,7 +347,17 @@ func loadPlanet(ctx context.Context, tx *sql.Tx, accountID, requestedPlanetID in
 		condition += " AND p.id = ?"
 		arguments = append(arguments, requestedPlanetID)
 	}
-	return scanAndSettlePlanet(ctx, tx, condition, arguments, now, catalogue)
+	planet, version, state, err := scanAndSettlePlanet(ctx, tx, condition, arguments, now, catalogue)
+	if errors.Is(err, appeconomy.ErrNoEmpire) && requestedPlanetID > 0 {
+		var hasEmpire bool
+		if scanErr := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM players WHERE account_id = ?)", accountID).Scan(&hasEmpire); scanErr != nil {
+			return appeconomy.Planet{}, 0, economy.ProductionState{}, fmt.Errorf("economy repository: inspect empire: %w", scanErr)
+		}
+		if hasEmpire {
+			return appeconomy.Planet{}, 0, economy.ProductionState{}, appeconomy.ErrPlanetNotFound
+		}
+	}
+	return planet, version, state, err
 }
 
 func loadPlanetByID(ctx context.Context, tx *sql.Tx, planetID int64, now time.Time, catalogue building.Catalogue) (appeconomy.Planet, int64, economy.ProductionState, error) {

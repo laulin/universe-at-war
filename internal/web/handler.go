@@ -59,7 +59,8 @@ type setupService interface {
 
 type economyService interface {
 	CreateEmpire(context.Context, appauth.Principal, string) (appeconomy.Planet, error)
-	Buildings(context.Context, appauth.Principal) (appeconomy.Planet, []appeconomy.BuildingChoice, error)
+	Planets(context.Context, appauth.Principal) ([]appeconomy.Planet, error)
+	Buildings(context.Context, appauth.Principal, int64) (appeconomy.Planet, []appeconomy.BuildingChoice, error)
 	StartConstruction(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
 }
 
@@ -125,6 +126,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /setup/{step}", handler.setupPage)
 	handler.mux.HandleFunc("POST /setup/{step}", handler.saveSetupStep)
 	handler.mux.HandleFunc("POST /empire", handler.createEmpire)
+	handler.mux.HandleFunc("GET /planets/{planet}", handler.planetPage)
 	handler.mux.HandleFunc("POST /planets/{planet}/buildings/{building}", handler.startBuilding)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(handler.mux), nil
@@ -374,7 +376,7 @@ func (h *Handler) home(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "economy unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	planet, choices, err := h.economy.Buildings(request.Context(), principal)
+	planets, err := h.economy.Planets(request.Context(), principal)
 	if errors.Is(err, appeconomy.ErrNoEmpire) {
 		token, ok := h.ensureCSRF(response, request)
 		if !ok {
@@ -387,7 +389,43 @@ func (h *Handler) home(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "economy unavailable", http.StatusInternalServerError)
 		return
 	}
+	h.renderOverview(response, request, http.StatusOK, planets)
+}
+
+// planetPage renders one planet of the signed-in account. A planet owned by
+// somebody else is reported as missing so the response never proves it exists.
+func (h *Handler) planetPage(response http.ResponseWriter, request *http.Request) {
+	principal, _, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if principal.MustChangePassword {
+		http.Redirect(response, request, "/password/change", http.StatusSeeOther)
+		return
+	}
+	planetID, ok := h.planetParameter(response, request)
+	if !ok {
+		return
+	}
+	planet, choices, err := h.economy.Buildings(request.Context(), principal, planetID)
+	if errors.Is(err, appeconomy.ErrPlanetNotFound) || errors.Is(err, appeconomy.ErrNoEmpire) {
+		http.NotFound(response, request)
+		return
+	}
+	if err != nil {
+		http.Error(response, "economy unavailable", http.StatusInternalServerError)
+		return
+	}
 	h.renderEconomy(response, request, http.StatusOK, planet, choices, "")
+}
+
+func (h *Handler) planetParameter(response http.ResponseWriter, request *http.Request) (int64, bool) {
+	planetID, err := strconv.ParseInt(request.PathValue("planet"), 10, 64)
+	if err != nil || planetID <= 0 {
+		http.NotFound(response, request)
+		return 0, false
+	}
+	return planetID, true
 }
 
 func (h *Handler) createEmpire(response http.ResponseWriter, request *http.Request) {
@@ -422,14 +460,17 @@ func (h *Handler) startBuilding(response http.ResponseWriter, request *http.Requ
 	if !h.validCSRF(response, request) {
 		return
 	}
-	planetID, err := strconv.ParseInt(request.PathValue("planet"), 10, 64)
-	if err != nil {
+	planetID, ok := h.planetParameter(response, request)
+	if !ok {
+		return
+	}
+	_, err := h.economy.StartConstruction(request.Context(), principal, planetID, building.ID(request.PathValue("building")), request.PostFormValue("idempotency_key"))
+	if errors.Is(err, appeconomy.ErrPlanetNotFound) || errors.Is(err, appeconomy.ErrNoEmpire) {
 		http.NotFound(response, request)
 		return
 	}
-	_, err = h.economy.StartConstruction(request.Context(), principal, planetID, building.ID(request.PathValue("building")), request.PostFormValue("idempotency_key"))
 	if err != nil {
-		planet, choices, loadErr := h.economy.Buildings(request.Context(), principal)
+		planet, choices, loadErr := h.economy.Buildings(request.Context(), principal, planetID)
 		if loadErr != nil {
 			http.Error(response, "construction unavailable", http.StatusBadRequest)
 			return
@@ -437,7 +478,7 @@ func (h *Handler) startBuilding(response http.ResponseWriter, request *http.Requ
 		h.renderEconomy(response, request, http.StatusBadRequest, planet, choices, buildingError(err))
 		return
 	}
-	http.Redirect(response, request, "/", http.StatusSeeOther)
+	http.Redirect(response, request, fmt.Sprintf("/planets/%d", planetID), http.StatusSeeOther)
 }
 
 type buildingPageChoice struct {
@@ -451,6 +492,21 @@ type buildingPageChoice struct {
 	CanStart       bool
 	Reason         string
 	IdempotencyKey string
+}
+
+type overviewPageData struct {
+	CSRFToken string
+	Planets   []appeconomy.Planet
+}
+
+func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Request, status int, planets []appeconomy.Planet) {
+	token, ok := h.ensureCSRF(response, request)
+	if !ok {
+		return
+	}
+	response.Header().Set("Content-Type", "text/html; charset=utf-8")
+	response.WriteHeader(status)
+	_ = h.templates.ExecuteTemplate(response, "overview.html", overviewPageData{CSRFToken: token, Planets: planets})
 }
 
 type economyPageData struct {
