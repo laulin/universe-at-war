@@ -80,3 +80,16 @@ func TestCapacity(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkSettleLazy(b *testing.B) {
+	start := time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)
+	state := ProductionState{Stock: Resources{Metal: 500, Crystal: 500}, ProducedAt: start}
+	rates := Rates{Metal: 12_345, Crystal: 6_789, Deuterium: 2_345}
+	capacities := Resources{Metal: 1_000_000_000, Crystal: 1_000_000_000, Deuterium: 1_000_000_000}
+	b.ReportAllocs()
+	for range b.N {
+		if _, err := Settle(state, start.Add(30*24*time.Hour), rates, capacities); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

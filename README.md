@@ -4,10 +4,12 @@ Universe At War est un jeu de stratégie spatiale persistant, local et autonome,
 inspiré des mécaniques temporelles d'OGame. Le serveur est développé en Go et
 utilise SQLite sans service externe.
 
-Le socle et le premier milestone applicatif fournissent les migrations SQLite
+Le socle et les deux premiers milestones fournissent les migrations SQLite
 embarquées, le bootstrap administrateur, l'authentification, les sessions
-opaques et l'assistant de configuration versionné. La spécification complète se
-trouve dans
+opaques, l'assistant de configuration versionné et une progression économique
+jouable. Après le démarrage de l'univers, un compte peut fonder son empire,
+produire des ressources hors ligne et construire les premiers bâtiments depuis
+l'interface SSR. La spécification complète se trouve dans
 [`SPECIFICATION_OGAME_LOCAL_GO.md`](SPECIFICATION_OGAME_LOCAL_GO.md).
 
 ## Prérequis de développement
@@ -29,6 +31,11 @@ Au premier `serve`, le terminal affiche une seule fois l'identifiant et le mot
 de passe aléatoire de l'administrateur initial. Après connexion sur
 `http://127.0.0.1:8080`, ce mot de passe doit être remplacé avant de parcourir
 les dix étapes de création de l'univers.
+
+Une fois l'univers lancé, la page principale propose de fonder un empire. La
+planète mère affiche les productions, stockages, énergie et cases, ainsi que le
+catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
+worker reprend automatiquement les événements après un redémarrage.
 
 La commande `migrate` applique les migrations embarquées. `doctor` vérifie la
 version du schéma, l'intégrité SQLite et les clés étrangères sans modifier les

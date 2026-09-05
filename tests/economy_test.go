@@ -77,6 +77,14 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	if err != nil || completed != 0 {
 		t.Fatalf("second CompleteDue() = %d, %v", completed, err)
 	}
+	// Simulate a duplicate delivery after an external crash/recovery decision.
+	if _, err := database.Write().ExecContext(ctx, "UPDATE scheduled_events SET state = 'pending', processed_at = NULL WHERE entity_id = ?", fmt.Sprint(queue.ID)); err != nil {
+		t.Fatal(err)
+	}
+	completed, err = service.CompleteDue(ctx, 10)
+	if err != nil || completed != 1 {
+		t.Fatalf("redelivered CompleteDue() = %d, %v", completed, err)
+	}
 	planet, err = service.Planet(ctx, principal)
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +93,45 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 		t.Fatalf("completed planet = %#v", planet)
 	}
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM game_event_log WHERE event_type = 'building_completed'", 1)
+}
+
+func TestDueBuildingsUseStableEventOrder(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
+	clock := appclock.NewFake(now)
+	database := economyDatabase(t, ctx, 2)
+	service := appeconomy.Service{Clock: clock, Repository: storagesqlite.NewEconomyRepository(database.Write()), Catalogue: building.DefaultCatalogue()}
+	one, err := service.CreateEmpire(ctx, appauth.Principal{AccountID: 1}, "First Player")
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := service.CreateEmpire(ctx, appauth.Principal{AccountID: 2}, "Second Player")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstQueue, err := service.StartConstruction(ctx, appauth.Principal{AccountID: 1}, one.ID, building.MetalMine, "first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondQueue, err := service.StartConstruction(ctx, appauth.Principal{AccountID: 2}, two.ID, building.MetalMine, "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstQueue.CompletesAt != secondQueue.CompletesAt || firstQueue.ID >= secondQueue.ID {
+		t.Fatalf("queues do not establish the fixture order: %#v %#v", firstQueue, secondQueue)
+	}
+	clock.Advance(firstQueue.CompletesAt.Sub(now))
+	completed, err := service.CompleteDue(ctx, 1)
+	if err != nil || completed != 1 {
+		t.Fatalf("CompleteDue(limit 1) = %d, %v", completed, err)
+	}
+	var completedID int64
+	if err := database.Read().QueryRowContext(ctx, "SELECT id FROM building_queue WHERE state = 'completed'").Scan(&completedID); err != nil {
+		t.Fatal(err)
+	}
+	if completedID != firstQueue.ID {
+		t.Fatalf("completed queue = %d, want oldest %d", completedID, firstQueue.ID)
+	}
 }
 
 func TestEmpirePositionsAndResourceConstraints(t *testing.T) {
