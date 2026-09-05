@@ -218,11 +218,13 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)
 	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
 	shipyardRepository := storagesqlite.NewShipyardRepository(database.Write(), catalogues)
+	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	events.Logger = logger
 	economyRepository.RegisterHandlers(events)
 	researchRepository.RegisterHandlers(events)
 	shipyardRepository.RegisterHandlers(events)
+	fleetRepository.RegisterHandlers(events)
 	worker := appsimulation.NewWorker(clock, events)
 	worker.Logger = logger
 	economy := appeconomy.Service{

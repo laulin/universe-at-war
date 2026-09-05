@@ -15,6 +15,7 @@ import (
 	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/catalogue"
 	domaineconomy "universeatwar/internal/domain/economy"
+	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/prerequisite"
 	"universeatwar/internal/domain/unit"
 )
@@ -252,17 +253,34 @@ func completeProduction(ctx context.Context, tx *sql.Tx, event ScheduledEvent, n
 	return nil
 }
 
-// adjustInventory adds or removes units, the database constraint guaranteeing a
-// stock that never goes negative.
+// adjustInventory adds or removes units. A removal is a guarded update: it only
+// applies when the planet really owns the units, so no inventory can ever go
+// negative, even under concurrency.
 func adjustInventory(ctx context.Context, tx *sql.Tx, planetID int64, id unit.ID, delta int64) error {
 	if delta == 0 {
 		return nil
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO planet_units(planet_id, unit_id, quantity) VALUES (?, ?, ?)
-		ON CONFLICT(planet_id, unit_id) DO UPDATE SET quantity = quantity + excluded.quantity
-	`, planetID, string(id), delta); err != nil {
+	if delta > 0 {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO planet_units(planet_id, unit_id, quantity) VALUES (?, ?, ?)
+			ON CONFLICT(planet_id, unit_id) DO UPDATE SET quantity = quantity + excluded.quantity
+		`, planetID, string(id), delta); err != nil {
+			return fmt.Errorf("shipyard repository: adjust inventory: %w", err)
+		}
+		return nil
+	}
+	result, err := tx.ExecContext(ctx, `
+		UPDATE planet_units SET quantity = quantity + ? WHERE planet_id = ? AND unit_id = ? AND quantity >= ?
+	`, delta, planetID, string(id), -delta)
+	if err != nil {
 		return fmt.Errorf("shipyard repository: adjust inventory: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("shipyard repository: adjust inventory: %w", err)
+	}
+	if affected != 1 {
+		return domainfleet.ErrInsufficientUnits
 	}
 	return nil
 }

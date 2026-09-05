@@ -2,14 +2,18 @@ package tests
 
 import (
 	"context"
+	"crypto/rand"
 	"path/filepath"
 	"testing"
 
 	appeconomy "universeatwar/internal/app/economy"
+	appfleet "universeatwar/internal/app/fleet"
 	appresearch "universeatwar/internal/app/research"
 	appshipyard "universeatwar/internal/app/shipyard"
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/catalogue"
+	"universeatwar/internal/domain/universe"
+	"universeatwar/internal/random"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 
@@ -22,6 +26,7 @@ type world struct {
 	Economy  appeconomy.Service
 	Research appresearch.Service
 	Shipyard appshipyard.Service
+	Fleet    appfleet.Service
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -30,10 +35,12 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)
 	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
 	shipyardRepository := storagesqlite.NewShipyardRepository(database.Write(), catalogues)
+	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	economyRepository.RegisterHandlers(events)
 	researchRepository.RegisterHandlers(events)
 	shipyardRepository.RegisterHandlers(events)
+	fleetRepository.RegisterHandlers(events)
 	return &world{
 		Database: database,
 		Clock:    clock,
@@ -54,6 +61,13 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 			Clock:      clock,
 			Repository: shipyardRepository,
 			Catalogues: catalogues,
+			Completer:  events,
+		},
+		Fleet: appfleet.Service{
+			Clock:      clock,
+			Repository: fleetRepository,
+			Catalogues: catalogues,
+			Seeds:      random.NewSeedGenerator(rand.Reader),
 			Completer:  events,
 		},
 	}
@@ -110,4 +124,20 @@ func benchmarkDatabase(b *testing.B, ctx context.Context) *storagesqlite.Databas
 		b.Fatal(err)
 	}
 	return database
+}
+
+func assertSingleText(t *testing.T, database *storagesqlite.Database, query string, want string) {
+	t.Helper()
+	var got string
+	if err := database.Read().QueryRow(query).Scan(&got); err != nil {
+		t.Fatalf("query %q: %v", query, err)
+	}
+	if got != want {
+		t.Fatalf("query %q = %q, want %q", query, got, want)
+	}
+}
+
+func coordinateOf(t *testing.T, galaxy, system, position int) universe.Coordinate {
+	t.Helper()
+	return universe.Coordinate{Galaxy: galaxy, System: system, Position: position}
 }
