@@ -17,6 +17,7 @@ import (
 	appauth "universeatwar/internal/app/authentication"
 	appbootstrap "universeatwar/internal/app/bootstrap"
 	appeconomy "universeatwar/internal/app/economy"
+	appregistration "universeatwar/internal/app/registration"
 	appserverstate "universeatwar/internal/app/serverstate"
 	appsetup "universeatwar/internal/app/setup"
 	appsimulation "universeatwar/internal/app/simulation"
@@ -185,6 +186,11 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	states := appserverstate.Service{
 		Repository: storagesqlite.NewServerStateRepository(database.Read(), database.Write()),
 	}
+	registration := appregistration.Service{
+		Clock:      clock,
+		Passwords:  passwords,
+		Repository: storagesqlite.NewRegistrationRepository(database.Read(), database.Write()),
+	}
 	setup := appsetup.Service{
 		Clock:      clock,
 		Repository: storagesqlite.NewSetupRepository(database.Write()),
@@ -211,6 +217,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		CSRFSecrets:    auth.NewSecretGenerator(random, 32),
 		Setup:          setup,
 		Economy:        economy,
+		Registration:   registration,
 		SecureCookies:  *secureCookie,
 	})
 	if err != nil {

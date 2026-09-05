@@ -96,3 +96,5 @@ input:focus-visible, button:focus-visible { outline: .2rem solid #80e0ff; outlin
 .session { display: flex; align-items: center; gap: .75rem; }
 .session form { margin: 0; }
 .game-footer { width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: 1rem 2rem; color: #9bb0c5; border-top: 1px solid #294967; }
+
+.notice { padding: .75rem; border-left: .25rem solid #37bde8; background: #0f2a3a; }

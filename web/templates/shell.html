@@ -8,6 +8,7 @@
 </head>
 <body>
   <main class="auth-shell">
+    {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
     {{template "content" .}}
   </main>
 </body>

@@ -32,7 +32,11 @@ de passe aléatoire de l'administrateur initial. Après connexion sur
 `http://127.0.0.1:8080`, ce mot de passe doit être remplacé avant de parcourir
 les dix étapes de création de l'univers.
 
-Une fois l'univers lancé, la page principale propose de fonder un empire. La
+Si la politique d'inscription de l'univers vaut `open`, la page de connexion
+propose de créer un compte joueur ; sinon le parcours reste totalement fermé.
+
+Une fois l'univers lancé, la page principale liste les corps de l'empire et
+chaque planète a sa propre page. La page principale propose de fonder un empire. La
 planète mère affiche les productions, stockages, énergie et cases, ainsi que le
 catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
 worker reprend automatiquement les événements après un redémarrage.

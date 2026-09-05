@@ -32,3 +32,13 @@ nécessite une procédure administrative future, explicite et auditée.
   exposées ;
 - les handlers interrogent une politique centrale, pas des booléens locaux.
 
+
+## Inscriptions
+
+Le parcours d'inscription n'existe que dans l'état `RUNNING` et seulement si la
+politique du ruleset actif vaut `open`. Dans tout autre cas, `/register` répond
+404 et la page de connexion n'affiche aucun lien : l'existence même du parcours
+ne renseigne pas sur la configuration. Un compte créé reçoit le seul rôle
+`PLAYER`, sans obligation de changer son mot de passe, et l'inscription est
+auditée. Les politiques `closed` et `invitation` refusent la création ; les
+invitations proprement dites arrivent avec le jalon de finition.

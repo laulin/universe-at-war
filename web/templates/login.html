@@ -4,6 +4,7 @@
     <p class="eyebrow">Centre de commandement</p>
     <h1 id="page-title">Universe At War</h1>
     <p>Connectez-vous pour administrer ou rejoindre cet univers.</p>
+    {{if .Registered}}<p class="notice" role="status">Compte créé. Connectez-vous avec vos identifiants.</p>{{end}}
       <form method="post" action="/login">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <label for="username">Identifiant</label>
@@ -12,5 +13,6 @@
       <input id="password" name="password" type="password" autocomplete="current-password" required>
       <button type="submit">Se connecter</button>
     </form>
+    {{if .RegistrationOpen}}<p><a href="/register">Créer un compte</a></p>{{end}}
   </section>
 {{end}}

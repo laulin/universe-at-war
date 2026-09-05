@@ -1,0 +1,19 @@
+{{define "title"}}Créer un compte{{end}}
+{{define "content"}}
+  <section class="panel" aria-labelledby="page-title">
+    <p class="eyebrow">Nouvel arrivant</p>
+    <h1 id="page-title">Créer un compte</h1>
+    <p>Choisissez un identifiant de 3 à 32 caractères (a-z, 0-9, _) et un mot de passe d'au moins 12 caractères.</p>
+    <form method="post" action="/register">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="username">Identifiant</label>
+      <input id="username" name="username" autocomplete="username" minlength="3" maxlength="32" required autofocus>
+      <label for="password">Mot de passe</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" required>
+      <label for="password_confirmation">Confirmation du mot de passe</label>
+      <input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="12" required>
+      <button type="submit">Créer le compte</button>
+    </form>
+    <p><a href="/login">Retour à la connexion</a></p>
+  </section>
+{{end}}

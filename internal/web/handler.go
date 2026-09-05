@@ -18,6 +18,7 @@ import (
 
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
+	appregistration "universeatwar/internal/app/registration"
 	appsetup "universeatwar/internal/app/setup"
 	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/rules"
@@ -58,6 +59,11 @@ type setupService interface {
 	Activate(context.Context, appauth.Principal, int64, rules.Ruleset) error
 }
 
+type registrationService interface {
+	Policy(context.Context) (string, error)
+	Register(context.Context, string, string) (int64, error)
+}
+
 type economyService interface {
 	CreateEmpire(context.Context, appauth.Principal, string) (appeconomy.Planet, error)
 	Planets(context.Context, appauth.Principal) ([]appeconomy.Planet, error)
@@ -72,6 +78,7 @@ type Dependencies struct {
 	CSRFSecrets    secretGenerator
 	Setup          setupService
 	Economy        economyService
+	Registration   registrationService
 	SecureCookies  bool
 	LoginLimiter   loginRateLimiter
 }
@@ -83,6 +90,7 @@ type Handler struct {
 	csrfSecrets    secretGenerator
 	setup          setupService
 	economy        economyService
+	registration   registrationService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
 	clock          func() time.Time
@@ -93,7 +101,7 @@ type Handler struct {
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
 	gamePages  = []string{"overview", "economy"}
-	plainPages = []string{"login", "password-change", "empire", "setup"}
+	plainPages = []string{"login", "password-change", "empire", "setup", "register"}
 )
 
 // parsePages clones the right base template per page so that every page may
@@ -143,6 +151,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		csrfSecrets:    dependencies.CSRFSecrets,
 		setup:          dependencies.Setup,
 		economy:        dependencies.Economy,
+		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
 		clock:          func() time.Time { return time.Now().UTC() },
@@ -152,6 +161,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
 	handler.mux.HandleFunc("GET /healthz", handler.health)
 	handler.mux.HandleFunc("GET /login", handler.loginPage)
+	handler.mux.HandleFunc("GET /register", handler.registerPage)
+	handler.mux.HandleFunc("POST /register", handler.register)
 	handler.mux.HandleFunc("POST /login", handler.login)
 	handler.mux.HandleFunc("GET /password/change", handler.passwordChangePage)
 	handler.mux.HandleFunc("POST /password/change", handler.passwordChange)
@@ -164,6 +175,57 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /planets/{planet}/buildings/{building}", handler.startBuilding)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(handler.mux), nil
+}
+
+// registrationOpen reports whether the universe currently accepts players. A
+// closed or unavailable universe simply hides the whole registration path.
+func (h *Handler) registrationOpen(ctx context.Context) bool {
+	if h.registration == nil {
+		return false
+	}
+	policy, err := h.registration.Policy(ctx)
+	return err == nil && policy == appregistration.PolicyOpen
+}
+
+func (h *Handler) registerPage(response http.ResponseWriter, request *http.Request) {
+	if !h.registrationOpen(request.Context()) {
+		http.NotFound(response, request)
+		return
+	}
+	token, ok := h.ensureCSRF(response, request)
+	if !ok {
+		return
+	}
+	h.render(response, http.StatusOK, "register", pageData{pageShell{CSRFToken: token}})
+}
+
+func (h *Handler) register(response http.ResponseWriter, request *http.Request) {
+	if !h.registrationOpen(request.Context()) {
+		http.NotFound(response, request)
+		return
+	}
+	if !h.validCSRF(response, request) {
+		return
+	}
+	username := request.PostFormValue("username")
+	password := request.PostFormValue("password")
+	if password != request.PostFormValue("password_confirmation") {
+		h.render(response, http.StatusBadRequest, "register", pageData{pageShell{
+			CSRFToken: request.PostFormValue("csrf_token"),
+			Error:     "Les deux mots de passe doivent être identiques.",
+		}})
+		return
+	}
+	if _, err := h.registration.Register(request.Context(), username, password); err != nil {
+		// The same neutral message covers every refusal so the form never
+		// reveals which usernames already exist.
+		h.render(response, http.StatusBadRequest, "register", pageData{pageShell{
+			CSRFToken: request.PostFormValue("csrf_token"),
+			Error:     "Inscription impossible avec ces informations. Choisissez un autre identifiant de 3 à 32 caractères (a-z, 0-9, _) et un mot de passe d'au moins 12 caractères.",
+		}})
+		return
+	}
+	http.Redirect(response, request, "/login?registered=1", http.StatusSeeOther)
 }
 
 func (h *Handler) health(response http.ResponseWriter, request *http.Request) {
@@ -181,7 +243,11 @@ func (h *Handler) loginPage(response http.ResponseWriter, request *http.Request)
 	if !ok {
 		return
 	}
-	h.render(response, http.StatusOK, "login", pageData{pageShell{CSRFToken: token}})
+	h.render(response, http.StatusOK, "login", loginPageData{
+		pageShell:        pageShell{CSRFToken: token},
+		RegistrationOpen: h.registrationOpen(request.Context()),
+		Registered:       request.URL.Query().Get("registered") == "1",
+	})
 }
 
 func (h *Handler) login(response http.ResponseWriter, request *http.Request) {
@@ -737,6 +803,13 @@ type bodyLink struct {
 
 type pageData struct {
 	pageShell
+}
+
+// loginPageData adds the registration affordances of the login screen.
+type loginPageData struct {
+	pageShell
+	RegistrationOpen bool
+	Registered       bool
 }
 
 // gameShell builds the navigation shell from the bodies of the account.
