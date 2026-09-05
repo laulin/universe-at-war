@@ -1,8 +1,8 @@
 package tests
 
 import (
-	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"sync"
 	"testing"
@@ -93,9 +93,10 @@ func registrationService(t *testing.T, database *storagesqlite.Database) appregi
 	t.Helper()
 	return appregistration.Service{
 		Clock: appclock.NewFake(time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC)),
+		// crypto/rand is safe for concurrent use, which the concurrency test needs.
 		Passwords: auth.NewPasswordHasher(auth.Parameters{
 			MemoryKiB: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32,
-		}, bytes.NewReader(bytes.Repeat([]byte{0x23}, 4096))),
+		}, rand.Reader),
 		Repository: storagesqlite.NewRegistrationRepository(database.Read(), database.Write()),
 	}
 }

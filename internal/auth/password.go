@@ -42,6 +42,8 @@ type PasswordHasher struct {
 }
 
 // NewPasswordHasher creates a hasher with an explicit policy and random source.
+// NewPasswordHasher builds a hasher. The random source draws one salt per hash
+// and must therefore be safe for concurrent use, like crypto/rand.Reader.
 func NewPasswordHasher(parameters Parameters, random io.Reader) *PasswordHasher {
 	return &PasswordHasher{parameters: parameters, random: random}
 }
