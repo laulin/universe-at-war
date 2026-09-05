@@ -1,0 +1,14 @@
+# Runtime data
+*.db
+*.db-shm
+*.db-wal
+backups/
+
+# Build and tooling output
+/bin/
+/coverage.out
+/.cache/
+
+# Local configuration
+.env
+
