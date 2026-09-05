@@ -93,3 +93,40 @@ func BenchmarkSettleLazy(b *testing.B) {
 		}
 	}
 }
+
+func TestSolarSatellitesProduceEnergyFromTemperature(t *testing.T) {
+	configured := rules.Default()
+	tests := []struct {
+		name        string
+		satellites  int
+		temperature int
+		want        int64
+	}{
+		{name: "no satellite", satellites: 0, temperature: 40, want: 0},
+		{name: "temperate planet", satellites: 10, temperature: 40, want: 330},
+		{name: "frozen planet gives nothing", satellites: 10, temperature: -200, want: 0},
+		{name: "scorching planet is capped", satellites: 2, temperature: 200, want: 100},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, energy, err := CalculateRates(configured, Levels{SolarSatellites: test.satellites}, test.temperature)
+			if err != nil {
+				t.Fatalf("CalculateRates() error = %v", err)
+			}
+			if energy.Produced != test.want {
+				t.Fatalf("energy produced = %d, want %d", energy.Produced, test.want)
+			}
+		})
+	}
+
+	_, energy, err := CalculateRates(configured, Levels{SolarPlant: 1, SolarSatellites: 1}, 40)
+	if err != nil {
+		t.Fatalf("CalculateRates() error = %v", err)
+	}
+	if energy.Produced != 22+33 {
+		t.Fatalf("plant and satellites = %d, want 55", energy.Produced)
+	}
+	if _, _, err := CalculateRates(configured, Levels{SolarSatellites: -1}, 40); err == nil {
+		t.Fatal("CalculateRates() accepted a negative satellite count")
+	}
+}

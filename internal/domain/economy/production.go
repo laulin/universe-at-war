@@ -41,6 +41,7 @@ type Levels struct {
 	MetalStorage         int
 	CrystalStorage       int
 	DeuteriumTank        int
+	SolarSatellites      int
 }
 
 // Energy is the instantaneous production and consumption capacity.
@@ -116,7 +117,7 @@ func CalculateRates(configured rules.Ruleset, levels Levels, maximumTemperature 
 	if err := configured.Validate(); err != nil {
 		return Rates{}, Energy{}, err
 	}
-	if levels.MetalMine < 0 || levels.CrystalMine < 0 || levels.DeuteriumSynthesizer < 0 || levels.SolarPlant < 0 {
+	if levels.MetalMine < 0 || levels.CrystalMine < 0 || levels.DeuteriumSynthesizer < 0 || levels.SolarPlant < 0 || levels.SolarSatellites < 0 {
 		return Rates{}, Energy{}, errors.New("economy: building levels cannot be negative")
 	}
 	growth := configured.Economy.MineProductionGrowth
@@ -141,6 +142,14 @@ func CalculateRates(configured rules.Ruleset, levels Levels, maximumTemperature 
 	if err != nil {
 		return Rates{}, Energy{}, err
 	}
+	satellites, err := floored(float64(levels.SolarSatellites) * satelliteEnergy(maximumTemperature))
+	if err != nil {
+		return Rates{}, Energy{}, err
+	}
+	if produced > math.MaxInt64-satellites {
+		return Rates{}, Energy{}, errors.New("economy: energy overflow")
+	}
+	produced += satellites
 	factor := 1.0
 	if consumed > 0 && produced < consumed {
 		factor = math.Max(configured.Economy.LowEnergyProduction, float64(produced)/float64(consumed))
@@ -162,6 +171,13 @@ func CalculateRates(configured rules.Ruleset, levels Levels, maximumTemperature 
 		Crystal:   baseCrystal + int64(math.Floor(float64(crystalMine)*factor)),
 		Deuterium: baseDeuterium + int64(math.Floor(float64(deuteriumMine)*factor)),
 	}, Energy{Produced: produced, Consumed: consumed}, nil
+}
+
+// satelliteEnergy is the energy one solar satellite produces, bounded so a very
+// hot or very cold planet stays within the classic range.
+func satelliteEnergy(maximumTemperature int) float64 {
+	energy := math.Floor((float64(maximumTemperature) + 160) / 6)
+	return math.Min(50, math.Max(0, energy))
 }
 
 func sumFlooredEnergy(levels Levels, growth float64) (int64, error) {
