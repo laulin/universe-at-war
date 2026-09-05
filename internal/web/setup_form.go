@@ -238,7 +238,7 @@ func requiredText(request *http.Request, name string) string {
 func intField(request *http.Request, name string) (int, error) {
 	value, err := strconv.Atoi(request.PostFormValue(name))
 	if err != nil {
-		return 0, fmt.Errorf("Le champ %s doit être un nombre entier.", name)
+		return 0, fmt.Errorf("le champ %s doit être un nombre entier", name)
 	}
 	return value, nil
 }
@@ -246,7 +246,7 @@ func intField(request *http.Request, name string) (int, error) {
 func int64Field(request *http.Request, name string) (int64, error) {
 	value, err := strconv.ParseInt(request.PostFormValue(name), 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("Le champ %s doit être un nombre entier.", name)
+		return 0, fmt.Errorf("le champ %s doit être un nombre entier", name)
 	}
 	return value, nil
 }
@@ -254,7 +254,7 @@ func int64Field(request *http.Request, name string) (int64, error) {
 func floatField(request *http.Request, name string) (float64, error) {
 	value, err := strconv.ParseFloat(request.PostFormValue(name), 64)
 	if err != nil {
-		return 0, fmt.Errorf("Le champ %s doit être un nombre.", name)
+		return 0, fmt.Errorf("le champ %s doit être un nombre", name)
 	}
 	return value, nil
 }

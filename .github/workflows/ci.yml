@@ -33,7 +33,7 @@ jobs:
           staticcheck ./...
       - name: Vulnerability scan
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ./...
 
   cross-build:
@@ -65,4 +65,3 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath ./cmd/universe-at-war
-
