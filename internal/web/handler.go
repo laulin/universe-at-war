@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"slices"
@@ -79,6 +80,7 @@ type Dependencies struct {
 	Setup          setupService
 	Economy        economyService
 	Registration   registrationService
+	Logger         *slog.Logger
 	SecureCookies  bool
 	LoginLimiter   loginRateLimiter
 }
@@ -174,7 +176,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /planets/{planet}", handler.planetPage)
 	handler.mux.HandleFunc("POST /planets/{planet}/buildings/{building}", handler.startBuilding)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
-	return handler.securityHeaders(handler.mux), nil
+	return handler.securityHeaders(requestID(requestLogger(dependencies.Logger, handler.mux))), nil
 }
 
 // registrationOpen reports whether the universe currently accepts players. A

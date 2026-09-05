@@ -4,6 +4,7 @@ package simulation
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	domainclock "universeatwar/internal/domain/clock"
@@ -20,11 +21,19 @@ type Worker struct {
 	Processor      Processor
 	BatchSize      int
 	RescanInterval time.Duration
+	Logger         *slog.Logger
 	wake           chan struct{}
 }
 
 func NewWorker(clock domainclock.Clock, processor Processor) *Worker {
-	return &Worker{Clock: clock, Processor: processor, BatchSize: 100, RescanInterval: 30 * time.Second, wake: make(chan struct{}, 1)}
+	return &Worker{
+		Clock:          clock,
+		Processor:      processor,
+		BatchSize:      100,
+		RescanInterval: 30 * time.Second,
+		Logger:         slog.New(slog.DiscardHandler),
+		wake:           make(chan struct{}, 1),
+	}
 }
 
 func (w *Worker) Wake() {
@@ -38,11 +47,23 @@ func (w *Worker) Run(ctx context.Context) error {
 	if w.Clock == nil || w.Processor == nil || w.BatchSize <= 0 || w.RescanInterval <= 0 || w.wake == nil {
 		return errors.New("simulation: incomplete worker dependencies")
 	}
+	logger := w.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	for {
-		for {
+		// A batch that fails is logged and retried at the next wake-up: a
+		// transient database error must not stop the simulation for good.
+		failed := false
+		for !failed {
 			processed, err := w.Processor.CompleteDue(ctx, w.BatchSize)
 			if err != nil {
-				return err
+				if ctx.Err() != nil {
+					return nil
+				}
+				logger.Error("simulation batch failed", "error", err.Error())
+				failed = true
+				break
 			}
 			if processed < w.BatchSize {
 				break
@@ -50,8 +71,11 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 		delay := w.RescanInterval
 		if dueAt, ok, err := w.Processor.NextDue(ctx); err != nil {
-			return err
-		} else if ok {
+			if ctx.Err() != nil {
+				return nil
+			}
+			logger.Error("simulation schedule unavailable", "error", err.Error())
+		} else if ok && !failed {
 			untilDue := dueAt.Sub(w.Clock.Now().UTC())
 			if untilDue < 0 {
 				untilDue = 0

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"universeatwar/internal/auth"
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/building"
+	"universeatwar/internal/observability"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 	webhandler "universeatwar/internal/web"
 )
@@ -40,7 +42,18 @@ type Runner struct {
 	DefaultListen      string
 	Random             io.Reader
 	PasswordParameters auth.Parameters
+	LogLevel           string
 	ServeHTTP          func(context.Context, *http.Server) error
+}
+
+// logger builds the structured logger of the serve command. Logs go to the
+// error stream so the bootstrap password stays alone on the standard output.
+func (r Runner) logger() (*slog.Logger, error) {
+	level := r.LogLevel
+	if strings.TrimSpace(level) == "" {
+		level = "info"
+	}
+	return observability.NewLogger(r.Stderr, level)
 }
 
 // Run executes one command and returns a process exit code.
@@ -157,6 +170,10 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		return r.commandError("serve", err)
 	}
 
+	logger, err := r.logger()
+	if err != nil {
+		return r.commandError("serve", err)
+	}
 	random := r.randomSource()
 	parameters := r.passwordParameters()
 	passwords := auth.NewPasswordHasher(parameters, random)
@@ -198,8 +215,10 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	catalogue := building.DefaultCatalogue()
 	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogue)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
+	events.Logger = logger
 	economyRepository.RegisterHandlers(events)
 	worker := appsimulation.NewWorker(clock, events)
+	worker.Logger = logger
 	economy := appeconomy.Service{
 		Clock:      clock,
 		Repository: economyRepository,
@@ -218,6 +237,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Setup:          setup,
 		Economy:        economy,
 		Registration:   registration,
+		Logger:         logger,
 		SecureCookies:  *secureCookie,
 	})
 	if err != nil {
@@ -235,6 +255,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	if serve == nil {
 		serve = serveUntilCancelled
 	}
+	logger.Info("server starting", "version", r.Version, "listen", *listenAddress, "database", *databasePath)
 	fmt.Fprintf(r.Stdout, "Listening on http://%s\n", *listenAddress)
 	if err := serve(ctx, server); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return r.commandError("serve", err)

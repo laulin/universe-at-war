@@ -76,3 +76,12 @@ ne pas faire dépendre le domaine de chemins de fichiers.
 6. État, événement planifié, journal métier et audit sont persistés ensemble.
 7. Le commit précède toute réponse ou notification externe.
 
+
+## Observabilité
+
+Le serveur construit un journal structuré `slog` sur la sortie d'erreur. Un
+identifiant de corrélation est attribué à chaque requête, renvoyé dans
+`X-Request-Id` et repris dans la ligne d'accès (méthode, chemin, statut, durée).
+La chaîne de requête, les cookies et les jetons ne sont jamais journalisés. Le
+worker journalise les lots en échec et poursuit : une erreur transitoire de base
+ne doit pas arrêter la simulation.

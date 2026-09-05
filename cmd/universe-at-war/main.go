@@ -28,6 +28,7 @@ func main() {
 		Version:         version,
 		DefaultDatabase: configuration.DatabasePath,
 		DefaultListen:   configuration.ListenAddress,
+		LogLevel:        configuration.LogLevel,
 	}
 	os.Exit(runner.Run(ctx, os.Args[1:]))
 }

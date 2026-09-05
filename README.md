@@ -41,6 +41,11 @@ planète mère affiche les productions, stockages, énergie et cases, ainsi que 
 catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
 worker reprend automatiquement les événements après un redémarrage.
 
+Le serveur écrit des journaux structurés sur la sortie d'erreur. Chaque requête
+porte un identifiant de corrélation renvoyé dans l'en-tête `X-Request-Id` ;
+aucun secret, jeton ni cookie n'y figure. `UAW_LOG_LEVEL` choisit le niveau
+(`debug`, `info`, `warn`, `error`).
+
 La commande `migrate` applique les migrations embarquées. `doctor` vérifie la
 version du schéma, l'intégrité SQLite et les clés étrangères sans modifier les
 données. `admin reset-password` constitue la récupération locale : elle génère
