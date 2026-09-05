@@ -160,9 +160,14 @@ func authenticatedService(t *testing.T, ctx context.Context, clock *appclock.Fak
 		t.Fatalf("Initialize() error = %v", err)
 	}
 	service := appauth.Service{
-		Clock:       clock,
-		Passwords:   passwords,
-		Tokens:      auth.NewSecretGenerator(bytes.NewReader(bytes.Repeat([]byte{0x63}, 128)), 32),
+		Clock:     clock,
+		Passwords: passwords,
+		Tokens: auth.NewSecretGenerator(bytes.NewReader(bytes.Join([][]byte{
+			bytes.Repeat([]byte{0x63}, 32),
+			bytes.Repeat([]byte{0x64}, 32),
+			bytes.Repeat([]byte{0x65}, 32),
+			bytes.Repeat([]byte{0x66}, 32),
+		}, nil)), 32),
 		Repository:  storagesqlite.NewAuthenticationRepository(database.Read(), database.Write()),
 		SessionLife: lifetime,
 	}

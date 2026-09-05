@@ -6,12 +6,16 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
+	appsetup "universeatwar/internal/app/setup"
+	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/server"
 	webassets "universeatwar/web"
 )
@@ -36,11 +40,18 @@ type secretGenerator interface {
 	Generate() (string, error)
 }
 
+type setupService interface {
+	Load(context.Context, appauth.Principal) (appsetup.Draft, error)
+	Save(context.Context, appauth.Principal, int, int64, rules.Ruleset) (appsetup.Draft, error)
+	Activate(context.Context, appauth.Principal, int64, rules.Ruleset) error
+}
+
 // Dependencies are the application services required by the HTTP adapter.
 type Dependencies struct {
 	Authentication authenticationService
 	ServerState    stateService
 	CSRFSecrets    secretGenerator
+	Setup          setupService
 	SecureCookies  bool
 }
 
@@ -49,6 +60,7 @@ type Handler struct {
 	authentication authenticationService
 	serverState    stateService
 	csrfSecrets    secretGenerator
+	setup          setupService
 	secureCookies  bool
 	templates      *template.Template
 	mux            *http.ServeMux
@@ -71,6 +83,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		authentication: dependencies.Authentication,
 		serverState:    dependencies.ServerState,
 		csrfSecrets:    dependencies.CSRFSecrets,
+		setup:          dependencies.Setup,
 		secureCookies:  dependencies.SecureCookies,
 		templates:      templates,
 		mux:            http.NewServeMux(),
@@ -81,7 +94,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /login", handler.login)
 	handler.mux.HandleFunc("GET /password/change", handler.passwordChangePage)
 	handler.mux.HandleFunc("POST /password/change", handler.passwordChange)
-	handler.mux.HandleFunc("GET /setup/{step}", handler.setupGuard)
+	handler.mux.HandleFunc("GET /setup/{step}", handler.setupPage)
+	handler.mux.HandleFunc("POST /setup/{step}", handler.saveSetupStep)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(handler.mux), nil
 }
@@ -167,7 +181,7 @@ func (h *Handler) passwordChange(response http.ResponseWriter, request *http.Req
 	http.Redirect(response, request, "/setup/1", http.StatusSeeOther)
 }
 
-func (h *Handler) setupGuard(response http.ResponseWriter, request *http.Request) {
+func (h *Handler) setupPage(response http.ResponseWriter, request *http.Request) {
 	principal, _, ok := h.requirePrincipal(response, request)
 	if !ok {
 		return
@@ -176,7 +190,105 @@ func (h *Handler) setupGuard(response http.ResponseWriter, request *http.Request
 		http.Redirect(response, request, "/password/change", http.StatusSeeOther)
 		return
 	}
-	http.NotFound(response, request)
+	if h.setup == nil {
+		http.NotFound(response, request)
+		return
+	}
+	draft, err := h.setup.Load(request.Context(), principal)
+	if errors.Is(err, appsetup.ErrAlreadyCompleted) {
+		http.Redirect(response, request, "/", http.StatusSeeOther)
+		return
+	}
+	if err != nil {
+		http.Error(response, "setup unavailable", http.StatusForbidden)
+		return
+	}
+	requestedStep, err := strconv.Atoi(request.PathValue("step"))
+	if err != nil || requestedStep < 1 || requestedStep > 10 {
+		http.NotFound(response, request)
+		return
+	}
+	if requestedStep != draft.CurrentStep {
+		http.Redirect(response, request, fmt.Sprintf("/setup/%d", draft.CurrentStep), http.StatusSeeOther)
+		return
+	}
+	token, ok := h.ensureCSRF(response, request)
+	if !ok {
+		return
+	}
+	h.renderSetup(response, http.StatusOK, setupPageData{
+		CSRFToken: token, Step: draft.CurrentStep, Version: draft.Version, Rules: draft.Rules,
+	})
+}
+
+func (h *Handler) saveSetupStep(response http.ResponseWriter, request *http.Request) {
+	principal, _, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if principal.MustChangePassword {
+		http.Redirect(response, request, "/password/change", http.StatusSeeOther)
+		return
+	}
+	if h.setup == nil {
+		http.NotFound(response, request)
+		return
+	}
+	if !h.validCSRF(response, request) {
+		return
+	}
+	step, err := strconv.Atoi(request.PathValue("step"))
+	if err != nil || step < 1 || step > 10 {
+		http.NotFound(response, request)
+		return
+	}
+	draft, err := h.setup.Load(request.Context(), principal)
+	if err != nil {
+		http.Error(response, "setup unavailable", http.StatusForbidden)
+		return
+	}
+	if step != draft.CurrentStep {
+		http.Error(response, "setup step conflict", http.StatusConflict)
+		return
+	}
+	expectedVersion, err := strconv.ParseInt(request.PostFormValue("version"), 10, 64)
+	if err != nil || expectedVersion != draft.Version {
+		http.Error(response, "setup version conflict", http.StatusConflict)
+		return
+	}
+	if step == 10 {
+		if request.PostFormValue("confirm") != "yes" {
+			h.renderSetup(response, http.StatusBadRequest, setupPageData{
+				CSRFToken: request.PostFormValue("csrf_token"), Step: step, Version: draft.Version,
+				Rules: draft.Rules, Error: "La confirmation explicite est obligatoire.",
+			})
+			return
+		}
+		if err := h.setup.Activate(request.Context(), principal, expectedVersion, draft.Rules); err != nil {
+			http.Error(response, "setup activation failed", http.StatusConflict)
+			return
+		}
+		http.Redirect(response, request, "/", http.StatusSeeOther)
+		return
+	}
+
+	updated := draft.Rules
+	if err := updateRulesFromForm(step, request, &updated); err != nil {
+		h.renderSetup(response, http.StatusBadRequest, setupPageData{
+			CSRFToken: request.PostFormValue("csrf_token"), Step: step, Version: draft.Version,
+			Rules: updated, Error: err.Error(),
+		})
+		return
+	}
+	saved, err := h.setup.Save(request.Context(), principal, step, expectedVersion, updated)
+	if err != nil {
+		h.renderSetup(response, http.StatusBadRequest, setupPageData{
+			CSRFToken: request.PostFormValue("csrf_token"), Step: step, Version: draft.Version,
+			Rules: updated, Error: err.Error(),
+		})
+		return
+	}
+	http.Redirect(response, request, fmt.Sprintf("/setup/%d", saved.CurrentStep), http.StatusSeeOther)
 }
 
 func (h *Handler) home(response http.ResponseWriter, request *http.Request) {

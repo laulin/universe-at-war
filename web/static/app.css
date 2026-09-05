@@ -9,6 +9,10 @@
 
 body { margin: 0; min-height: 100vh; }
 
+.setup-shell { width: min(100% - 2rem, 64rem); margin: 0 auto; padding: 2rem 0 4rem; }
+.setup-header { margin-bottom: 1.5rem; }
+progress { width: 100%; accent-color: #37bde8; }
+
 .auth-shell {
   min-height: 100vh;
   display: grid;
@@ -27,6 +31,17 @@ body { margin: 0; min-height: 100vh; }
 .eyebrow { color: #78d9ff; letter-spacing: .08em; text-transform: uppercase; }
 
 form { display: grid; gap: .75rem; margin-top: 1.5rem; }
+.setup-form { width: 100%; }
+fieldset { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; border: 0; padding: 0; }
+legend { grid-column: 1 / -1; font-size: 1.35rem; font-weight: 700; margin-bottom: 1rem; }
+label { display: grid; gap: .4rem; }
+.check { display: flex; align-items: center; gap: .65rem; }
+.check input { min-height: auto; width: 1.2rem; height: 1.2rem; }
+textarea, select { border: 1px solid #466a8d; border-radius: .35rem; padding: .65rem .8rem; background: #07101d; color: inherit; font: inherit; }
+.summary { display: grid; grid-template-columns: minmax(8rem, 1fr) 3fr; gap: .6rem 1rem; }
+.summary dt { color: #78d9ff; font-weight: 700; }
+.summary dd { margin: 0; }
+.confirm { margin-top: 1.5rem; }
 
 input, button {
   min-height: 2.75rem;
@@ -41,4 +56,3 @@ button { margin-top: .5rem; background: #147da2; color: white; font-weight: 700;
 button:hover { background: #1894bd; }
 input:focus-visible, button:focus-visible { outline: .2rem solid #80e0ff; outline-offset: .15rem; }
 .alert { padding: .75rem; border-left: .25rem solid #ff677d; background: #341521; }
-

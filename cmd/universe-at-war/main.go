@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	_ "time/tzdata"
 
 	"universeatwar/internal/cli"
 	"universeatwar/internal/config"

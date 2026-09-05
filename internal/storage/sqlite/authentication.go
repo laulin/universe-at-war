@@ -168,11 +168,28 @@ func (r *AuthenticationRepository) ChangePassword(ctx context.Context, change ap
 		return fmt.Errorf("authentication repository: begin password change: %w", err)
 	}
 	defer func() { _ = transaction.Rollback() }()
+	var sessionValid bool
+	if err := transaction.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM sessions
+			WHERE account_id = ? AND token_digest = ? AND revoked_at IS NULL AND expires_at > ?
+		)
+	`, change.AccountID, change.OldTokenDigest, timestamp(change.IssuedAt)).Scan(&sessionValid); err != nil {
+		return fmt.Errorf("authentication repository: verify password-change session: %w", err)
+	}
+	if !sessionValid {
+		return appauth.ErrInvalidSession
+	}
 
 	result, err := transaction.ExecContext(ctx, `
 		UPDATE accounts SET version = version + 1, updated_at = ?
 		WHERE id = ? AND version = ? AND status = 'active'
-	`, timestamp(change.IssuedAt), change.AccountID, change.AccountVersion)
+		  AND NOT EXISTS (
+		      SELECT 1 FROM bans b
+		      WHERE b.account_id = accounts.id AND b.status = 'active'
+		        AND b.starts_at <= ? AND (b.ends_at IS NULL OR b.ends_at > ?)
+		  )
+	`, timestamp(change.IssuedAt), change.AccountID, change.AccountVersion, timestamp(change.IssuedAt), timestamp(change.IssuedAt))
 	if err != nil {
 		return fmt.Errorf("authentication repository: version account: %w", err)
 	}

@@ -1,0 +1,148 @@
+{{define "setup.html"}}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuration {{.Step}}/10 — Universe At War</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="setup-shell">
+    <header class="setup-header">
+      <p class="eyebrow">Assistant de création de l'univers</p>
+      <h1>Étape {{.Step}} sur 10</h1>
+      <progress max="10" value="{{.Step}}">{{.Step}}/10</progress>
+    </header>
+    {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+    <form class="setup-form panel" method="post" action="/setup/{{.Step}}">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="version" value="{{.Version}}">
+
+      {{if eq .Step 1}}
+      <fieldset><legend>Identité</legend>
+        <label>Nom de l'univers<input name="name" value="{{.Rules.Identity.Name}}" required></label>
+        <label>Langue<input name="language" value="{{.Rules.Identity.Language}}" required></label>
+        <label>Fuseau horaire<input name="timezone" value="{{.Rules.Identity.Timezone}}" required></label>
+        <label>Description<textarea name="description">{{.Rules.Identity.Description}}</textarea></label>
+        <label>Visibilité réseau<select name="network_visibility"><option value="local" {{if eq .Rules.Identity.NetworkVisibility "local"}}selected{{end}}>Machine locale</option><option value="private_network" {{if eq .Rules.Identity.NetworkVisibility "private_network"}}selected{{end}}>Réseau privé</option></select></label>
+        <label>Inscriptions<select name="registration_policy"><option value="closed" {{if eq .Rules.Identity.RegistrationPolicy "closed"}}selected{{end}}>Fermées</option><option value="open" {{if eq .Rules.Identity.RegistrationPolicy "open"}}selected{{end}}>Ouvertes</option><option value="invitation" {{if eq .Rules.Identity.RegistrationPolicy "invitation"}}selected{{end}}>Sur invitation</option></select></label>
+      </fieldset>
+      {{else if eq .Step 2}}
+      <fieldset><legend>Topologie</legend>
+        <label>Galaxies<input type="number" min="1" name="galaxies" value="{{.Rules.Topology.Galaxies}}" required></label>
+        <label>Systèmes par galaxie<input type="number" min="1" name="systems_per_galaxy" value="{{.Rules.Topology.SystemsPerGalaxy}}" required></label>
+        <label>Positions par système<input type="number" min="1" name="positions_per_system" value="{{.Rules.Topology.PositionsPerSystem}}" required></label>
+        <label class="check"><input type="checkbox" name="circular_galaxies" {{if .Rules.Topology.CircularGalaxies}}checked{{end}}> Galaxies circulaires</label>
+        <label class="check"><input type="checkbox" name="circular_systems" {{if .Rules.Topology.CircularSystems}}checked{{end}}> Systèmes circulaires</label>
+        <label>Cases planétaires minimales<input type="number" min="1" name="min_planet_fields" value="{{.Rules.Topology.MinPlanetFields}}" required></label>
+        <label>Cases planétaires maximales<input type="number" min="1" name="max_planet_fields" value="{{.Rules.Topology.MaxPlanetFields}}" required></label>
+        <label>Distance inter-systèmes<input type="number" min="1" name="inter_system_distance" value="{{.Rules.Topology.InterSystemDistance}}" required></label>
+        <label>Distance inter-galaxies<input type="number" min="1" name="inter_galaxy_distance" value="{{.Rules.Topology.InterGalaxyDistance}}" required></label>
+      </fieldset>
+      {{else if eq .Step 3}}
+      <fieldset><legend>Temps</legend>
+        <label>Vitesse économie<input type="number" min="0.01" step="0.01" name="economy_speed" value="{{.Rules.Time.EconomySpeed}}" required></label>
+        <label>Vitesse bâtiments<input type="number" min="0.01" step="0.01" name="building_speed" value="{{.Rules.Time.BuildingSpeed}}" required></label>
+        <label>Vitesse recherches<input type="number" min="0.01" step="0.01" name="research_speed" value="{{.Rules.Time.ResearchSpeed}}" required></label>
+        <label>Vitesse chantier<input type="number" min="0.01" step="0.01" name="shipyard_speed" value="{{.Rules.Time.ShipyardSpeed}}" required></label>
+        <label>Vitesse défenses<input type="number" min="0.01" step="0.01" name="defense_speed" value="{{.Rules.Time.DefenseSpeed}}" required></label>
+        <label>Flottes pacifiques<input type="number" min="0.01" step="0.01" name="peaceful_fleet_speed" value="{{.Rules.Time.PeacefulFleetSpeed}}" required></label>
+        <label>Flottes hostiles<input type="number" min="0.01" step="0.01" name="hostile_fleet_speed" value="{{.Rules.Time.HostileFleetSpeed}}" required></label>
+        <label>Flottes en stationnement<input type="number" min="0.01" step="0.01" name="holding_fleet_speed" value="{{.Rules.Time.HoldingFleetSpeed}}" required></label>
+        <label>Expéditions<input type="number" min="0.01" step="0.01" name="expedition_speed" value="{{.Rules.Time.ExpeditionSpeed}}" required></label>
+        <label>Durée minimale de mission (s)<input type="number" min="1" name="minimum_mission_seconds" value="{{.Rules.Time.MinimumMissionSeconds}}" required></label>
+        <label class="check"><input type="checkbox" name="pause_when_empty" {{if .Rules.Time.PauseWhenEmpty}}checked{{end}}> Mettre en pause lorsque personne n'est connecté</label>
+      </fieldset>
+      {{else if eq .Step 4}}
+      <fieldset><legend>Économie</legend>
+        <label>Métal de base par heure<input type="number" min="0" step="0.01" name="base_metal_per_hour" value="{{.Rules.Economy.BaseMetalPerHour}}" required></label>
+        <label>Cristal de base par heure<input type="number" min="0" step="0.01" name="base_crystal_per_hour" value="{{.Rules.Economy.BaseCrystalPerHour}}" required></label>
+        <label>Deutérium de base par heure<input type="number" min="0" step="0.01" name="base_deuterium_per_hour" value="{{.Rules.Economy.BaseDeuteriumPerHour}}" required></label>
+        <label>Croissance production mines<input type="number" min="0.01" step="0.01" name="mine_production_growth" value="{{.Rules.Economy.MineProductionGrowth}}" required></label>
+        <label>Croissance coûts mines<input type="number" min="1.01" step="0.01" name="mine_cost_growth" value="{{.Rules.Economy.MineCostGrowth}}" required></label>
+        <label>Croissance consommation énergétique<input type="number" min="0.01" step="0.01" name="energy_consumption_growth" value="{{.Rules.Economy.EnergyConsumptionGrowth}}" required></label>
+        <label>Stockage initial<input type="number" min="1" name="base_storage" value="{{.Rules.Economy.BaseStorage}}" required></label>
+        <label>Taux de pillage (0–1)<input type="number" min="0" max="1" step="0.01" name="pillage_ratio" value="{{.Rules.Economy.PillageRatio}}" required></label>
+        <label>Consommation deutérium<input type="number" min="0" step="0.01" name="deuterium_consumption" value="{{.Rules.Economy.DeuteriumConsumption}}" required></label>
+        <label>Production avec énergie insuffisante (0–1)<input type="number" min="0" max="1" step="0.01" name="low_energy_production" value="{{.Rules.Economy.LowEnergyProduction}}" required></label>
+      </fieldset>
+      {{else if eq .Step 5}}
+      <fieldset><legend>Combat</legend>
+        <label>Rounds maximaux<input type="number" min="1" name="maximum_rounds" value="{{.Rules.Combat.MaximumRounds}}" required></label>
+        <label>Vaisseaux en débris (0–1)<input type="number" min="0" max="1" step="0.01" name="ships_to_debris" value="{{.Rules.Combat.ShipsToDebris}}" required></label>
+        <label>Défenses en débris (0–1)<input type="number" min="0" max="1" step="0.01" name="defenses_to_debris" value="{{.Rules.Combat.DefensesToDebris}}" required></label>
+        <label>Reconstruction défenses (0–1)<input type="number" min="0" max="1" step="0.01" name="defense_rebuild_chance" value="{{.Rules.Combat.DefenseRebuildChance}}" required></label>
+        <label>Chance de lune maximale (0–1)<input type="number" min="0" max="1" step="0.01" name="maximum_moon_chance" value="{{.Rules.Combat.MaximumMoonChance}}" required></label>
+        <label>Pillage maximal (0–1)<input type="number" min="0" max="1" step="0.01" name="maximum_pillage" value="{{.Rules.Combat.MaximumPillage}}" required></label>
+        <label>Capacité recycleur<input type="number" min="1" name="recycler_capacity" value="{{.Rules.Combat.RecyclerCapacity}}" required></label>
+        <label class="check"><input type="checkbox" name="missiles_enabled" {{if .Rules.Combat.MissilesEnabled}}checked{{end}}> Missiles interplanétaires activés</label>
+      </fieldset>
+      {{else if eq .Step 6}}
+      <fieldset><legend>Progression</legend>
+        <label>Multiplicateur coûts bâtiments<input type="number" min="0.01" step="0.01" name="building_cost_multiplier" value="{{.Rules.Progression.BuildingCostMultiplier}}" required></label>
+        <label>Multiplicateur coûts recherches<input type="number" min="0.01" step="0.01" name="research_cost_multiplier" value="{{.Rules.Progression.ResearchCostMultiplier}}" required></label>
+        <label>Multiplicateur coûts vaisseaux<input type="number" min="0.01" step="0.01" name="ship_cost_multiplier" value="{{.Rules.Progression.ShipCostMultiplier}}" required></label>
+        <label>Multiplicateur coûts défenses<input type="number" min="0.01" step="0.01" name="defense_cost_multiplier" value="{{.Rules.Progression.DefenseCostMultiplier}}" required></label>
+        <label>Bonus laboratoire<input type="number" min="0.01" step="0.01" name="laboratory_bonus" value="{{.Rules.Progression.LaboratoryBonus}}" required></label>
+        <label>Colonies maximales<input type="number" min="1" name="maximum_colonies" value="{{.Rules.Progression.MaximumColonies}}" required></label>
+        <label class="check"><input type="checkbox" name="research_network_enabled" {{if .Rules.Progression.ResearchNetworkEnabled}}checked{{end}}> Réseau de recherche activé</label>
+      </fieldset>
+      {{else if eq .Step 7}}
+      <fieldset><legend>Jeu d'équipe</legend>
+        <label class="check"><input type="checkbox" name="alliances_enabled" {{if .Rules.Team.AlliancesEnabled}}checked{{end}}> Alliances</label>
+        <label>Taille maximale d'alliance<input type="number" min="1" name="maximum_alliance_size" value="{{.Rules.Team.MaximumAllianceSize}}" required></label>
+        <label class="check"><input type="checkbox" name="acs_enabled" {{if .Rules.Team.ACSEnabled}}checked{{end}}> Attaques groupées</label>
+        <label class="check"><input type="checkbox" name="group_defense_enabled" {{if .Rules.Team.GroupDefenseEnabled}}checked{{end}}> Défenses groupées</label>
+        <label class="check"><input type="checkbox" name="report_sharing_enabled" {{if .Rules.Team.ReportSharingEnabled}}checked{{end}}> Partage de rapports</label>
+        <label class="check"><input type="checkbox" name="intelligence_sharing_enabled" {{if .Rules.Team.IntelligenceSharingEnabled}}checked{{end}}> Partage de renseignement</label>
+        <label class="check"><input type="checkbox" name="diplomacy_enabled" {{if .Rules.Team.DiplomacyEnabled}}checked{{end}}> Diplomatie</label>
+        <label>Mode de départ<select name="start_mode"><option value="free" {{if eq .Rules.Team.StartMode "free"}}selected{{end}}>Libre</option><option value="predefined_teams" {{if eq .Rules.Team.StartMode "predefined_teams"}}selected{{end}}>Équipes prédéfinies</option><option value="humans_vs_ai" {{if eq .Rules.Team.StartMode "humans_vs_ai"}}selected{{end}}>Humains contre IA</option><option value="pvpve" {{if eq .Rules.Team.StartMode "pvpve"}}selected{{end}}>PvPvE</option></select></label>
+      </fieldset>
+      {{else if eq .Step 8}}
+      <fieldset><legend>Intelligence artificielle</legend>
+        <label>IA totales<input type="number" min="0" name="ai_total" value="{{.Rules.AI.Total}}" required></label>
+        <label>IA indépendantes<input type="number" min="0" name="ai_independent_count" value="{{.Rules.AI.IndependentCount}}" required></label>
+        <label>Alliances IA<input type="number" min="0" name="ai_alliance_count" value="{{.Rules.AI.AllianceCount}}" required></label>
+        <label>Taille des alliances IA<input type="number" min="0" name="ai_alliance_size" value="{{.Rules.AI.AllianceSize}}" required></label>
+        <label>Difficulté<select name="ai_difficulty"><option value="easy" {{if eq .Rules.AI.Difficulty "easy"}}selected{{end}}>Facile</option><option value="normal" {{if eq .Rules.AI.Difficulty "normal"}}selected{{end}}>Normale</option><option value="hard" {{if eq .Rules.AI.Difficulty "hard"}}selected{{end}}>Difficile</option></select></label>
+        <label>Intervalle de réflexion (s)<input type="number" min="1" name="ai_think_interval_seconds" value="{{.Rules.AI.ThinkIntervalSeconds}}" required></label>
+        <label>Début d'activité (heure)<input type="number" min="0" max="23" name="ai_activity_start_hour" value="{{.Rules.AI.ActivityStartHour}}" required></label>
+        <label>Fin d'activité (heure)<input type="number" min="1" max="24" name="ai_activity_end_hour" value="{{.Rules.AI.ActivityEndHour}}" required></label>
+        <label>Niveau initial<input type="number" min="0" name="ai_initial_development_level" value="{{.Rules.AI.InitialDevelopmentLevel}}" required></label>
+        <label>Coordination (0–1)<input type="number" min="0" max="1" step="0.01" name="ai_coordination" value="{{.Rules.AI.Coordination}}" required></label>
+        <label>Diplomatie<select name="ai_diplomacy"><option value="none" {{if eq .Rules.AI.Diplomacy "none"}}selected{{end}}>Aucune</option><option value="static" {{if eq .Rules.AI.Diplomacy "static"}}selected{{end}}>Statique</option><option value="dynamic" {{if eq .Rules.AI.Diplomacy "dynamic"}}selected{{end}}>Dynamique</option></select></label>
+      </fieldset>
+      {{else if eq .Step 9}}
+      <fieldset><legend>Protection et joueurs</legend>
+        <label>Protection débutant jusqu'à<input type="number" min="0" name="beginner_protection_points" value="{{.Rules.Protection.BeginnerProtectionPoints}}" required></label>
+        <label>Ratio de points maximal<input type="number" min="1" step="0.1" name="maximum_point_ratio" value="{{.Rules.Protection.MaximumPointRatio}}" required></label>
+        <label>Comptes par installation<input type="number" min="1" name="accounts_per_installation" value="{{.Rules.Protection.AccountsPerInstallation}}" required></label>
+        <label class="check"><input type="checkbox" name="vacation_mode_enabled" {{if .Rules.Protection.VacationModeEnabled}}checked{{end}}> Mode vacances</label>
+        <label>Inactif après (jours)<input type="number" min="0" name="inactive_after_days" value="{{.Rules.Protection.InactiveAfterDays}}" required></label>
+        <label>Suppression après (jours)<input type="number" min="0" name="delete_after_days" value="{{.Rules.Protection.DeleteAfterDays}}" required></label>
+        <label>Limite de joueurs<input type="number" min="1" name="player_limit" value="{{.Rules.Protection.PlayerLimit}}" required></label>
+        <label>Inscriptions<select name="registration_policy"><option value="closed" {{if eq .Rules.Identity.RegistrationPolicy "closed"}}selected{{end}}>Fermées</option><option value="open" {{if eq .Rules.Identity.RegistrationPolicy "open"}}selected{{end}}>Ouvertes</option><option value="invitation" {{if eq .Rules.Identity.RegistrationPolicy "invitation"}}selected{{end}}>Sur invitation</option></select></label>
+      </fieldset>
+      {{else}}
+      <section aria-labelledby="summary-title"><h2 id="summary-title">Validation</h2>
+        <p>Vérifiez ce résumé. La topologie sera verrouillée après le démarrage.</p>
+        <dl class="summary">
+          <dt>Univers</dt><dd>{{.Rules.Identity.Name}} — {{.Rules.Identity.Timezone}}</dd>
+          <dt>Topologie</dt><dd>{{.Rules.Topology.Galaxies}} galaxies, {{.Rules.Topology.SystemsPerGalaxy}} systèmes, {{.Rules.Topology.PositionsPerSystem}} positions</dd>
+          <dt>Vitesses</dt><dd>économie ×{{.Rules.Time.EconomySpeed}}, recherche ×{{.Rules.Time.ResearchSpeed}}, flotte hostile ×{{.Rules.Time.HostileFleetSpeed}}</dd>
+          <dt>Combat</dt><dd>{{.Rules.Combat.MaximumRounds}} rounds, {{.Rules.Combat.ShipsToDebris}} des vaisseaux en débris</dd>
+          <dt>Équipes</dt><dd>alliances {{if .Rules.Team.AlliancesEnabled}}activées{{else}}désactivées{{end}}, ACS {{if .Rules.Team.ACSEnabled}}activé{{else}}désactivé{{end}}</dd>
+          <dt>IA</dt><dd>{{.Rules.AI.Total}} au total, difficulté {{.Rules.AI.Difficulty}}</dd>
+          <dt>Inscriptions</dt><dd>{{.Rules.Identity.RegistrationPolicy}}, limite {{.Rules.Protection.PlayerLimit}} joueurs</dd>
+        </dl>
+        <label class="check confirm"><input type="checkbox" name="confirm" value="yes" required> Je confirme la création définitive de cet univers.</label>
+      </section>
+      {{end}}
+      <button type="submit">{{if eq .Step 10}}Démarrer l'univers{{else}}Enregistrer et continuer{{end}}</button>
+    </form>
+  </main>
+</body>
+</html>
+{{end}}
+
