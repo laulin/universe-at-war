@@ -85,6 +85,14 @@ avant d'attaquer, perd ses flottes et dort en dehors de ses heures. Elle passe
 par les mêmes cas d'usage que vous : un test structurel garantit qu'elle
 n'atteint aucune base de données ni aucune vérité adverse.
 
+Les machines peuvent aussi faire équipe. Un administrateur les affecte à une
+alliance ; elles s'y partagent alors leurs rapports, se répartissent des rôles
+selon ce que chacune déclare posséder, choisissent une cible commune, l'espionnent
+avant d'y aller et résolvent ensemble une attaque groupée. Une alliée attaquée
+appelle à l'aide et celles qui ont des vaisseaux viennent stationner chez elle.
+Chaque croyance de cette mémoire commune porte son auteur, sa date et son
+expiration : retirer le partage d'un rapport la fait disparaître aussitôt.
+
 Le serveur écrit des journaux structurés sur la sortie d'erreur. Chaque requête
 porte un identifiant de corrélation renvoyé dans l'en-tête `X-Request-Id` ;
 aucun secret, jeton ni cookie n'y figure. `UAW_LOG_LEVEL` choisit le niveau

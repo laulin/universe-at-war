@@ -52,6 +52,7 @@ ne pas faire dépendre le domaine de chemins de fichiers.
 | Expedition | PvE probabiliste | seed enregistrée et résultats configurables |
 | Reports | récit destiné à un acteur | rapport immuable et filtré à la création |
 | AI | décision stratégique | mêmes commandes, coûts et informations qu'un humain |
+| AI d'alliance | mémoire commune et plan collectif | toute croyance a un auteur, un partage explicite et une expiration |
 
 ## Règles de dépendance
 
