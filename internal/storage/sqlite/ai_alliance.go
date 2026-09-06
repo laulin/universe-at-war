@@ -18,10 +18,23 @@ import (
 
 // sharedPayload is the persisted body of one shared belief.
 type sharedPayload struct {
-	Plunder  economy.Resources `json:"plunder"`
-	Defence  int64             `json:"defence"`
-	Complete bool              `json:"complete"`
-	Summary  string            `json:"summary"`
+	Plunder    economy.Resources `json:"plunder"`
+	Defence    int64             `json:"defence"`
+	Complete   bool              `json:"complete"`
+	Summary    string            `json:"summary"`
+	Capability *sharedCapability `json:"capability,omitempty"`
+}
+
+// sharedCapability is what a member declares it owns. It is a declaration, not
+// a reading: nothing here comes from anywhere but its author.
+type sharedCapability struct {
+	BodyID        int64 `json:"body_id"`
+	Awake         bool  `json:"awake"`
+	Probes        int64 `json:"probes"`
+	Recyclers     int64 `json:"recyclers"`
+	WarStrength   int64 `json:"war_strength"`
+	GroundDefence int64 `json:"ground_defence"`
+	Hauling       int64 `json:"hauling"`
 }
 
 // AllianceOf returns the team of a player and who may lead an operation for it.
@@ -78,10 +91,19 @@ func (r *AIRepository) Publish(ctx context.Context, allianceID, authorID int64, 
 			if !belief.Kind.Valid() {
 				return fmt.Errorf("ai repository: unknown shared belief %q", belief.Kind)
 			}
-			document, err := json.Marshal(sharedPayload{
+			payload := sharedPayload{
 				Plunder: belief.Plunder, Defence: belief.Defence,
 				Complete: belief.Complete, Summary: belief.Summary,
-			})
+			}
+			if belief.Kind == domainai.CapabilityKnowledge {
+				payload.Capability = &sharedCapability{
+					BodyID: belief.Capability.BodyID, Awake: belief.Capability.Awake,
+					Probes: belief.Capability.Probes, Recyclers: belief.Capability.Recyclers,
+					WarStrength:   belief.Capability.WarStrength,
+					GroundDefence: belief.Capability.GroundDefence, Hauling: belief.Capability.Hauling,
+				}
+			}
+			document, err := json.Marshal(payload)
 			if err != nil {
 				return fmt.Errorf("ai repository: encode belief: %w", err)
 			}
@@ -151,6 +173,15 @@ func (r *AIRepository) Recall(ctx context.Context, allianceID int64, now time.Ti
 		}
 		belief.Plunder, belief.Defence = payload.Plunder, payload.Defence
 		belief.Complete, belief.Summary = payload.Complete, payload.Summary
+		if payload.Capability != nil {
+			belief.Capability = domainai.Capability{
+				PlayerID: belief.AuthorID, PlayerName: belief.AuthorName, Coordinate: belief.Coordinate,
+				BodyID: payload.Capability.BodyID, Awake: payload.Capability.Awake,
+				Probes: payload.Capability.Probes, Recyclers: payload.Capability.Recyclers,
+				WarStrength:   payload.Capability.WarStrength,
+				GroundDefence: payload.Capability.GroundDefence, Hauling: payload.Capability.Hauling,
+			}
+		}
 		beliefs = append(beliefs, belief)
 	}
 	if err := rows.Err(); err != nil {

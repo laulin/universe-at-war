@@ -21,6 +21,7 @@ import (
 	"universeatwar/internal/domain/random"
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/unit"
+	"universeatwar/internal/domain/universe"
 )
 
 // Thinking hands out the players that owe a reflection and takes their
@@ -105,14 +106,40 @@ func (b *Brain) think(ctx context.Context, profile domainai.Profile) []domainai.
 	decisions := []domainai.Decision{b.build(ctx, principal, profile, home.ID)}
 	decisions = append(decisions, b.research(ctx, principal, profile, home.ID))
 	decisions = append(decisions, b.produce(ctx, principal, profile, home.ID))
-	observations := b.observe(ctx, principal, home)
-	if alliance, allied := b.team(ctx, profile); allied && b.Fleet != nil && b.Reports != nil {
+	team := friends{names: map[string]bool{}, coordinates: map[universe.Coordinate]bool{}}
+	alliance, allied := b.team(ctx, profile)
+	var beliefs []domainai.Knowledge
+	if allied {
+		for _, member := range alliance.Members {
+			team.names[member.Name] = true
+		}
+		recalled, err := b.Teamwork.Recall(ctx, alliance.ID, b.Clock.Now().UTC())
+		if err != nil {
+			decisions = append(decisions, failure(domainai.Operational, "recall", err))
+		}
+		beliefs = recalled
+		for _, belief := range beliefs {
+			if belief.Kind == domainai.CapabilityKnowledge {
+				team.coordinates[belief.Coordinate] = true
+			}
+		}
+	}
+	observations := b.observe(ctx, principal, home, team)
+	if allied && b.Fleet != nil && b.Reports != nil {
 		if overview, err := b.Fleet.Overview(ctx, principal, home.ID); err == nil {
 			decisions = append(decisions,
 				b.contribute(ctx, principal, profile, alliance, home, overview, observations))
+			// The declaration of this very reflection is part of what the
+			// leader now reasons on.
+			if refreshed, err := b.Teamwork.Recall(ctx, alliance.ID, b.Clock.Now().UTC()); err == nil {
+				beliefs = refreshed
+			}
+		}
+		if leader, ok := alliance.Leader(); ok && leader.PlayerID == profile.PlayerID {
+			decisions = append(decisions, b.lead(ctx, profile, alliance, beliefs)...)
 		}
 	}
-	return append(decisions, b.campaign(ctx, principal, profile, planets, observations)...)
+	return append(decisions, b.campaign(ctx, principal, profile, planets, observations, team)...)
 }
 
 // build raises the one building the body wants most and can pay for.

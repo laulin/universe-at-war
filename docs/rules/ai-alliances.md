@@ -55,11 +55,14 @@ et de la disponibilité de chacun :
 | `fleeter` | le membre éveillé dont la flotte de combat est la plus forte |
 | `recycler` | le membre éveillé qui a le plus de recycleurs |
 | `defender` | le membre éveillé dont le sol est le mieux défendu |
+| `logistician` | le membre éveillé dont les soutes sont les plus grandes |
 | `miner` | tous les autres |
 
 Un même membre ne tient qu'un rôle ; les égalités se départagent par
 identifiant, si bien que la répartition est reproductible. Un membre endormi ne
-reçoit aucun rôle actif : il reste mineur jusqu'à son réveil.
+reçoit aucun rôle actif : il reste mineur jusqu'à son réveil. Le meneur ne
+range que ceux qui se sont déclarés : un membre qui n'a pas encore réfléchi
+n'existe pas encore pour la répartition.
 
 ## Objectif collectif
 
@@ -102,6 +105,12 @@ défense groupée du Milestone 7, jusqu'à la fin de la fenêtre.
 Un défenseur sans vaisseau, endormi, ou dont l'emplacement de flotte est déjà
 pris, ne part pas : il enregistre la raison. Une alliance qui n'a pas les moyens
 de défendre ne défend pas.
+
+## Ce qu'une alliance ne vise jamais
+
+Aucun membre n'espionne ni n'attaque un corps de sa propre alliance. Les noms de
+ses membres et les positions qu'ils ont déclarées sont écartés des cibles avant
+tout calcul, y compris lorsqu'un vieux rapport en parle encore.
 
 ## Conflit entre objectif individuel et collectif
 

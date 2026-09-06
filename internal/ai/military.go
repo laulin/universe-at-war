@@ -41,7 +41,7 @@ type Fleet interface {
 // campaign runs the operational layer: look, then strike, or put the fleet out
 // of reach before the night.
 func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
-	planets []appeconomy.Planet, observations []observation) []domainai.Decision {
+	planets []appeconomy.Planet, observations []observation, team friends) []domainai.Decision {
 	if b.Fleet == nil {
 		return []domainai.Decision{domainai.Skip(domainai.Operational, "campaign", "no fleet service")}
 	}
@@ -67,7 +67,7 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 	if decision, sent := b.recycle(ctx, principal, profile, home, overview); sent {
 		return []domainai.Decision{decision}
 	}
-	return []domainai.Decision{b.spy(ctx, principal, profile, home, overview, stale)}
+	return []domainai.Decision{b.spy(ctx, principal, profile, home, overview, stale, team)}
 }
 
 // observation is one report of the player, read once and used by everything
@@ -78,10 +78,22 @@ type observation struct {
 	intel   domainai.Intel
 }
 
+// friends are the players an artificial one never looks at and never strikes:
+// itself and everybody of its own alliance.
+type friends struct {
+	names       map[string]bool
+	coordinates map[universe.Coordinate]bool
+}
+
+// covers reports whether a name or a position belongs to the team.
+func (f friends) covers(name string, at universe.Coordinate) bool {
+	return f.names[name] || f.coordinates[at]
+}
+
 // observe reads the espionage reports of the player and turns them into what
 // the planner reasons about. Nothing else feeds this: no report, no opinion.
 func (b *Brain) observe(ctx context.Context, principal appauth.Principal,
-	home appeconomy.Planet) []observation {
+	home appeconomy.Planet, team friends) []observation {
 	if b.Reports == nil {
 		return nil
 	}
@@ -104,6 +116,10 @@ func (b *Brain) observe(ctx context.Context, principal appauth.Principal,
 			continue
 		}
 		seen[summary.Coordinate] = true
+		if team.covers(payload.TargetPlayerName, summary.Coordinate) {
+			// One does not raid one's own alliance, so one does not weigh it.
+			continue
+		}
 		observations = append(observations, observation{
 			summary: summary, payload: payload, intel: b.intelOf(payload, summary, home),
 		})
@@ -161,14 +177,14 @@ func (b *Brain) intelOf(payload report.EspionagePayload, summary appreports.Summ
 // spy sends probes at the most promising body it cannot yet judge, or at a
 // neighbour it has never looked at.
 func (b *Brain) spy(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
-	home appeconomy.Planet, overview appfleet.Overview, stale domainai.Target) domainai.Decision {
+	home appeconomy.Planet, overview appfleet.Overview, stale domainai.Target, team friends) domainai.Decision {
 	probes := overview.Stationed[unit.EspionageProbe]
 	if probes <= 0 {
 		return skip(domainai.Operational, "spy", "no probe on the ground", home.ID)
 	}
 	target := stale.Coordinate
 	if target.Galaxy == 0 {
-		found, ok := b.neighbour(ctx, principal, home)
+		found, ok := b.neighbour(ctx, principal, home, team)
 		if !ok {
 			return skip(domainai.Operational, "spy", "nobody to look at nearby", home.ID)
 		}
@@ -238,7 +254,8 @@ func (b *Brain) recycle(ctx context.Context, principal appauth.Principal, profil
 }
 
 // neighbour picks the closest body of somebody else in the home system.
-func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, home appeconomy.Planet) (universe.Coordinate, bool) {
+func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, home appeconomy.Planet,
+	team friends) (universe.Coordinate, bool) {
 	if b.Galaxy == nil {
 		return universe.Coordinate{}, false
 	}
@@ -250,9 +267,13 @@ func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, home
 		if row.PlanetID == 0 || row.Own {
 			continue
 		}
-		return universe.Coordinate{
+		at := universe.Coordinate{
 			Galaxy: home.Coordinate.Galaxy, System: home.Coordinate.System, Position: row.Position,
-		}, true
+		}
+		if team.covers(row.OwnerName, at) {
+			continue
+		}
+		return at, true
 	}
 	return universe.Coordinate{}, false
 }

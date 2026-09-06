@@ -9,6 +9,8 @@ import (
 	appauth "universeatwar/internal/app/authentication"
 	appclock "universeatwar/internal/clock"
 	domainai "universeatwar/internal/domain/ai"
+	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/universe"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 
@@ -214,4 +216,97 @@ func flyEverything(t *testing.T, ctx context.Context, universeWorld *world) {
 			t.Fatalf("CompleteDue() error = %v", err)
 		}
 	}
+}
+
+// TestTheLeaderHandsOutRolesAndOpensOnePlan proves an alliance of machines
+// organises itself from what its members declared, and pursues one plan at a
+// time.
+func TestTheLeaderHandsOutRolesAndOpensOnePlan(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, _, players := alliedArtificials(t)
+	scout, fleeter := players[0], players[1]
+
+	setUnits(t, ctx, database, scout.bodyID, "espionage_probe", 9)
+	setUnits(t, ctx, database, fleeter.bodyID, "light_fighter", 40)
+	for _, member := range players {
+		setResearch(t, ctx, database, member.playerID, "espionage_technology", 3)
+		setResearch(t, ctx, database, member.playerID, "computer_technology", 3)
+		setResources(t, ctx, database, member.bodyID, 200000, 200000, 200000)
+	}
+	setResources(t, ctx, database, 1, 60000, 40000, 10000)
+
+	// A first reflection: everybody declares itself and the scout goes looking.
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM ai_alliance_memory WHERE kind = 'capability'", 2)
+	// Nothing is worth a plan yet: nobody has seen anything.
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM ai_alliance_objectives", 0)
+
+	// On the next one the leader ranks everybody on what they declared.
+	universeWorld.Clock.Advance(time.Minute)
+	think(t, ctx, universeWorld)
+	assertSingleText(t, database,
+		"SELECT role FROM ai_alliance_roles WHERE player_id = ?", "scout", scout.playerID)
+	assertSingleText(t, database,
+		"SELECT role FROM ai_alliance_roles WHERE player_id = ?", "fleeter", fleeter.playerID)
+
+	flyEverything(t, ctx, universeWorld)
+	think(t, ctx, universeWorld)
+
+	// The report is shared, so the alliance opens a plan and moves to gathering.
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM ai_alliance_objectives", 1)
+	assertSingleText(t, database, "SELECT kind FROM ai_alliance_objectives", "raid")
+	think(t, ctx, universeWorld)
+	assertSingleText(t, database, "SELECT state FROM ai_alliance_objectives", "assembling")
+	// One plan at a time, whatever else the memory holds.
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM ai_alliance_objectives WHERE state IN ('scouting', 'assembling')", 1)
+}
+
+// TestAPlanNobodyLooksAtIsGivenUp proves an alliance does not wait for ever on
+// intelligence that never comes.
+func TestAPlanNobodyLooksAtIsGivenUp(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, _, players := alliedArtificials(t)
+	leader := players[0]
+
+	// A belief good enough to plan on, with nobody able to confirm it.
+	alliance, _, err := universeWorld.Teamwork.Alliance(ctx, leader.playerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := universeWorld.Clock.Now().UTC()
+	if err := universeWorld.Teamwork.Publish(ctx, alliance.ID, leader.playerID, []domainai.Knowledge{{
+		Kind: domainai.TargetKnowledge, Coordinate: bodyCoordinate(t, ctx, universeWorld, 1),
+		ObservedAt: now, ExpiresAt: now.Add(48 * time.Hour), Confidence: 1,
+		Plunder: economyResources(90000), Complete: false, Summary: "vu de loin",
+	}}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	think(t, ctx, universeWorld)
+	assertSingleText(t, database, "SELECT state FROM ai_alliance_objectives", "scouting")
+
+	// Six reflections later the window closes and the plan is dropped.
+	for cycle := 0; cycle < 8; cycle++ {
+		universeWorld.Clock.Advance(5 * time.Minute)
+		think(t, ctx, universeWorld)
+	}
+	assertSingleText(t, database, "SELECT state FROM ai_alliance_objectives WHERE id = 1", "abandoned")
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM ai_decisions WHERE action LIKE 'abandon %' AND outcome = 'done'", 1)
+}
+
+// bodyCoordinate reads where a body sits, the way any page would show it.
+func bodyCoordinate(t *testing.T, ctx context.Context, universeWorld *world, bodyID int64) universe.Coordinate {
+	t.Helper()
+	var at universe.Coordinate
+	if err := universeWorld.Database.Read().QueryRowContext(ctx,
+		"SELECT galaxy, system, position FROM planets WHERE id = ?", bodyID).
+		Scan(&at.Galaxy, &at.System, &at.Position); err != nil {
+		t.Fatal(err)
+	}
+	return at
+}
+
+func economyResources(metal int64) economy.Resources {
+	return economy.Resources{Metal: metal}
 }

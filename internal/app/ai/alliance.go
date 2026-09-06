@@ -15,6 +15,11 @@ type Shared interface {
 	Publish(context.Context, int64, int64, []domainai.Knowledge) error
 	Recall(context.Context, int64, time.Time) ([]domainai.Knowledge, error)
 	AllianceOf(context.Context, int64) (Alliance, error)
+	AssignRoles(context.Context, int64, map[int64]domainai.Role, time.Time) error
+	Roles(context.Context, int64) (map[int64]domainai.Role, error)
+	OpenObjective(context.Context, int64, domainai.Objective) (domainai.Objective, error)
+	Objective(context.Context, int64) (domainai.Objective, bool, error)
+	AdvanceObjective(context.Context, domainai.Objective, domainai.ObjectiveState, int64, string, time.Time) error
 }
 
 // Alliance is what an artificial player knows of its own team: who is in it,
@@ -88,4 +93,48 @@ func (t Teamwork) Recall(ctx context.Context, allianceID int64, now time.Time) (
 		return nil, errors.New("ai: incomplete teamwork dependencies")
 	}
 	return t.Shared.Recall(ctx, allianceID, now)
+}
+
+// AssignRoles writes down who does what for the alliance.
+func (t Teamwork) AssignRoles(ctx context.Context, allianceID int64, roles map[int64]domainai.Role, now time.Time) error {
+	if t.Shared == nil {
+		return errors.New("ai: incomplete teamwork dependencies")
+	}
+	return t.Shared.AssignRoles(ctx, allianceID, roles, now)
+}
+
+// Roles reads who does what for the alliance.
+func (t Teamwork) Roles(ctx context.Context, allianceID int64) (map[int64]domainai.Role, error) {
+	if t.Shared == nil {
+		return nil, errors.New("ai: incomplete teamwork dependencies")
+	}
+	return t.Shared.Roles(ctx, allianceID)
+}
+
+// OpenObjective starts the single plan an alliance pursues.
+func (t Teamwork) OpenObjective(ctx context.Context, allianceID int64, objective domainai.Objective) (domainai.Objective, error) {
+	if t.Shared == nil {
+		return domainai.Objective{}, errors.New("ai: incomplete teamwork dependencies")
+	}
+	return t.Shared.OpenObjective(ctx, allianceID, objective)
+}
+
+// Objective returns the plan an alliance is pursuing, if it has one.
+func (t Teamwork) Objective(ctx context.Context, allianceID int64) (domainai.Objective, bool, error) {
+	if t.Shared == nil {
+		return domainai.Objective{}, false, errors.New("ai: incomplete teamwork dependencies")
+	}
+	return t.Shared.Objective(ctx, allianceID)
+}
+
+// AdvanceObjective moves a plan along, or gives it up with a reason.
+func (t Teamwork) AdvanceObjective(ctx context.Context, objective domainai.Objective,
+	to domainai.ObjectiveState, groupID int64, reason string, now time.Time) error {
+	if t.Shared == nil {
+		return errors.New("ai: incomplete teamwork dependencies")
+	}
+	if !domainai.CanAdvance(objective.State, to) {
+		return ErrInvalidRequest
+	}
+	return t.Shared.AdvanceObjective(ctx, objective, to, groupID, reason, now)
 }

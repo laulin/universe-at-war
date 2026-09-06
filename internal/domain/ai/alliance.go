@@ -27,6 +27,8 @@ type Knowledge struct {
 	Defence  int64
 	Complete bool
 	Summary  string
+	// Capability is filled on a declaration: what the author says it owns.
+	Capability Capability
 }
 
 // KnowledgeKind is what a shared belief is about.
@@ -76,6 +78,7 @@ type Capability struct {
 	Recyclers     int64
 	WarStrength   int64
 	GroundDefence int64
+	Hauling       int64
 }
 
 // Assess reads out of an inventory what a member can honestly declare to its
@@ -105,5 +108,11 @@ func Assess(inventory map[unit.ID]int64, catalogue unit.Catalogue) Capability {
 	}
 	capability.WarStrength = Strength(warships, catalogue)
 	capability.GroundDefence = Strength(ground, catalogue)
+	for id, quantity := range inventory {
+		definition, known := catalogue.Definition(id)
+		if known && quantity > 0 && ShipRoleOf(definition) == Carrier {
+			capability.Hauling += quantity * definition.Cargo
+		}
+	}
 	return capability
 }

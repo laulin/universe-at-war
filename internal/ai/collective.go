@@ -20,6 +20,11 @@ type Teamwork interface {
 	Alliance(context.Context, int64) (appai.Alliance, bool, error)
 	Publish(context.Context, int64, int64, []domainai.Knowledge) error
 	Recall(context.Context, int64, time.Time) ([]domainai.Knowledge, error)
+	AssignRoles(context.Context, int64, map[int64]domainai.Role, time.Time) error
+	Roles(context.Context, int64) (map[int64]domainai.Role, error)
+	OpenObjective(context.Context, int64, domainai.Objective) (domainai.Objective, error)
+	Objective(context.Context, int64) (domainai.Objective, bool, error)
+	AdvanceObjective(context.Context, domainai.Objective, domainai.ObjectiveState, int64, string, time.Time) error
 }
 
 // contribute tells the alliance what this member has seen. Reports are shared
@@ -70,10 +75,15 @@ func (b *Brain) contribute(ctx context.Context, principal appauth.Principal, pro
 func (b *Brain) declare(profile domainai.Profile, alliance appai.Alliance, home appeconomy.Planet,
 	overview appfleet.Overview, now time.Time, recent time.Duration) domainai.Knowledge {
 	capability := domainai.Assess(overview.Stationed, b.Catalogues.Units)
+	capability.PlayerID = profile.PlayerID
+	capability.PlayerName = profile.Name
+	capability.Coordinate = home.Coordinate
+	capability.BodyID = home.ID
+	capability.Awake = profile.Window.Awake(now)
 	return domainai.Knowledge{
 		Kind: domainai.CapabilityKnowledge, Coordinate: home.Coordinate,
 		ObservedAt: now, ExpiresAt: now.Add(recent * domainai.StaleFactor), Confidence: 1,
-		Plunder: home.Stock, Defence: capability.GroundDefence, Complete: profile.Window.Awake(now),
+		Defence: capability.GroundDefence, Complete: capability.Awake, Capability: capability,
 		Summary: fmt.Sprintf("corps %d, sondes %d, recycleurs %d, flotte %d, sol %d",
 			home.ID, capability.Probes, capability.Recyclers, capability.WarStrength, capability.GroundDefence),
 	}
@@ -122,4 +132,120 @@ func (b *Brain) team(ctx context.Context, profile domainai.Profile) (appai.Allia
 		return appai.Alliance{}, false
 	}
 	return alliance, true
+}
+
+// lead is what the leader of an alliance does on top of its own reflection: it
+// hands out the roles and keeps the single collective plan moving. It reasons
+// on the common memory alone.
+func (b *Brain) lead(ctx context.Context, profile domainai.Profile, alliance appai.Alliance,
+	beliefs []domainai.Knowledge) []domainai.Decision {
+	now := b.Clock.Now().UTC()
+	capabilities := declarationsOf(beliefs)
+	roles := domainai.AssignRoles(capabilities)
+	if err := b.Teamwork.AssignRoles(ctx, alliance.ID, roles, now); err != nil {
+		return []domainai.Decision{failure(domainai.Strategic, "assign roles", err)}
+	}
+	decisions := []domainai.Decision{{
+		Layer: domainai.Strategic, Action: "assign roles", Outcome: domainai.Done,
+		Reason: fmt.Sprintf("%d members ranked by what they declared", len(roles)),
+	}}
+	objective, running, err := b.Teamwork.Objective(ctx, alliance.ID)
+	if err != nil {
+		return append(decisions, failure(domainai.Strategic, "objective", err))
+	}
+	if running {
+		return append(decisions, b.steer(ctx, profile, objective, beliefs, now))
+	}
+	kind, at, found := domainai.ChooseObjective(beliefs, profile.Preferences(), now)
+	if !found {
+		return append(decisions, domainai.Skip(domainai.Strategic, "objective",
+			"the common memory holds nothing worth a plan"))
+	}
+	opened, err := b.Teamwork.OpenObjective(ctx, alliance.ID, domainai.Objective{
+		Kind: kind, Coordinate: at, Quorum: domainai.Quorum(awakeCount(capabilities)),
+		OpenedAt: now, DeadlineAt: now.Add(objectiveWindow * profile.Interval),
+		Reason: "chosen from the shared memory",
+	})
+	if err != nil {
+		return append(decisions, failure(domainai.Strategic, "objective", err))
+	}
+	coordinate := opened.Coordinate
+	return append(decisions, domainai.Decision{
+		Layer: domainai.Strategic, Action: string(opened.Kind) + " on " + coordinate.String(),
+		Outcome: domainai.Done, Reason: "opened for the alliance", Target: &coordinate,
+	})
+}
+
+// objectiveWindow is how many reflections of the leader a plan is given before
+// it is given up.
+const objectiveWindow = 6
+
+// steer keeps a running plan honest: it moves to gathering once somebody has
+// actually looked, and gives up when the window closes or the reason is gone.
+func (b *Brain) steer(ctx context.Context, profile domainai.Profile, objective domainai.Objective,
+	beliefs []domainai.Knowledge, now time.Time) domainai.Decision {
+	coordinate := objective.Coordinate
+	if !now.Before(objective.DeadlineAt) {
+		if err := b.Teamwork.AdvanceObjective(ctx, objective, domainai.Abandoned, 0,
+			"the window closed", now); err != nil {
+			return failure(domainai.Strategic, "objective", err)
+		}
+		return domainai.Decision{
+			Layer: domainai.Strategic, Action: "abandon " + coordinate.String(),
+			Outcome: domainai.Done, Reason: "the window closed", Target: &coordinate,
+		}
+	}
+	if objective.State != domainai.Scouting {
+		return domainai.Skip(domainai.Strategic, "objective", "the alliance is already gathering")
+	}
+	if !seenProperly(beliefs, objective, now) {
+		return domainai.Skip(domainai.Strategic, "objective", "nobody has looked at it yet")
+	}
+	if err := b.Teamwork.AdvanceObjective(ctx, objective, domainai.Assembling, 0,
+		"the intelligence is in", now); err != nil {
+		return failure(domainai.Strategic, "objective", err)
+	}
+	return domainai.Decision{
+		Layer: domainai.Strategic, Action: "gather on " + coordinate.String(),
+		Outcome: domainai.Done, Reason: "a fresh and complete report was shared", Target: &coordinate,
+	}
+}
+
+// seenProperly reports whether somebody actually looked at the target of a
+// plan and shared what they saw. A defence needs no report: the victim is the
+// one raising the alarm.
+func seenProperly(beliefs []domainai.Knowledge, objective domainai.Objective, now time.Time) bool {
+	if objective.Kind == domainai.DefenceObjective {
+		return true
+	}
+	for _, belief := range beliefs {
+		if belief.Kind != domainai.TargetKnowledge || belief.Coordinate != objective.Coordinate {
+			continue
+		}
+		if belief.Complete && belief.Fresh(now) {
+			return true
+		}
+	}
+	return false
+}
+
+// declarationsOf keeps the declarations out of the common memory.
+func declarationsOf(beliefs []domainai.Knowledge) []domainai.Capability {
+	var capabilities []domainai.Capability
+	for _, belief := range beliefs {
+		if belief.Kind == domainai.CapabilityKnowledge && belief.Capability.PlayerID != 0 {
+			capabilities = append(capabilities, belief.Capability)
+		}
+	}
+	return capabilities
+}
+
+func awakeCount(capabilities []domainai.Capability) int {
+	awake := 0
+	for _, capability := range capabilities {
+		if capability.Awake {
+			awake++
+		}
+	}
+	return awake
 }
