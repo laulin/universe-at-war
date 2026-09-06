@@ -16,6 +16,8 @@ import (
 	"universeatwar/internal/domain/catalogue"
 	"universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
+	"universeatwar/internal/domain/research"
+	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 )
@@ -260,6 +262,13 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 		if request.Mission.TargetsForeignBody() && targetOwner == playerID {
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
 		}
+	case domainfleet.TargetEmpty:
+		if targetPlanetID != 0 {
+			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
+		}
+		if err := colonySlotAvailable(ctx, tx, playerID, planet.Researches, planet.Rules); err != nil {
+			return domainfleet.Plan{}, appeconomy.Planet{}, 0, err
+		}
 	case domainfleet.TargetDebris:
 		field, fieldErr := loadDebris(ctx, tx, request.Target)
 		if fieldErr != nil {
@@ -401,7 +410,7 @@ func sortedComposition(composition domainfleet.Composition) []unit.ID {
 func planetAt(ctx context.Context, tx *sql.Tx, at universe.Coordinate) (int64, int64, error) {
 	var planetID, ownerID int64
 	err := tx.QueryRowContext(ctx,
-		"SELECT id, owner_player_id FROM planets WHERE galaxy = ? AND system = ? AND position = ?",
+		"SELECT id, owner_player_id FROM planets WHERE galaxy = ? AND system = ? AND position = ? AND kind = 'planet'",
 		at.Galaxy, at.System, at.Position).Scan(&planetID, &ownerID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, 0, nil
@@ -410,6 +419,20 @@ func planetAt(ctx context.Context, tx *sql.Tx, at universe.Coordinate) (int64, i
 		return 0, 0, fmt.Errorf("fleet repository: read target planet: %w", err)
 	}
 	return planetID, ownerID, nil
+}
+
+// colonySlotAvailable reports whether the player may found one more colony.
+// The home world does not consume a slot.
+func colonySlotAvailable(ctx context.Context, tx *sql.Tx, playerID int64, levels research.Levels, configured rules.Ruleset) error {
+	var planets int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM planets WHERE owner_player_id = ? AND kind = 'planet'", playerID).Scan(&planets); err != nil {
+		return fmt.Errorf("fleet repository: count colonies: %w", err)
+	}
+	if planets-1 >= levels.ColonySlots(configured.Progression.MaximumColonies) {
+		return domainfleet.ErrNoColonySlot
+	}
+	return nil
 }
 
 func accountOfPlayer(ctx context.Context, tx *sql.Tx, playerID int64) (int64, error) {

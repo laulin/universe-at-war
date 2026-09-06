@@ -330,8 +330,11 @@ func completeBuilding(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now
 		return fmt.Errorf("economy repository: complete building level: %w", err)
 	}
 	extraFields := 0
-	if building.ID(buildingID) == building.Terraformer {
+	switch building.ID(buildingID) {
+	case building.Terraformer:
 		extraFields = 5
+	case building.LunarBase:
+		extraFields = planet.Rules.Expansion.LunarBaseFields
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE planets SET used_fields = used_fields + 1, total_fields = total_fields + ? WHERE id = ?", extraFields, planetID); err != nil {
 		return fmt.Errorf("economy repository: consume planet field: %w", err)
@@ -374,10 +377,11 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 	if err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
-	query := `SELECT p.id, p.name, pl.display_name, p.galaxy, p.system, p.position, p.total_fields, p.used_fields, p.minimum_temperature, p.maximum_temperature, r.metal, r.crystal, r.deuterium, r.metal_remainder, r.crystal_remainder, r.deuterium_remainder, r.produced_at FROM planets p JOIN players pl ON pl.id = p.owner_player_id JOIN planet_resources r ON r.planet_id = p.id WHERE ` + condition + ` ORDER BY p.id LIMIT 1`
+	query := `SELECT p.id, p.kind, p.parent_planet_id, p.name, pl.display_name, p.galaxy, p.system, p.position, p.total_fields, p.used_fields, p.minimum_temperature, p.maximum_temperature, r.metal, r.crystal, r.deuterium, r.produced_at FROM planets p JOIN players pl ON pl.id = p.owner_player_id JOIN planet_resources r ON r.planet_id = p.id WHERE ` + condition + ` ORDER BY p.id LIMIT 1`
 	var planet appeconomy.Planet
-	var producedText string
-	err = tx.QueryRowContext(ctx, query, arguments...).Scan(&planet.ID, &planet.Name, &planet.PlayerName, &planet.Coordinate.Galaxy, &planet.Coordinate.System, &planet.Coordinate.Position, &planet.TotalFields, &planet.UsedFields, &planet.MinimumTemperature, &planet.MaximumTemperature, &planet.Stock.Metal, &planet.Stock.Crystal, &planet.Stock.Deuterium, new(int64), new(int64), new(int64), &producedText)
+	var producedText, kind string
+	var parentID sql.NullInt64
+	err = tx.QueryRowContext(ctx, query, arguments...).Scan(&planet.ID, &kind, &parentID, &planet.Name, &planet.PlayerName, &planet.Coordinate.Galaxy, &planet.Coordinate.System, &planet.Coordinate.Position, &planet.TotalFields, &planet.UsedFields, &planet.MinimumTemperature, &planet.MaximumTemperature, &planet.Stock.Metal, &planet.Stock.Crystal, &planet.Stock.Deuterium, &producedText)
 	if errors.Is(err, sql.ErrNoRows) {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, appeconomy.ErrNoEmpire
 	}
@@ -405,7 +409,8 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 	if err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
-	planet.Kind = building.OnPlanet
+	planet.Kind = building.Placement(kind)
+	planet.ParentID = parentID.Int64
 	planet.Rules = configured
 	if err := enrichEconomy(&planet); err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
@@ -577,6 +582,22 @@ func loadUnits(ctx context.Context, tx *sql.Tx, planetID int64) (unit.Inventory,
 }
 
 func enrichEconomy(planet *appeconomy.Planet) error {
+	if planet.Kind == building.OnMoon {
+		// A moon has no mines and no base production: it only stores.
+		planet.Rates = economy.Rates{}
+		planet.Energy = economy.Energy{}
+		var err error
+		planet.Capacity.Metal, err = economy.Capacity(planet.Rules.Economy.BaseStorage, planet.Levels[building.MetalStorage])
+		if err != nil {
+			return err
+		}
+		planet.Capacity.Crystal, err = economy.Capacity(planet.Rules.Economy.BaseStorage, planet.Levels[building.CrystalStorage])
+		if err != nil {
+			return err
+		}
+		planet.Capacity.Deuterium, err = economy.Capacity(planet.Rules.Economy.BaseStorage, planet.Levels[building.DeuteriumTank])
+		return err
+	}
 	levels := economy.Levels{
 		MetalMine: planet.Levels[building.MetalMine], CrystalMine: planet.Levels[building.CrystalMine],
 		DeuteriumSynthesizer: planet.Levels[building.DeuteriumSynthesizer], SolarPlant: planet.Levels[building.SolarPlant],

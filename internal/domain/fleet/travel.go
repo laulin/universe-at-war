@@ -22,6 +22,7 @@ var (
 	ErrInsufficientFuel     = errors.New("fleet: not enough deuterium for the trip")
 	ErrCargoExceedsCapacity = errors.New("fleet: cargo exceeds the remaining capacity")
 	ErrNoFleetSlot          = errors.New("fleet: no free fleet slot")
+	ErrNoColonySlot         = errors.New("fleet: no free colony slot")
 )
 
 // Composition maps stable ship identifiers to the quantity sent.

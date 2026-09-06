@@ -3,7 +3,9 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"universeatwar/internal/domain/building"
@@ -17,6 +19,7 @@ import (
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/unit"
+	"universeatwar/internal/domain/universe"
 )
 
 // resolveEspionage reveals what the probes could see, tells the target that
@@ -495,4 +498,162 @@ func researchDocument(levels research.Levels) map[string]int {
 		document[string(id)] = level
 	}
 	return document
+}
+
+// resolveColonization founds a planet if the position is still free when the
+// fleet lands. The whole creation is one transaction, and the uniqueness of a
+// coordinate arbitrates two colonisations racing for it.
+func (r *FleetRepository) resolveColonization(ctx context.Context, tx *sql.Tx, row fleetRow, dueAt, now time.Time) error {
+	configured, rulesetVersion, err := activeRuleset(ctx, tx)
+	if err != nil {
+		return err
+	}
+	occupied, _, err := planetAt(ctx, tx, row.target)
+	if err != nil {
+		return err
+	}
+	if occupied != 0 {
+		return r.abortMission(ctx, tx, row, "position_taken", now)
+	}
+	levels, err := researchOfPlayer(ctx, tx, row.ownerPlayerID)
+	if err != nil {
+		return err
+	}
+	if err := colonySlotAvailable(ctx, tx, row.ownerPlayerID, levels, configured); err != nil {
+		if errors.Is(err, domainfleet.ErrNoColonySlot) {
+			return r.abortMission(ctx, tx, row, "no_colony_slot", now)
+		}
+		return err
+	}
+	composition, err := loadComposition(ctx, tx, row.id)
+	if err != nil {
+		return err
+	}
+	if composition[unit.ColonyShip] <= 0 {
+		return r.abortMission(ctx, tx, row, "no_colony_ship", now)
+	}
+
+	traits, err := universe.Generate(row.target,
+		configured.Topology.MinPlanetFields, configured.Topology.MaxPlanetFields,
+		configured.Topology.PositionsPerSystem, random.NewSeeded(uint64(row.seed)))
+	if err != nil {
+		return err
+	}
+	planetID, err := createBody(ctx, tx, bodyRecord{
+		ownerPlayerID: row.ownerPlayerID,
+		kind:          building.OnPlanet,
+		name:          "Colonie",
+		at:            row.target,
+		traits:        traits,
+		createdAt:     dueAt,
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			// Another colonisation reached the position first.
+			return r.abortMission(ctx, tx, row, "position_taken", now)
+		}
+		return err
+	}
+
+	// The colony ship becomes the settlement; the rest of the fleet goes home.
+	if err := consumeColonyShip(ctx, tx, row.id, composition); err != nil {
+		return err
+	}
+	cargo, err := loadCargo(ctx, tx, row.id)
+	if err != nil {
+		return err
+	}
+	planet, _, production, err := loadPlanetByID(ctx, tx, planetID, dueAt, r.catalogues.Buildings)
+	if err != nil {
+		return err
+	}
+	delivered := deliverable(cargo, production.Stock, planet.Capacity)
+	production.Stock = economy.Resources{
+		Metal:     production.Stock.Metal + delivered.Metal,
+		Crystal:   production.Stock.Crystal + delivered.Crystal,
+		Deuterium: production.Stock.Deuterium + delivered.Deuterium,
+	}
+	if err := persistProduction(ctx, tx, planetID, production); err != nil {
+		return err
+	}
+	if err := storeCargo(ctx, tx, row.id, economy.Resources{
+		Metal:     cargo.Metal - delivered.Metal,
+		Crystal:   cargo.Crystal - delivered.Crystal,
+		Deuterium: cargo.Deuterium - delivered.Deuterium,
+	}); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO game_event_log(event_type, actor_type, actor_id, entity_type, entity_id, occurred_at, payload)
+		VALUES ('colony_founded', 'player', ?, 'planet', ?, ?, json_object('coordinate', ?, 'fields', ?, 'seed', ?, 'ruleset_version', ?))
+	`, row.ownerPlayerID, planetID, timestamp(now), row.target.String(), traits.TotalFields, row.seed, rulesetVersion); err != nil {
+		return fmt.Errorf("fleet repository: log colonisation: %w", err)
+	}
+
+	remaining, err := loadComposition(ctx, tx, row.id)
+	if err != nil {
+		return err
+	}
+	if remaining.Count() == 0 {
+		return transitionFleet(ctx, tx, row, domainfleet.Completed, "colonised", now)
+	}
+	return r.sendHome(ctx, tx, row, "colonised", now)
+}
+
+// bodyRecord is a celestial body about to be created.
+type bodyRecord struct {
+	ownerPlayerID int64
+	kind          building.Placement
+	parentID      int64
+	name          string
+	at            universe.Coordinate
+	traits        universe.Characteristics
+	createdAt     time.Time
+}
+
+// createBody inserts a planet or a moon with its own empty stock.
+func createBody(ctx context.Context, tx *sql.Tx, record bodyRecord) (int64, error) {
+	var parent any
+	if record.parentID > 0 {
+		parent = record.parentID
+	}
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO planets(owner_player_id, kind, parent_planet_id, name, galaxy, system, position,
+			total_fields, minimum_temperature, maximum_temperature, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, record.ownerPlayerID, string(record.kind), parent, record.name,
+		record.at.Galaxy, record.at.System, record.at.Position,
+		record.traits.TotalFields, record.traits.MinimumTemperature, record.traits.MaximumTemperature,
+		timestamp(record.createdAt))
+	if err != nil {
+		return 0, fmt.Errorf("fleet repository: create body: %w", err)
+	}
+	bodyID, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("fleet repository: body id: %w", err)
+	}
+	// A new body starts empty: a colony brings its own stock, a moon holds none.
+	if _, err := tx.ExecContext(ctx,
+		"INSERT INTO planet_resources(planet_id, metal, crystal, deuterium, produced_at) VALUES (?, 0, 0, 0, ?)",
+		bodyID, timestamp(record.createdAt)); err != nil {
+		return 0, fmt.Errorf("fleet repository: create body resources: %w", err)
+	}
+	return bodyID, nil
+}
+
+// consumeColonyShip removes exactly one colony ship from the fleet.
+func consumeColonyShip(ctx context.Context, tx *sql.Tx, fleetID int64, composition domainfleet.Composition) error {
+	remaining := composition[unit.ColonyShip] - 1
+	if remaining <= 0 {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM fleet_ships WHERE fleet_id = ? AND unit_id = ?",
+			fleetID, string(unit.ColonyShip)); err != nil {
+			return fmt.Errorf("fleet repository: consume colony ship: %w", err)
+		}
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE fleet_ships SET quantity = ? WHERE fleet_id = ? AND unit_id = ?",
+		remaining, fleetID, string(unit.ColonyShip)); err != nil {
+		return fmt.Errorf("fleet repository: consume colony ship: %w", err)
+	}
+	return nil
 }
