@@ -16,7 +16,7 @@ import (
 // CurrentSchemaVersion is the ruleset document layout produced by this build.
 // Older documents decode on top of the current defaults; a newer one is
 // refused so a downgrade never corrupts a saved universe.
-const CurrentSchemaVersion = 3
+const CurrentSchemaVersion = 4
 
 // DefaultCatalogueVersion names the content catalogue shipped with this build.
 const DefaultCatalogueVersion = "classic-1"
@@ -34,6 +34,7 @@ type Ruleset struct {
 	Economy       EconomySettings     `json:"economy"`
 	Combat        CombatSettings      `json:"combat"`
 	Espionage     EspionageSettings   `json:"espionage"`
+	Expansion     ExpansionSettings   `json:"expansion"`
 	Progression   ProgressionSettings `json:"progression"`
 	Team          TeamSettings        `json:"team"`
 	AI            AISettings          `json:"ai"`
@@ -108,6 +109,14 @@ type EspionageSettings struct {
 	ResearchThreshold   int     `json:"research_threshold"`
 	DetectionBase       float64 `json:"detection_base"`
 	RecentReportSeconds int     `json:"recent_report_seconds"`
+}
+
+// ExpansionSettings tunes moons, the phalanx and the jump gate.
+type ExpansionSettings struct {
+	BaseMoonFields          int   `json:"base_moon_fields"`
+	LunarBaseFields         int   `json:"lunar_base_fields"`
+	PhalanxScanCost         int64 `json:"phalanx_scan_cost"`
+	JumpGateCooldownSeconds int   `json:"jump_gate_cooldown_seconds"`
 }
 
 type ProgressionSettings struct {
@@ -191,6 +200,10 @@ func Default() Ruleset {
 			ResourcesThreshold: 1, FleetThreshold: 2, DefensesThreshold: 3,
 			BuildingsThreshold: 4, ResearchThreshold: 5,
 			DetectionBase: .0025, RecentReportSeconds: 3600,
+		},
+		Expansion: ExpansionSettings{
+			BaseMoonFields: 1, LunarBaseFields: 3,
+			PhalanxScanCost: 5000, JumpGateCooldownSeconds: 3600,
 		},
 		Progression: ProgressionSettings{
 			BuildingCostMultiplier: 1, ResearchCostMultiplier: 1, ShipCostMultiplier: 1,
@@ -296,6 +309,10 @@ func (r Ruleset) Validate() error {
 	}
 	if !ratio(r.Espionage.DetectionBase) || r.Espionage.RecentReportSeconds <= 0 {
 		return errors.New("rules: invalid espionage detection or freshness")
+	}
+	if r.Expansion.BaseMoonFields <= 0 || r.Expansion.LunarBaseFields <= 0 ||
+		r.Expansion.PhalanxScanCost < 0 || r.Expansion.JumpGateCooldownSeconds <= 0 {
+		return errors.New("rules: invalid expansion setting")
 	}
 	for _, multiplier := range []float64{
 		r.Progression.BuildingCostMultiplier, r.Progression.ResearchCostMultiplier,

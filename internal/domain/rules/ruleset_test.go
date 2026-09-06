@@ -24,6 +24,8 @@ func TestRulesetValidationRejectsImpossibleValues(t *testing.T) {
 		{name: "decreasing espionage thresholds", mutate: func(r *Ruleset) { r.Espionage.FleetThreshold = 0 }},
 		{name: "impossible detection base", mutate: func(r *Ruleset) { r.Espionage.DetectionBase = 2 }},
 		{name: "no report freshness", mutate: func(r *Ruleset) { r.Espionage.RecentReportSeconds = 0 }},
+		{name: "moon without a field", mutate: func(r *Ruleset) { r.Expansion.BaseMoonFields = 0 }},
+		{name: "jump gate without a cooldown", mutate: func(r *Ruleset) { r.Expansion.JumpGateCooldownSeconds = 0 }},
 		{name: "unknown timezone", mutate: func(r *Ruleset) { r.Identity.Timezone = "Mars/Olympus" }},
 		{name: "zero galaxies", mutate: func(r *Ruleset) { r.Topology.Galaxies = 0 }},
 		{name: "invalid planet fields", mutate: func(r *Ruleset) { r.Topology.MinPlanetFields = r.Topology.MaxPlanetFields + 1 }},
@@ -59,6 +61,7 @@ func TestDecodeFillsSectionsMissingFromOlderDocuments(t *testing.T) {
 	}
 	delete(generic, "schema_version")
 	delete(generic, "espionage")
+	delete(generic, "expansion")
 	progression, ok := generic["progression"].(map[string]any)
 	if !ok {
 		t.Fatal("progression section is missing from the encoded document")
@@ -82,6 +85,9 @@ func TestDecodeFillsSectionsMissingFromOlderDocuments(t *testing.T) {
 	if decoded.Espionage != Default().Espionage {
 		t.Fatalf("espionage section = %+v, want the defaults", decoded.Espionage)
 	}
+	if decoded.Expansion != Default().Expansion {
+		t.Fatalf("expansion section = %+v, want the defaults", decoded.Expansion)
+	}
 }
 
 func TestDecodeRejectsFutureSchemaAndUnknownFields(t *testing.T) {
@@ -89,11 +95,11 @@ func TestDecodeRejectsFutureSchemaAndUnknownFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
-	future := bytes.Replace(document, []byte(`"schema_version":3`), []byte(`"schema_version":99`), 1)
+	future := bytes.Replace(document, []byte(`"schema_version":4`), []byte(`"schema_version":99`), 1)
 	if _, err := Decode(future); !errors.Is(err, ErrFutureSchema) {
 		t.Fatalf("Decode(future schema) error = %v, want ErrFutureSchema", err)
 	}
-	unknown := bytes.Replace(document, []byte(`"schema_version":3`), []byte(`"schema_version":3,"mystery":1`), 1)
+	unknown := bytes.Replace(document, []byte(`"schema_version":4`), []byte(`"schema_version":4,"mystery":1`), 1)
 	if _, err := Decode(unknown); err == nil {
 		t.Fatal("Decode(unknown field) accepted a document with an unknown field")
 	}
