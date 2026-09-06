@@ -10,6 +10,8 @@ import (
 
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
+	appgalaxy "universeatwar/internal/app/galaxy"
+	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
 	appshipyard "universeatwar/internal/app/shipyard"
 	appclock "universeatwar/internal/clock"
@@ -30,6 +32,8 @@ type world struct {
 	Research appresearch.Service
 	Shipyard appshipyard.Service
 	Fleet    appfleet.Service
+	Galaxy   appgalaxy.Service
+	Reports  appreports.Service
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -73,6 +77,8 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 			Seeds:      random.NewSeedGenerator(rand.Reader),
 			Completer:  events,
 		},
+		Galaxy:  appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())},
+		Reports: appreports.Service{Clock: clock, Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()), Completer: events},
 	}
 }
 

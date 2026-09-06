@@ -139,7 +139,7 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 		}
 		choices = append(choices, view)
 	}
-	shell := h.gameShell(token, principal, "research", planets, planetID)
+	shell := h.gameShell(request.Context(), token, principal, "research", planets, planetID)
 	shell.Error = message
 	data := researchPageData{
 		pageShell: shell, Planet: overview.Planet, Levels: overview.Levels,
@@ -253,7 +253,7 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 		section = "defense"
 		title = "Défense"
 	}
-	shell := h.gameShell(token, principal, section, planets, planetID)
+	shell := h.gameShell(request.Context(), token, principal, section, planets, planetID)
 	shell.Error = message
 	data := productionPageData{
 		pageShell: shell, Planet: overview.Planet, Family: string(family), Title: title,

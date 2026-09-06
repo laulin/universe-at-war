@@ -447,6 +447,17 @@ func activeRuleset(ctx context.Context, tx *sql.Tx) (rules.Ruleset, int64, error
 	return configured, version, nil
 }
 
+// activeRulesetFrom reads the active ruleset outside any transaction, for the
+// read-only projections.
+func activeRulesetFrom(ctx context.Context, database *sql.DB) (rules.Ruleset, error) {
+	var document string
+	if err := database.QueryRowContext(ctx,
+		"SELECT document FROM ruleset_versions WHERE status = 'active' ORDER BY version DESC LIMIT 1").Scan(&document); err != nil {
+		return rules.Ruleset{}, fmt.Errorf("economy repository: active ruleset: %w", err)
+	}
+	return rules.Decode([]byte(document))
+}
+
 func loadLevels(ctx context.Context, tx *sql.Tx, planetID int64, catalogue building.Catalogue) (building.Levels, error) {
 	levels := building.Levels{}
 	known := map[building.ID]bool{}

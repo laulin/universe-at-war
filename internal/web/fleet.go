@@ -108,7 +108,7 @@ func (h *Handler) renderFleet(response http.ResponseWriter, request *http.Reques
 	if !ok {
 		return
 	}
-	shell := h.gameShell(token, principal, "fleet", planets, planetID)
+	shell := h.gameShell(request.Context(), token, principal, "fleet", planets, planetID)
 	shell.Error = message
 	missions := make([]fleetPageMission, 0, len(overview.Fleets))
 	for _, mission := range overview.Fleets {
@@ -161,7 +161,7 @@ func (h *Handler) renderFleetSend(response http.ResponseWriter, request *http.Re
 	if !ok {
 		return
 	}
-	shell := h.gameShell(token, principal, "fleet", planets, planetID)
+	shell := h.gameShell(request.Context(), token, principal, "fleet", planets, planetID)
 	shell.Error = message
 	h.render(response, status, "fleet-send", fleetSendPageData{
 		pageShell: shell, Planet: overview.Planet,
@@ -219,7 +219,7 @@ func (h *Handler) previewFleet(response http.ResponseWriter, request *http.Reque
 	if !ok {
 		return
 	}
-	shell := h.gameShell(token, principal, "fleet", planets, planetID)
+	shell := h.gameShell(request.Context(), token, principal, "fleet", planets, planetID)
 	data := fleetConfirmPageData{
 		pageShell: shell, Planet: overview.Planet, Form: form, Plan: plan,
 		ArrivesISO: plan.ArrivesAt.Format(time.RFC3339), MissionName: missionName(domainfleet.Mission(form.Mission)),

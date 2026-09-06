@@ -46,7 +46,14 @@ La page Flotte liste les vaisseaux stationnés, les emplacements disponibles et
 les missions en vol avec leurs horaires absolus. L'assistant d'envoi calcule
 distance, carburant, capacité, arrivée et retour avant confirmation. Une flotte
 partie est engagée : seul le rappel, tant que la mission le permet, la fait
-revenir. La
+revenir.
+
+La carte galaxie n'affiche que le public : noms de planètes, joueurs et champs
+de débris. Elle propose d'espionner en un clic ou de préparer une flotte. Les
+rapports d'espionnage, de combat et de recyclage sont immuables et filtrés à
+leur création : une section non révélée n'est pas envoyée au navigateur. Les
+rapports hostiles non lus sont signalés par un compteur et un texte, jamais par
+la seule couleur. La
 planète mère affiche les productions, stockages, énergie et cases, ainsi que le
 catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
 worker reprend automatiquement les événements après un redémarrage.

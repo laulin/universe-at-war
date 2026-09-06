@@ -19,7 +19,9 @@ import (
 	appbootstrap "universeatwar/internal/app/bootstrap"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
+	appgalaxy "universeatwar/internal/app/galaxy"
 	appregistration "universeatwar/internal/app/registration"
+	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
 	appserverstate "universeatwar/internal/app/serverstate"
 	appsetup "universeatwar/internal/app/setup"
@@ -251,6 +253,12 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Completer:  events,
 		Wake:       worker.Wake,
 	}
+	galaxy := appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())}
+	reports := appreports.Service{
+		Clock:      clock,
+		Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()),
+		Completer:  events,
+	}
 	shipyard := appshipyard.Service{
 		Clock:      clock,
 		Repository: shipyardRepository,
@@ -271,6 +279,8 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Research:       research,
 		Shipyard:       shipyard,
 		Fleet:          fleet,
+		Galaxy:         galaxy,
+		Reports:        reports,
 		Registration:   registration,
 		Logger:         logger,
 		SecureCookies:  *secureCookie,

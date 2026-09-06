@@ -1,0 +1,60 @@
+{{define "title"}}{{.Report.KindName}}{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="report-title">
+    <p class="eyebrow">{{.Report.Coordinate}} — {{.Report.OccurredAt.Format "2006-01-02 15:04:05"}} UTC ({{.Report.Freshness}})</p>
+    <h2 id="report-title">{{.Report.KindName}}{{if .Report.Hostile}} <span class="hostile">⚠ hostile</span>{{end}}</h2>
+
+    {{with .Espionage}}
+    <dl class="summary">
+      <dt>Cible</dt><dd>{{.TargetPlanetName}} — {{.TargetPlayerName}}</dd>
+      <dt>Sondes</dt><dd>{{.Probes}}{{if .ProbesLost}} (perdues){{end}}</dd>
+      <dt>Niveau de révélation</dt><dd>{{.Level}}</dd>
+      <dt>Ressources</dt><dd>{{if .Resources}}M {{.Resources.Metal}} · C {{.Resources.Crystal}} · D {{.Resources.Deuterium}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
+      <dt>Flotte</dt><dd>{{if .Fleet}}{{range $id, $quantity := .Fleet}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
+      <dt>Défenses</dt><dd>{{if .Defenses}}{{range $id, $quantity := .Defenses}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
+      <dt>Bâtiments</dt><dd>{{if .Buildings}}{{range $id, $level := .Buildings}}{{$id}} {{$level}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
+      <dt>Recherches</dt><dd>{{if .Research}}{{range $id, $level := .Research}}{{$id}} {{$level}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
+    </dl>
+    {{end}}
+
+    {{with .Detected}}
+    <dl class="summary">
+      <dt>Espionné par</dt><dd>{{.AttackerPlayerName}}</dd>
+      <dt>Origine</dt><dd>{{.Origin}}</dd>
+      <dt>Sondes</dt><dd>{{.Probes}}{{if .ProbesDestroyed}} — détruites{{end}}</dd>
+      <dt>Planète visée</dt><dd>{{.TargetPlanetName}}</dd>
+    </dl>
+    {{end}}
+
+    {{with .Combat}}
+    <dl class="summary">
+      <dt>Issue</dt><dd>{{.Outcome}}</dd>
+      <dt>Butin</dt><dd>M {{.Loot.Metal}} · C {{.Loot.Crystal}} · D {{.Loot.Deuterium}}</dd>
+      <dt>Débris</dt><dd>M {{.Debris.Metal}} · C {{.Debris.Crystal}}</dd>
+      <dt>Chance de lune</dt><dd>{{.MoonChance}}</dd>
+    </dl>
+    <h3>Camps</h3>
+    {{range .Attackers}}<p><strong>Attaquant {{.PlayerName}}</strong> — armes {{.Weapons}}, bouclier {{.Shielding}}, protection {{.Armour}} ; pertes {{range $id, $quantity := .Losses}}{{$id}} {{$quantity}}. {{else}}aucune{{end}}</p>{{end}}
+    {{range .Defenders}}<p><strong>Défenseur {{.PlayerName}}</strong> — armes {{.Weapons}}, bouclier {{.Shielding}}, protection {{.Armour}} ; pertes {{range $id, $quantity := .Losses}}{{$id}} {{$quantity}}. {{else}}aucune{{end}}</p>{{end}}
+    {{if .Rebuilt}}<p>Défenses reconstruites : {{range $id, $quantity := .Rebuilt}}{{$id}} {{$quantity}}. {{end}}</p>{{end}}
+    <h3>Rounds</h3>
+    <table class="bodies">
+      <thead><tr><th scope="col">Round</th><th scope="col">Tirs attaquants</th><th scope="col">Dégâts attaquants</th><th scope="col">Tirs défenseurs</th><th scope="col">Dégâts défenseurs</th></tr></thead>
+      <tbody>
+      {{range .Rounds}}<tr><th scope="row">{{.Number}}</th><td>{{.AttackerShots}}</td><td>{{.AttackerDamage}}</td><td>{{.DefenderShots}}</td><td>{{.DefenderDamage}}</td></tr>{{end}}
+      </tbody>
+    </table>
+    {{end}}
+
+    {{with .Recycling}}
+    <dl class="summary">
+      <dt>Position</dt><dd>{{.Position}}</dd>
+      <dt>Recycleurs</dt><dd>{{.Recyclers}} — capacité {{.Capacity}}</dd>
+      <dt>Collecté</dt><dd>M {{.Collected.Metal}} · C {{.Collected.Crystal}}</dd>
+      <dt>Reste sur place</dt><dd>M {{.Remaining.Metal}} · C {{.Remaining.Crystal}}</dd>
+    </dl>
+    {{end}}
+
+    <p><a href="/reports">Retour aux rapports</a></p>
+  </section>
+{{end}}

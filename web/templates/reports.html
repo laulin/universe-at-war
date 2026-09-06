@@ -1,0 +1,41 @@
+{{define "title"}}Rapports{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="reports-title">
+    <p class="eyebrow">Journal</p>
+    <h2 id="reports-title">Rapports</h2>
+    <nav class="filters" aria-label="Filtres">
+      <a href="/reports">Tous</a>
+      <a href="/reports?unread=1">Non lus</a>
+      <a href="/reports?kind=espionage">Espionnage</a>
+      <a href="/reports?kind=combat_defense">Défense</a>
+      <a href="/reports?kind=combat_attack">Attaque</a>
+      <a href="/reports?kind=recycling">Recyclage</a>
+    </nav>
+    {{if .Reports}}
+    <table class="bodies">
+      <thead>
+        <tr><th scope="col">Type</th><th scope="col">Position</th><th scope="col">Date</th><th scope="col">État</th><th scope="col">Action</th></tr>
+      </thead>
+      <tbody>
+      {{range .Reports}}
+        <tr>
+          <th scope="row"><a href="/reports/{{.ID}}">{{.KindName}}</a>{{if .Hostile}} <span class="hostile">⚠ hostile</span>{{end}}</th>
+          <td>{{.Coordinate}}</td>
+          <td>{{.OccurredAt.Format "2006-01-02 15:04:05"}} UTC ({{.Freshness}})</td>
+          <td>{{if .Read}}lu{{else}}non lu{{end}}</td>
+          <td>
+            {{if not .Read}}
+            <form method="post" action="/reports/{{.ID}}/read">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit">Marquer lu</button>
+            </form>
+            {{else}}<span class="muted">—</span>{{end}}
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{if .NextPage}}<p><a href="/reports?page={{.NextPage}}">Page suivante</a></p>{{end}}
+    {{else}}<p class="muted">Aucun rapport pour l'instant.</p>{{end}}
+  </section>
+{{end}}

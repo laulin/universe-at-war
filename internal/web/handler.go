@@ -20,7 +20,9 @@ import (
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
+	appgalaxy "universeatwar/internal/app/galaxy"
 	appregistration "universeatwar/internal/app/registration"
+	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
 	appsetup "universeatwar/internal/app/setup"
 	appshipyard "universeatwar/internal/app/shipyard"
@@ -96,6 +98,17 @@ type fleetService interface {
 	Recall(context.Context, appauth.Principal, int64, string) (appfleet.Fleet, error)
 }
 
+type galaxyService interface {
+	System(context.Context, appauth.Principal, int, int) (appgalaxy.View, error)
+}
+
+type reportsService interface {
+	List(context.Context, appauth.Principal, appreports.Filter) ([]appreports.Summary, error)
+	Get(context.Context, appauth.Principal, int64) (appreports.Detail, error)
+	MarkRead(context.Context, appauth.Principal, int64) error
+	UnreadHostile(context.Context, appauth.Principal) (int, error)
+}
+
 // Dependencies are the application services required by the HTTP adapter.
 type Dependencies struct {
 	Authentication authenticationService
@@ -106,6 +119,8 @@ type Dependencies struct {
 	Research       researchService
 	Shipyard       shipyardService
 	Fleet          fleetService
+	Galaxy         galaxyService
+	Reports        reportsService
 	Registration   registrationService
 	Logger         *slog.Logger
 	SecureCookies  bool
@@ -122,6 +137,8 @@ type Handler struct {
 	research       researchService
 	shipyard       shipyardService
 	fleet          fleetService
+	galaxy         galaxyService
+	reports        reportsService
 	registration   registrationService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
@@ -132,7 +149,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register"}
 )
 
@@ -186,6 +203,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		research:       dependencies.Research,
 		shipyard:       dependencies.Shipyard,
 		fleet:          dependencies.Fleet,
+		galaxy:         dependencies.Galaxy,
+		reports:        dependencies.Reports,
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
@@ -218,6 +237,11 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/preview", handler.previewFleet)
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/launch", handler.launchFleet)
 	handler.mux.HandleFunc("POST /fleets/{fleet}/recall", handler.recallFleet)
+	handler.mux.HandleFunc("GET /galaxy/{galaxy}/{system}", handler.galaxyPage)
+	handler.mux.HandleFunc("POST /galaxy/{galaxy}/{system}/{position}/spy", handler.spyFromGalaxy)
+	handler.mux.HandleFunc("GET /reports", handler.reportsPage)
+	handler.mux.HandleFunc("GET /reports/{report}", handler.reportPage)
+	handler.mux.HandleFunc("POST /reports/{report}/read", handler.markReportRead)
 	handler.mux.HandleFunc("POST /planets/{planet}/defense/{unit}", handler.orderDefenses)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(requestID(requestLogger(dependencies.Logger, handler.mux))), nil
@@ -678,7 +702,7 @@ func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Req
 	if !ok {
 		return
 	}
-	shell := h.gameShell(token, principal, "overview", planets, 0)
+	shell := h.gameShell(request.Context(), token, principal, "overview", planets, 0)
 	h.render(response, status, "overview", overviewPageData{pageShell: shell, Planets: planets})
 }
 
@@ -708,7 +732,7 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 			Reason: reason, IdempotencyKey: fmt.Sprintf("%s:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
 		})
 	}
-	shell := h.gameShell(token, principal, "planet", planets, planet.ID)
+	shell := h.gameShell(request.Context(), token, principal, "planet", planets, planet.ID)
 	shell.Error = message
 	h.render(response, status, "economy", economyPageData{pageShell: shell, Planet: planet, Choices: views})
 }
@@ -826,6 +850,7 @@ type pageShell struct {
 	Bodies    []bodyLink
 	Current   *bodyLink
 	Now       time.Time
+	Alerts    int
 }
 
 // bodyLink is one entry of the celestial body selector.
@@ -848,8 +873,13 @@ type loginPageData struct {
 }
 
 // gameShell builds the navigation shell from the bodies of the account.
-func (h *Handler) gameShell(token string, principal appauth.Principal, section string, planets []appeconomy.Planet, currentID int64) pageShell {
+func (h *Handler) gameShell(ctx context.Context, token string, principal appauth.Principal, section string, planets []appeconomy.Planet, currentID int64) pageShell {
 	shell := pageShell{CSRFToken: token, Username: principal.Username, Section: section, Now: h.clock()}
+	if h.reports != nil {
+		if alerts, err := h.reports.UnreadHostile(ctx, principal); err == nil {
+			shell.Alerts = alerts
+		}
+	}
 	for _, planet := range planets {
 		link := bodyLink{ID: planet.ID, Name: planet.Name, Coordinate: planet.Coordinate.String(), Current: planet.ID == currentID}
 		shell.Bodies = append(shell.Bodies, link)

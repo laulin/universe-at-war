@@ -105,3 +105,12 @@ input:focus-visible, button:focus-visible { outline: .2rem solid #80e0ff; outlin
 .stationed { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .5rem; }
 .stationed li { padding: .6rem .8rem; border: 1px solid #294967; border-radius: .5rem; background: #0c1a2a; display: flex; justify-content: space-between; }
 .stationed strong { color: #80e0ff; }
+
+.hostile { color: #ffb3bd; border: 1px solid #ff677d; border-radius: .3rem; padding: 0 .3rem; font-size: .85em; }
+.own-marker { color: #78d9ff; }
+.galaxy-navigation { display: flex; gap: 1.5rem; }
+.filters { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.filters a { color: #80e0ff; }
+.bodies form { margin: 0; display: flex; gap: .4rem; align-items: end; }
+.bodies form input[type="number"] { width: 5rem; }
+.bodies form button { margin-top: 0; }

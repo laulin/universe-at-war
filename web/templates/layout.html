@@ -20,6 +20,10 @@
       <a href="/planets/{{.ID}}/defense"{{if eq $.Section "defense"}} aria-current="page"{{end}}>Défense</a>
       <a href="/planets/{{.ID}}/fleet"{{if eq $.Section "fleet"}} aria-current="page"{{end}}>Flotte</a>
       {{end}}
+      <a href="/galaxy/1/1"{{if eq .Section "galaxy"}} aria-current="page"{{end}}>Galaxie</a>
+      <a href="/reports"{{if eq .Section "reports"}} aria-current="page"{{end}}>Rapports{{if .Alerts}} <span class="hostile">⚠ {{.Alerts}}</span>{{end}}</a>
+      {{with .Current}}
+      {{end}}
     </nav>
     <form class="body-picker" method="get" action="/planets/switch">
       <label for="body-picker">Corps actif</label>
