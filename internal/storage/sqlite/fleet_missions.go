@@ -142,110 +142,35 @@ func destroyProbes(ctx context.Context, tx *sql.Tx, row fleetRow, composition do
 		fmt.Sprintf("json_object('metal', %d, 'crystal', %d)", wreckage.Metal, wreckage.Crystal))
 }
 
-// resolveCombat fights the battle, applies its losses, its debris and its loot,
-// then sends the survivors home.
+// resolveCombat fights the battle of a lone attacker, which is the shared
+// battle with a single attacking party.
 func (r *FleetRepository) resolveCombat(ctx context.Context, tx *sql.Tx, row fleetRow, targetPlanetID int64, dueAt, now time.Time) error {
-	target, _, production, err := loadPlanetByID(ctx, tx, targetPlanetID, dueAt, r.catalogues.Buildings)
-	if err != nil {
-		return err
-	}
 	composition, err := loadComposition(ctx, tx, row.id)
 	if err != nil {
 		return err
 	}
-	attackerResearch, err := researchOfPlayer(ctx, tx, row.ownerPlayerID)
+	levels, err := researchOfPlayer(ctx, tx, row.ownerPlayerID)
 	if err != nil {
 		return err
 	}
-	defenderPlayerID, err := playerOfPlanet(ctx, tx, targetPlanetID)
+	outcome, err := r.resolveBattle(ctx, tx, []battleFleet{{
+		row:   row,
+		party: combat.Party{PlayerID: row.ownerPlayerID, Units: composition, Technologies: factorsOf(levels)},
+	}}, targetPlanetID, row.seed, dueAt, now)
 	if err != nil {
 		return err
 	}
-	source := random.NewSeeded(uint64(row.seed))
-	result, err := combat.Resolve(combat.Input{
-		Attackers: []combat.Party{{PlayerID: row.ownerPlayerID, Units: composition, Technologies: factorsOf(attackerResearch)}},
-		Defenders: []combat.Party{{PlayerID: defenderPlayerID, Units: fightingUnits(target.Units, r.catalogues.Units), Technologies: factorsOf(target.Researches)}},
-		Rules:     target.Rules.Combat,
-		Multipliers: combat.CostMultipliers{
-			Ship: target.Rules.Progression.ShipCostMultiplier, Defense: target.Rules.Progression.DefenseCostMultiplier,
-		},
-		Catalogue: r.catalogues.Units,
-	}, source)
-	if err != nil {
-		return err
-	}
+	return logBattle(ctx, tx, row.id, targetPlanetID, row.seed, outcome, now)
+}
 
-	survivors := result.Attackers[0].Survivors
-	if err := applyFleetLosses(ctx, tx, row.id, composition, survivors); err != nil {
-		return err
-	}
-	for id, lost := range result.Defenders[0].Losses {
-		if err := adjustInventory(ctx, tx, targetPlanetID, id, -lost); err != nil {
-			return err
-		}
-	}
-	if err := addDebris(ctx, tx, row.target,
-		debris.Field{Metal: result.Debris.Metal, Crystal: result.Debris.Crystal}, now); err != nil {
-		return err
-	}
-	// The moon draw continues the very sequence the battle used, so replaying
-	// the fight from its seed replays the moon as well.
-	moonCreated, err := r.attemptMoon(ctx, tx, row, targetPlanetID, target, result.MoonChance, source, now)
-	if err != nil {
-		return err
-	}
-
-	loot := economy.Resources{}
-	if result.Outcome == combat.AttackerWins && totalShips(survivors) > 0 {
-		cargo, cargoErr := loadCargo(ctx, tx, row.id)
-		if cargoErr != nil {
-			return cargoErr
-		}
-		capacity, capacityErr := remainingCapacity(survivors, cargo, r.catalogues.Units)
-		if capacityErr != nil {
-			return capacityErr
-		}
-		ratio := min(target.Rules.Economy.PillageRatio, target.Rules.Combat.MaximumPillage)
-		loot = combat.Pillage(production.Stock, capacity, ratio)
-		if production.Stock, err = production.Stock.Debit(loot); err != nil {
-			return err
-		}
-		if err := storeCargo(ctx, tx, row.id, economy.Resources{
-			Metal: cargo.Metal + loot.Metal, Crystal: cargo.Crystal + loot.Crystal, Deuterium: cargo.Deuterium + loot.Deuterium,
-		}); err != nil {
-			return err
-		}
-	}
-	if err := persistProduction(ctx, tx, targetPlanetID, production); err != nil {
-		return err
-	}
-
-	attackerName, err := playerName(ctx, tx, row.ownerPlayerID)
-	if err != nil {
-		return err
-	}
-	defenderName, err := playerName(ctx, tx, defenderPlayerID)
-	if err != nil {
-		return err
-	}
-	attackerPayload, defenderPayload := combatReports(row, result, attackerName, defenderName,
-		attackerResearch, target.Researches, loot)
-	if _, err := insertReport(ctx, tx, row.ownerPlayerID, report.CombatAttack, "planet", targetPlanetID, row.target, dueAt, attackerPayload); err != nil {
-		return err
-	}
-	if _, err := insertReport(ctx, tx, defenderPlayerID, report.CombatDefense, "planet", targetPlanetID, row.target, dueAt, defenderPayload); err != nil {
-		return err
-	}
-	if err := logFleetEvent(ctx, tx, "combat_resolved", row.id, targetPlanetID, now,
+// logBattle journals a resolved battle, whichever side and however many fleets
+// took part in it.
+func logBattle(ctx context.Context, tx *sql.Tx, fleetID, targetPlanetID, seed int64, outcome battleOutcome, now time.Time) error {
+	result := outcome.result
+	return logFleetEvent(ctx, tx, "combat_resolved", fleetID, targetPlanetID, now,
 		fmt.Sprintf("json_object('outcome', '%s', 'seed', %d, 'rounds', %d, 'debris_metal', %d, 'debris_crystal', %d, 'loot_metal', %d, 'loot_crystal', %d, 'loot_deuterium', %d, 'moon_chance', %f, 'moon_created', %t)",
-			result.Outcome, row.seed, len(result.Rounds), result.Debris.Metal, result.Debris.Crystal,
-			loot.Metal, loot.Crystal, loot.Deuterium, result.MoonChance, moonCreated)); err != nil {
-		return err
-	}
-	if totalShips(survivors) == 0 {
-		return transitionFleet(ctx, tx, row, domainfleet.Destroyed, "lost_in_battle", now)
-	}
-	return r.sendHome(ctx, tx, row, "battle_resolved", now)
+			result.Outcome, seed, len(result.Rounds), result.Debris.Metal, result.Debris.Crystal,
+			outcome.loot.Metal, outcome.loot.Crystal, outcome.loot.Deuterium, result.MoonChance, outcome.moon))
 }
 
 // resolveRecycling lifts what the fleet can carry out of a debris field.
@@ -324,26 +249,6 @@ func applyFleetLosses(ctx context.Context, tx *sql.Tx, fleetID int64, before dom
 		}
 	}
 	return nil
-}
-
-// combatReports builds the two accounts of the battle. Everything a participant
-// could observe is shared; the rebuilt defenses belong to the defender alone.
-func combatReports(row fleetRow, result combat.Result, attackerName, defenderName string,
-	attackerResearch, defenderResearch research.Levels, loot economy.Resources) (report.CombatPayload, report.CombatPayload) {
-	shared := report.CombatPayload{
-		Coordinate: row.target,
-		Outcome:    string(result.Outcome),
-		Attackers:  []report.Participant{participantOf(result.Attackers[0], attackerName, attackerResearch)},
-		Defenders:  []report.Participant{participantOf(result.Defenders[0], defenderName, defenderResearch)},
-		Rounds:     roundsOf(result.Rounds),
-		Loot:       loot,
-		Debris:     result.Debris,
-		MoonChance: result.MoonChance,
-	}
-	attacker := shared
-	defender := shared
-	defender.Rebuilt = inventoryDocument(result.Defenders[0].Rebuilt)
-	return attacker, defender
 }
 
 func participantOf(party combat.PartyResult, name string, levels research.Levels) report.Participant {

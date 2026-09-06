@@ -295,3 +295,19 @@ func loadHistory(ctx context.Context, tx *sql.Tx, allianceID int64) ([]appallian
 	}
 	return entries, rows.Err()
 }
+
+// alliesOf reports whether two players answer to the same alliance, which is
+// what makes one fleet allowed to defend the planet of another.
+func alliesOf(ctx context.Context, tx *sql.Tx, first, second int64) (bool, error) {
+	var shared bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM alliance_members a
+			JOIN alliance_members b ON b.alliance_id = a.alliance_id
+			WHERE a.player_id = ? AND b.player_id = ?
+		)
+	`, first, second).Scan(&shared); err != nil {
+		return false, fmt.Errorf("alliance repository: compare memberships: %w", err)
+	}
+	return shared, nil
+}

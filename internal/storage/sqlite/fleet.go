@@ -65,6 +65,9 @@ func (r *FleetRepository) RegisterHandlers(processor *EventProcessor) {
 	processor.Register("fleet_returned", func(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time) error {
 		return r.resolveReturn(ctx, tx, event, now)
 	})
+	processor.Register("holding_ended", func(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time) error {
+		return r.resolveHoldingEnd(ctx, tx, event, now)
+	})
 }
 
 // Overview lists the stationed units of a planet and the fleets in flight.
@@ -186,6 +189,10 @@ func (r *FleetRepository) launchInto(ctx context.Context, tx *sql.Tx, accountID,
 		if plan.ReturnsAt != nil {
 			returnsAt = timestamp(*plan.ReturnsAt)
 		}
+		var holdsUntil any
+		if plan.HoldsUntil != nil {
+			holdsUntil = timestamp(*plan.HoldsUntil)
+		}
 		var targetReference any
 		if targetPlanetID > 0 {
 			targetReference = targetPlanetID
@@ -193,12 +200,14 @@ func (r *FleetRepository) launchInto(ctx context.Context, tx *sql.Tx, accountID,
 		result, err := tx.ExecContext(ctx, `
 			INSERT INTO fleets(owner_player_id, origin_planet_id, origin_galaxy, origin_system, origin_position,
 				target_galaxy, target_system, target_position, target_kind, target_planet_id, mission,
-				speed_percent, fleet_speed, distance, fuel, seed, ruleset_version, departed_at, arrives_at, returns_at, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				speed_percent, fleet_speed, distance, fuel, seed, ruleset_version, departed_at, arrives_at,
+				holds_until, returns_at, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, playerID, planet.ID, planet.Coordinate.Galaxy, planet.Coordinate.System, planet.Coordinate.Position,
 			request.Target.Galaxy, request.Target.System, request.Target.Position, string(request.TargetKind),
 			targetReference, string(request.Mission), request.Percent, plan.Speed, plan.Distance, plan.Fuel, seed,
-			rulesetVersion, timestamp(plan.DepartsAt), timestamp(plan.ArrivesAt), returnsAt, timestamp(plan.DepartsAt))
+			rulesetVersion, timestamp(plan.DepartsAt), timestamp(plan.ArrivesAt), holdsUntil, returnsAt,
+			timestamp(plan.DepartsAt))
 		if err != nil {
 			return fmt.Errorf("fleet repository: create fleet: %w", err)
 		}
@@ -284,6 +293,11 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 		if request.Mission.TargetsForeignBody() && targetOwner == playerID {
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
 		}
+		if request.Mission.Defends() {
+			if err := defensibleBody(ctx, tx, planet.Rules, playerID, targetOwner); err != nil {
+				return domainfleet.Plan{}, appeconomy.Planet{}, 0, err
+			}
+		}
 	case domainfleet.TargetEmpty:
 		if targetPlanetID != 0 {
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
@@ -312,6 +326,7 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 		Composition: request.Composition,
 		Cargo:       request.Cargo,
 		Percent:     request.Percent,
+		HoldUntil:   request.HoldUntil,
 	}, domainfleet.Context{
 		Catalogue:    r.catalogues.Units,
 		Levels:       planet.Researches,
@@ -501,7 +516,7 @@ func accountOfPlayer(ctx context.Context, tx *sql.Tx, playerID int64) (int64, er
 func activeFleetCount(ctx context.Context, tx *sql.Tx, playerID int64) (int, error) {
 	var count int
 	if err := tx.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND state IN ('outbound', 'returning', 'recalled')",
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND state IN ('outbound', 'holding', 'returning', 'recalled')",
 		playerID).Scan(&count); err != nil {
 		return 0, fmt.Errorf("fleet repository: count fleets: %w", err)
 	}

@@ -23,6 +23,7 @@ var (
 	ErrCargoExceedsCapacity = errors.New("fleet: cargo exceeds the remaining capacity")
 	ErrNoFleetSlot          = errors.New("fleet: no free fleet slot")
 	ErrNoColonySlot         = errors.New("fleet: no free colony slot")
+	ErrInvalidHold          = errors.New("fleet: the holding time must end after the arrival and within the allowed window")
 )
 
 // Composition maps stable ship identifiers to the quantity sent.

@@ -33,6 +33,7 @@ type LaunchRequest struct {
 	Composition domainfleet.Composition
 	Cargo       economy.Resources
 	Percent     int
+	HoldUntil   time.Time
 }
 
 // Fleet is the projection of one mission.
@@ -50,6 +51,7 @@ type Fleet struct {
 	Fuel         int64
 	DepartedAt   time.Time
 	ArrivesAt    time.Time
+	HoldsUntil   *time.Time
 	ReturnsAt    *time.Time
 	RecalledAt   *time.Time
 	Recallable   bool

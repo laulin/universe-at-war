@@ -35,13 +35,14 @@ valeur documentée ; une valeur plus faible est traitée en premier.
 | Type d'événement | Priorité | Jalon |
 | --- | ---: | --- |
 | `combat_resolved` (arrivée d'une attaque) | 10 | 5 |
+| `acs_resolved` (arrivée d'une opération groupée) | 10 | 7 |
 | `espionage_resolved` (arrivée d'un espionnage) | 20 | 5 |
 | `fleet_arrived` | 30 | 4 |
 | `fleet_returned` | 40 | 4 |
 | `building_completed` | 50 | 2 |
 | `research_completed` | 60 | 3 |
 | `production_completed` | 70 | 3 |
-| `holding_ended`, `acs_locked`, `jump_gate_ready` | 80 | 4, 6, 7 |
+| `holding_ended` (fin d'un stationnement), `jump_gate_ready` | 80 | 6, 7 |
 | `ai_think` | 90 | 8 |
 | entretien (`protection_expired`, `ban_expired`) | 100 | 10 |
 
@@ -53,6 +54,12 @@ L'arrivée d'une flotte porte le type de sa mission : une attaque planifie
 `combat_resolved`, un espionnage `espionage_resolved`, toute autre mission
 `fleet_arrived`. Les trois partagent la clé d'idempotence `fleet-arrive:<id>`,
 si bien qu'un rappel annule l'arrivée sans connaître le type de la mission.
+
+Une flotte engagée dans une opération groupée ne planifie aucune arrivée : le
+groupe possède la sienne, `acs_resolved` sous la clé `acs-arrive:<groupe>`, et
+fait atterrir toutes ses flottes ensemble. Une flotte en stationnement planifie
+la fin de sa garde sous la clé `fleet-hold:<flotte>` ; une flotte détruite en
+défendant voit cet événement annulé.
 
 ## Traitement
 

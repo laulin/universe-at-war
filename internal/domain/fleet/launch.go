@@ -19,6 +19,7 @@ type LaunchRequest struct {
 	Composition Composition
 	Cargo       economy.Resources
 	Percent     int
+	HoldUntil   time.Time
 }
 
 // Context is the state the launch is validated against.
@@ -34,15 +35,16 @@ type Context struct {
 
 // Plan is the immutable calculation captured when a fleet leaves.
 type Plan struct {
-	Distance  int64
-	Speed     int64
-	Fuel      int64
-	Capacity  int64
-	Duration  time.Duration
-	DepartsAt time.Time
-	ArrivesAt time.Time
-	ReturnsAt *time.Time
-	Debit     economy.Resources
+	Distance   int64
+	Speed      int64
+	Fuel       int64
+	Capacity   int64
+	Duration   time.Duration
+	DepartsAt  time.Time
+	ArrivesAt  time.Time
+	HoldsUntil *time.Time
+	ReturnsAt  *time.Time
+	Debit      economy.Resources
 }
 
 // PlanLaunch validates a launch and captures its timings, fuel and debit. It
@@ -92,7 +94,7 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 	switch request.Mission.SpeedClass() {
 	case Hostile:
 		universeSpeed = context.Rules.Time.HostileFleetSpeed
-	case Holding:
+	case Stationary:
 		universeSpeed = context.Rules.Time.HoldingFleetSpeed
 	}
 	minimum := time.Duration(context.Rules.Time.MinimumMissionSeconds) * time.Second
@@ -134,6 +136,16 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 	}
 	if request.Mission.Returns() {
 		returnsAt := arrivesAt.Add(duration)
+		plan.ReturnsAt = &returnsAt
+	}
+	if request.Mission.Defends() {
+		holdsUntil := request.HoldUntil.UTC().Truncate(time.Second)
+		maximum := arrivesAt.Add(time.Duration(context.Rules.Team.MaximumHoldHours) * time.Hour)
+		if !holdsUntil.After(arrivesAt) || holdsUntil.After(maximum) {
+			return Plan{}, ErrInvalidHold
+		}
+		returnsAt := holdsUntil.Add(duration)
+		plan.HoldsUntil = &holdsUntil
 		plan.ReturnsAt = &returnsAt
 	}
 	return plan, nil

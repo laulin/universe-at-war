@@ -31,6 +31,7 @@ type fleetRow struct {
 	rulesetVersion int64
 	departedAt     time.Time
 	arrivesAt      time.Time
+	holdsUntil     *time.Time
 	returnsAt      *time.Time
 	recalledAt     *time.Time
 	state          domainfleet.State
@@ -82,6 +83,8 @@ func (r *FleetRepository) resolveFleetArrival(ctx context.Context, tx *sql.Tx, r
 		return r.resolveEspionage(ctx, tx, row, targetPlanetID, dueAt, now)
 	case domainfleet.MissionAttack:
 		return r.resolveCombat(ctx, tx, row, targetPlanetID, dueAt, now)
+	case domainfleet.MissionHold:
+		return r.beginHold(ctx, tx, row, targetPlanetID, now)
 	default:
 		return r.completeTransport(ctx, tx, row, targetPlanetID, cargo, dueAt, now)
 	}
@@ -328,17 +331,18 @@ func loadFleetRow(ctx context.Context, tx *sql.Tx, fleetID int64) (fleetRow, err
 	var row fleetRow
 	var targetKind, mission, state, departedText, arrivesText string
 	var targetPlanetID sql.NullInt64
-	var returnsText, recalledText sql.NullString
+	var holdsText, returnsText, recalledText sql.NullString
 	err := tx.QueryRowContext(ctx, `
 		SELECT id, owner_player_id, origin_planet_id, origin_galaxy, origin_system, origin_position,
 			target_galaxy, target_system, target_position, target_kind, target_planet_id, mission,
-			speed_percent, fuel, seed, ruleset_version, departed_at, arrives_at, returns_at, recalled_at, state, version
+			speed_percent, fuel, seed, ruleset_version, departed_at, arrives_at, holds_until, returns_at,
+			recalled_at, state, version
 		FROM fleets WHERE id = ?
 	`, fleetID).Scan(&row.id, &row.ownerPlayerID, &row.originPlanetID,
 		&row.origin.Galaxy, &row.origin.System, &row.origin.Position,
 		&row.target.Galaxy, &row.target.System, &row.target.Position, &targetKind, &targetPlanetID, &mission,
-		&row.speedPercent, &row.fuel, &row.seed, &row.rulesetVersion, &departedText, &arrivesText, &returnsText, &recalledText,
-		&state, &row.version)
+		&row.speedPercent, &row.fuel, &row.seed, &row.rulesetVersion, &departedText, &arrivesText, &holdsText,
+		&returnsText, &recalledText, &state, &row.version)
 	if err != nil {
 		return fleetRow{}, fmt.Errorf("fleet repository: read fleet: %w", err)
 	}
@@ -353,6 +357,13 @@ func loadFleetRow(ctx context.Context, tx *sql.Tx, fleetID int64) (fleetRow, err
 	row.arrivesAt, err = time.Parse(time.RFC3339Nano, arrivesText)
 	if err != nil {
 		return fleetRow{}, fmt.Errorf("fleet repository: parse arrival: %w", err)
+	}
+	if holdsText.Valid {
+		parsed, parseErr := time.Parse(time.RFC3339Nano, holdsText.String)
+		if parseErr != nil {
+			return fleetRow{}, fmt.Errorf("fleet repository: parse hold: %w", parseErr)
+		}
+		row.holdsUntil = &parsed
 	}
 	if returnsText.Valid {
 		parsed, parseErr := time.Parse(time.RFC3339Nano, returnsText.String)
@@ -399,7 +410,8 @@ func loadFleetProjection(ctx context.Context, tx *sql.Tx, fleetID int64) (appfle
 		ID: row.id, Mission: row.mission, State: row.state, Origin: row.origin, Target: row.target,
 		TargetKind: row.targetKind, OriginID: row.originPlanetID, Composition: composition, Cargo: cargo,
 		SpeedPercent: row.speedPercent, Fuel: row.fuel, DepartedAt: row.departedAt, ArrivesAt: row.arrivesAt,
-		ReturnsAt: row.returnsAt, RecalledAt: row.recalledAt, Recallable: row.state.Recallable(),
+		HoldsUntil: row.holdsUntil, ReturnsAt: row.returnsAt, RecalledAt: row.recalledAt,
+		Recallable: row.state.Recallable(),
 	}, nil
 }
 
@@ -427,7 +439,7 @@ func loadComposition(ctx context.Context, tx *sql.Tx, fleetID int64) (domainflee
 // fleetsInFlight lists the missions of a player that still occupy a slot.
 func fleetsInFlight(ctx context.Context, tx *sql.Tx, playerID int64) ([]appfleet.Fleet, error) {
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id FROM fleets WHERE owner_player_id = ? AND state IN ('outbound', 'returning', 'recalled')
+		SELECT id FROM fleets WHERE owner_player_id = ? AND state IN ('outbound', 'holding', 'returning', 'recalled')
 		ORDER BY arrives_at, id
 	`, playerID)
 	if err != nil {

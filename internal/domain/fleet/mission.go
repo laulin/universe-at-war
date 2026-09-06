@@ -14,6 +14,7 @@ const (
 	MissionEspionage Mission = "espionage"
 	MissionRecycle   Mission = "recycle"
 	MissionColonize  Mission = "colonize"
+	MissionHold      Mission = "hold"
 	MissionJump      Mission = "jump"
 )
 
@@ -21,9 +22,9 @@ const (
 type SpeedClass string
 
 const (
-	Peaceful SpeedClass = "peaceful"
-	Hostile  SpeedClass = "hostile"
-	Holding  SpeedClass = "holding"
+	Peaceful   SpeedClass = "peaceful"
+	Hostile    SpeedClass = "hostile"
+	Stationary SpeedClass = "holding"
 )
 
 // TargetKind is the sort of body a mission aims at.
@@ -39,7 +40,7 @@ const (
 // Valid reports whether the mission is one this build knows.
 func (m Mission) Valid() bool {
 	switch m {
-	case MissionTransport, MissionDeploy, MissionAttack, MissionEspionage, MissionRecycle, MissionColonize:
+	case MissionTransport, MissionDeploy, MissionAttack, MissionEspionage, MissionRecycle, MissionColonize, MissionHold:
 		return true
 	default:
 		return false
@@ -54,10 +55,14 @@ func (m Mission) Returns() bool {
 
 // SpeedClass returns the universe speed the mission travels at.
 func (m Mission) SpeedClass() SpeedClass {
-	if m == MissionAttack {
+	switch m {
+	case MissionAttack:
 		return Hostile
+	case MissionHold:
+		return Stationary
+	default:
+		return Peaceful
 	}
-	return Peaceful
 }
 
 // TargetsForeignBody reports whether the destination must belong to somebody
@@ -78,6 +83,12 @@ func (m Mission) Target() TargetKind {
 	}
 }
 
+// Defends reports whether the fleet fights for the body it reaches instead of
+// against it, and therefore waits there until its holding time is over.
+func (m Mission) Defends() bool {
+	return m == MissionHold
+}
+
 // TargetsOwnBody reports whether the destination must belong to the player.
 func (m Mission) TargetsOwnBody() bool {
 	return m == MissionDeploy
@@ -88,6 +99,7 @@ type State string
 
 const (
 	Outbound  State = "outbound"
+	Holding   State = "holding"
 	Returning State = "returning"
 	Recalled  State = "recalled"
 	Completed State = "completed"
@@ -98,7 +110,9 @@ const (
 func CanTransition(from, to State) bool {
 	switch from {
 	case Outbound:
-		return to == Returning || to == Completed || to == Recalled || to == Destroyed
+		return to == Holding || to == Returning || to == Completed || to == Recalled || to == Destroyed
+	case Holding:
+		return to == Returning || to == Destroyed
 	case Returning, Recalled:
 		return to == Completed || to == Destroyed
 	default:
@@ -113,7 +127,7 @@ func (s State) Terminal() bool {
 
 // InFlight reports whether the fleet still occupies a fleet slot.
 func (s State) InFlight() bool {
-	return s == Outbound || s == Returning || s == Recalled
+	return s == Outbound || s == Holding || s == Returning || s == Recalled
 }
 
 // Recallable reports whether the fleet may still be called back.

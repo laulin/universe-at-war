@@ -88,9 +88,17 @@ le sien, marqué hostile.
 ## Défense groupée
 
 Une flotte envoyée en `hold` sur une planète alliée y reste jusqu'à une heure de
-fin choisie au départ, puis rentre. Tant qu'elle est là, elle défend : elle
-compte parmi les défenseurs de tout combat qui se résout sur cette position, et
-elle subit ses propres pertes.
+fin choisie au départ, puis rentre. Cette heure doit tomber après l'arrivée et
+au plus tard `maximum_hold_hours` après elle ; toute autre valeur est refusée au
+lancement. La destination doit appartenir au joueur lui-même ou à un membre de
+son alliance, et la défense groupée doit être activée dans le ruleset.
+
+Tant qu'elle est là, la flotte défend : elle compte parmi les défenseurs de tout
+combat qui se résout sur cette position, avec les technologies de son
+propriétaire, et elle subit ses propres pertes. Une flotte anéantie en défendant
+ne rentre jamais : sa fin de garde est annulée avec elle. Une flotte qui survit
+repart à la fin de sa garde et vole vers son origine pour la durée de son propre
+trajet.
 
 Une flotte en défense ne pille pas et ne recycle pas. La planète reste maîtresse
 de ses ressources : la défense groupée protège, elle ne partage pas.

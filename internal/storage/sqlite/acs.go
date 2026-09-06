@@ -13,6 +13,7 @@ import (
 	appfleet "universeatwar/internal/app/fleet"
 	domainacs "universeatwar/internal/domain/acs"
 	"universeatwar/internal/domain/catalogue"
+	"universeatwar/internal/domain/combat"
 	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/universe"
@@ -574,29 +575,81 @@ func (r *ACSRepository) resolveGroup(ctx context.Context, tx *sql.Tx, event Sche
 	if err != nil {
 		return err
 	}
-	engaged := 0
+	engaged := make([]battleFleet, 0, len(fleets))
 	for _, fleetID := range fleets {
 		fleet, err := loadFleetRow(ctx, tx, fleetID)
 		if err != nil {
 			return err
 		}
 		if fleet.state != domainfleet.Outbound {
-			// The fleet was withdrawn or already resolved.
+			// The fleet was withdrawn, or is already gone.
 			continue
 		}
-		if err := r.fleets.resolveFleetArrival(ctx, tx, fleet, row.arrivesAt, now); err != nil {
+		composition, err := loadComposition(ctx, tx, fleetID)
+		if err != nil {
 			return err
 		}
-		engaged++
+		if composition.Count() == 0 {
+			continue
+		}
+		levels, err := researchOfPlayer(ctx, tx, fleet.ownerPlayerID)
+		if err != nil {
+			return err
+		}
+		engaged = append(engaged, battleFleet{
+			row: fleet,
+			party: combat.Party{
+				PlayerID: fleet.ownerPlayerID, Units: composition, Technologies: factorsOf(levels),
+			},
+		})
+	}
+	targetPlanetID, _, err := planetAt(ctx, tx, row.target)
+	if err != nil {
+		return err
+	}
+	if len(engaged) == 0 || targetPlanetID == 0 {
+		return r.abandonGroup(ctx, tx, row, engaged, now)
+	}
+	outcome, err := r.fleets.resolveBattle(ctx, tx, engaged, targetPlanetID, row.seed, row.arrivesAt, now)
+	if err != nil {
+		return err
+	}
+	if err := logBattle(ctx, tx, engaged[0].row.id, targetPlanetID, row.seed, outcome, now); err != nil {
+		return err
 	}
 	if err := transitionGroup(ctx, tx, row, domainacs.Resolved, now); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload)
-		VALUES ('acs_resolved', 'acs_group', ?, ?, json_object('target', ?, 'fleets', ?))
-	`, groupID, timestamp(now), row.target.String(), engaged); err != nil {
+		VALUES ('acs_resolved', 'acs_group', ?, ?, json_object('target', ?, 'fleets', ?, 'outcome', ?))
+	`, groupID, timestamp(now), row.target.String(), len(engaged), string(outcome.result.Outcome)); err != nil {
 		return fmt.Errorf("acs repository: log resolution: %w", err)
+	}
+	return nil
+}
+
+// abandonGroup calls the operation off: a target that no longer exists, or an
+// operation everybody has left, sends home whoever is still flying.
+func (r *ACSRepository) abandonGroup(ctx context.Context, tx *sql.Tx, row acsGroupRow,
+	engaged []battleFleet, now time.Time) error {
+	reason := "target_missing"
+	if len(engaged) == 0 {
+		reason = "no_fleet_left"
+	}
+	for _, attacker := range engaged {
+		if err := r.fleets.abortMission(ctx, tx, attacker.row, reason, now); err != nil {
+			return err
+		}
+	}
+	if err := transitionGroup(ctx, tx, row, domainacs.Cancelled, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload)
+		VALUES ('acs_cancelled', 'acs_group', ?, ?, json_object('target', ?, 'reason', ?, 'fleets', ?))
+	`, row.id, timestamp(now), row.target.String(), reason, len(engaged)); err != nil {
+		return fmt.Errorf("acs repository: log cancellation: %w", err)
 	}
 	return nil
 }
