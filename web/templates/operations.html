@@ -1,0 +1,87 @@
+{{define "title"}}Opérations groupées{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="operations-title">
+    <p class="eyebrow">Alliance</p>
+    <h2 id="operations-title">Opérations groupées</h2>
+    <p><a href="/alliance">Retour à l'alliance</a></p>
+    {{if .Groups}}
+    <table class="bodies">
+      <thead><tr><th scope="col">Cible</th><th scope="col">Meneur</th><th scope="col">État</th><th scope="col">Arrivée</th><th scope="col">Flottes</th></tr></thead>
+      <tbody>
+      {{range .Groups}}
+        <tr>
+          <th scope="row"><a href="/alliance/operations/{{.ID}}">{{.Target}}</a></th>
+          <td>{{.OwnerName}}</td>
+          <td>{{.State}}</td>
+          <td><time datetime="{{.ArrivesAt.Format "2006-01-02T15:04:05Z07:00"}}" data-countdown aria-live="off">{{.ArrivesAt.Format "15:04:05"}} UTC</time></td>
+          <td>{{len .Participants}} / {{.MaximumSize}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Aucune opération en préparation.</p>{{end}}
+
+    {{with .Group}}
+    <h3 id="group-title">Opération sur {{.Target}}</h3>
+    <p class="muted">Menée par {{.OwnerName}} — {{.State}} — arrivée prévue le {{.ArrivesAt.Format "2006-01-02 15:04:05"}} UTC.</p>
+    <table class="bodies" aria-labelledby="group-title">
+      <thead><tr><th scope="col">Joueur</th><th scope="col">Origine</th><th scope="col">Vaisseaux</th><th scope="col">Engagée</th><th scope="col">Action</th></tr></thead>
+      <tbody>
+      {{range .Participants}}
+        <tr>
+          <th scope="row">{{.PlayerName}}</th>
+          <td>{{.Origin}}</td>
+          <td>{{.Ships}}</td>
+          <td>{{.JoinedAt.Format "15:04:05"}} UTC</td>
+          <td>
+            {{if .Own}}
+            <form method="post" action="/fleets/{{.FleetID}}/withdraw">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit">Retirer ma flotte</button>
+            </form>
+            {{else}}<span class="muted">—</span>{{end}}
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+
+    {{with $.Preview}}
+    <dl class="summary">
+      <dt>Arrivée de votre flotte</dt><dd>{{.Plan.ArrivesAt.Format "2006-01-02 15:04:05"}} UTC</dd>
+      <dt>Arrivée du groupe</dt><dd>{{.GroupArrival.Format "2006-01-02 15:04:05"}} UTC</dd>
+      <dt>Carburant</dt><dd>{{.Plan.Fuel}} deutérium</dd>
+      <dt>Effet sur l'équipe</dt><dd>{{if .DelaysTheTeam}}Votre flotte retarde tout le groupe.{{else}}Votre flotte n'attarde personne.{{end}}</dd>
+    </dl>
+    {{end}}
+
+    <h4 id="join-title">Rejoindre l'opération</h4>
+    <form method="post" action="/alliance/operations/{{.ID}}/{{if $.Preview}}join{{else}}preview{{end}}" aria-labelledby="join-title">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <input type="hidden" name="idempotency_key" value="{{$.IdempotencyKey}}">
+      <input type="hidden" name="galaxy" value="{{.Target.Galaxy}}">
+      <input type="hidden" name="system" value="{{.Target.System}}">
+      <input type="hidden" name="position" value="{{.Target.Position}}">
+      <input type="hidden" name="mission" value="attack">
+      <input type="hidden" name="planet" value="{{$.PlanetID}}">
+      <label for="speed">Vitesse</label>
+      <select id="speed" name="speed">
+        <option value="100" selected>100 %</option>
+        <option value="50">50 %</option>
+        <option value="10">10 %</option>
+      </select>
+      <fieldset>
+        <legend>Composition</legend>
+        {{range $.Ships}}
+        <label for="ship-{{.ID}}">{{.Name}} (max {{.Owned}})</label>
+        <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="{{index $.Form.Composition .ID}}">
+        {{end}}
+      </fieldset>
+      <button type="submit">{{if $.Preview}}Confirmer l'engagement{{else}}Calculer l'impact{{end}}</button>
+    </form>
+    <p class="muted">Corps de départ :
+      {{range $.Bodies}}<a href="/alliance/operations/{{$.Group.ID}}?planet={{.ID}}">{{.Name}} [{{.Coordinate}}]</a> {{end}}
+    </p>
+    {{end}}
+  </section>
+{{end}}

@@ -27,12 +27,15 @@
         <label for="mission">Type</label>
         <select id="mission" name="mission">
           <option value="transport">Transport</option>
-          <option value="deploy">Stationnement</option>
+          <option value="deploy">Déploiement</option>
+          <option value="hold">Défense alliée</option>
           <option value="attack">Attaque</option>
           <option value="espionage">Espionnage</option>
           <option value="recycle">Recyclage</option>
           <option value="colonize">Colonisation</option>
         </select>
+        <label for="hold_until">Fin de garde (défense alliée)</label>
+        <input id="hold_until" name="hold_until" type="datetime-local" value="{{.Form.HoldUntil}}">
         <label for="speed">Vitesse</label>
         <select id="speed" name="speed">
           <option value="100" selected>100 %</option>

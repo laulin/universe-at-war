@@ -65,6 +65,7 @@ type fleetConfirmPageData struct {
 	ReturnsISO     string
 	MissionName    string
 	IdempotencyKey string
+	GroupedAttack  bool
 }
 
 // fleetForm is the transport shape of the send wizard, kept as typed values so
@@ -79,6 +80,7 @@ type fleetForm struct {
 	CargoMetal  int64
 	Crystal     int64
 	Deuterium   int64
+	HoldUntil   string
 }
 
 func (h *Handler) fleetPage(response http.ResponseWriter, request *http.Request) {
@@ -228,6 +230,8 @@ func (h *Handler) previewFleet(response http.ResponseWriter, request *http.Reque
 	if plan.ReturnsAt != nil {
 		data.ReturnsISO = plan.ReturnsAt.Format(time.RFC3339)
 	}
+	data.GroupedAttack = domainfleet.Mission(form.Mission) == domainfleet.MissionAttack &&
+		h.inAnAlliance(request.Context(), principal)
 	h.render(response, http.StatusOK, "fleet-confirm", data)
 }
 
@@ -318,6 +322,7 @@ func parseFleetForm(request *http.Request) (fleetForm, error) {
 	form.Crystal = optionalQuantity(request, "cargo_crystal")
 	form.Deuterium = optionalQuantity(request, "cargo_deuterium")
 	form.Composition = parseComposition(request)
+	form.HoldUntil = strings.TrimSpace(request.PostFormValue("hold_until"))
 	return form, nil
 }
 
@@ -357,21 +362,29 @@ func (f fleetForm) request() (appfleet.LaunchRequest, error) {
 	for id, quantity := range f.Composition {
 		composition[id] = quantity
 	}
-	return appfleet.LaunchRequest{
+	launch := appfleet.LaunchRequest{
 		Target:      universe.Coordinate{Galaxy: f.Galaxy, System: f.System, Position: f.Position},
 		TargetKind:  mission.Target(),
 		Mission:     mission,
 		Composition: composition,
 		Cargo:       domaineconomy.Resources{Metal: f.CargoMetal, Crystal: f.Crystal, Deuterium: f.Deuterium},
 		Percent:     f.Speed,
-	}, nil
+	}
+	if mission.Defends() {
+		until, err := time.Parse("2006-01-02T15:04", f.HoldUntil)
+		if err != nil {
+			return appfleet.LaunchRequest{}, domainfleet.ErrInvalidHold
+		}
+		launch.HoldUntil = until.UTC()
+	}
+	return launch, nil
 }
 
 // signature identifies one exact mission, so a refreshed confirmation cannot
 // launch a second fleet.
 func (f fleetForm) signature() string {
-	signature := fmt.Sprintf("%d:%d:%d:%s:%d:%d/%d/%d", f.Galaxy, f.System, f.Position, f.Mission, f.Speed,
-		f.CargoMetal, f.Crystal, f.Deuterium)
+	signature := fmt.Sprintf("%d:%d:%d:%s:%d:%d/%d/%d:%s", f.Galaxy, f.System, f.Position, f.Mission, f.Speed,
+		f.CargoMetal, f.Crystal, f.Deuterium, f.HoldUntil)
 	for _, id := range sortedUnitIDs(f.Composition) {
 		signature += fmt.Sprintf(":%s=%d", id, f.Composition[id])
 	}
@@ -420,7 +433,7 @@ func missionName(mission domainfleet.Mission) string {
 	case domainfleet.MissionTransport:
 		return "Transport"
 	case domainfleet.MissionDeploy:
-		return "Stationnement"
+		return "Déploiement"
 	case domainfleet.MissionAttack:
 		return "Attaque"
 	case domainfleet.MissionEspionage:
@@ -429,6 +442,8 @@ func missionName(mission domainfleet.Mission) string {
 		return "Recyclage"
 	case domainfleet.MissionColonize:
 		return "Colonisation"
+	case domainfleet.MissionHold:
+		return "Défense alliée"
 	default:
 		return string(mission)
 	}
@@ -471,6 +486,8 @@ func fleetError(err error) string {
 		return "Cette composition ne convient pas à cette mission."
 	case errors.Is(err, domainfleet.ErrInvalidTarget):
 		return "Destination invalide pour cette mission."
+	case errors.Is(err, domainfleet.ErrInvalidHold):
+		return "La fin de garde doit tomber après l'arrivée et dans la fenêtre autorisée."
 	case errors.Is(err, domainfleet.ErrInvalidSpeed):
 		return "Vitesse invalide."
 	case errors.Is(err, domainfleet.ErrInvalidMission), errors.Is(err, domainfleet.ErrImmobileUnit):

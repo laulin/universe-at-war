@@ -26,6 +26,7 @@
       {{end}}
       <a href="/galaxy/1/1"{{if eq .Section "galaxy"}} aria-current="page"{{end}}>Galaxie</a>
       <a href="/reports"{{if eq .Section "reports"}} aria-current="page"{{end}}>Rapports{{if .Alerts}} <span class="hostile">⚠ {{.Alerts}}</span>{{end}}</a>
+      <a href="/alliance"{{if eq .Section "alliance"}} aria-current="page"{{end}}>Alliance</a>
       {{with .Current}}
       {{end}}
     </nav>

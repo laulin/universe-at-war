@@ -118,6 +118,8 @@ type reportsService interface {
 	Get(context.Context, appauth.Principal, int64) (appreports.Detail, error)
 	MarkRead(context.Context, appauth.Principal, int64) error
 	UnreadHostile(context.Context, appauth.Principal) (int, error)
+	Share(context.Context, appauth.Principal, int64, bool) error
+	SharedWithAlliance(context.Context, appauth.Principal) ([]appreports.Summary, error)
 }
 
 type phalanxService interface {
@@ -143,6 +145,8 @@ type Dependencies struct {
 	Reports        reportsService
 	Phalanx        phalanxService
 	JumpGate       jumpGateService
+	Alliance       allianceService
+	ACS            acsService
 	Registration   registrationService
 	Logger         *slog.Logger
 	SecureCookies  bool
@@ -163,6 +167,8 @@ type Handler struct {
 	reports        reportsService
 	phalanx        phalanxService
 	jumpGate       jumpGateService
+	alliance       allianceService
+	acs            acsService
 	registration   registrationService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
@@ -173,7 +179,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register"}
 )
 
@@ -231,6 +237,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		reports:        dependencies.Reports,
 		phalanx:        dependencies.Phalanx,
 		jumpGate:       dependencies.JumpGate,
+		alliance:       dependencies.Alliance,
+		acs:            dependencies.ACS,
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
@@ -272,6 +280,22 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /reports", handler.reportsPage)
 	handler.mux.HandleFunc("GET /reports/{report}", handler.reportPage)
 	handler.mux.HandleFunc("POST /reports/{report}/read", handler.markReportRead)
+	handler.mux.HandleFunc("POST /reports/{report}/share", handler.shareReport)
+	handler.mux.HandleFunc("GET /alliance", handler.alliancePage)
+	handler.mux.HandleFunc("POST /alliance", handler.createAlliance)
+	handler.mux.HandleFunc("POST /alliance/invite", handler.inviteToAlliance)
+	handler.mux.HandleFunc("POST /alliance/invitations/{invitation}", handler.answerInvitation)
+	handler.mux.HandleFunc("POST /alliance/leave", handler.leaveAlliance)
+	handler.mux.HandleFunc("POST /alliance/members/{player}/expel", handler.expelMember)
+	handler.mux.HandleFunc("POST /alliance/members/{player}/role", handler.promoteMember)
+	handler.mux.HandleFunc("POST /alliance/diplomacy", handler.declareRelation)
+	handler.mux.HandleFunc("POST /alliance/description", handler.describeAlliance)
+	handler.mux.HandleFunc("GET /alliance/operations", handler.operationsPage)
+	handler.mux.HandleFunc("GET /alliance/operations/{group}", handler.operationPage)
+	handler.mux.HandleFunc("POST /alliance/operations/{group}/preview", handler.previewOperation)
+	handler.mux.HandleFunc("POST /alliance/operations/{group}/join", handler.joinOperation)
+	handler.mux.HandleFunc("POST /planets/{planet}/fleet/operation", handler.openOperation)
+	handler.mux.HandleFunc("POST /fleets/{fleet}/withdraw", handler.withdrawFromOperation)
 	handler.mux.HandleFunc("POST /planets/{planet}/defense/{unit}", handler.orderDefenses)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(requestID(requestLogger(dependencies.Logger, handler.mux))), nil

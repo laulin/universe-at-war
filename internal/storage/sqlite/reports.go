@@ -101,15 +101,16 @@ func (r *ReportsRepository) Get(ctx context.Context, accountID, reportID int64, 
 	// with, and by nobody else.
 	err := r.read.QueryRowContext(ctx, `
 		SELECT p.id, p.kind, p.galaxy, p.system, p.position, p.occurred_at, p.read_at, p.payload_version, p.payload,
-			p.shared_alliance_id IS NOT NULL, owner.display_name
+			p.shared_alliance_id IS NOT NULL, owner.display_name, owner.account_id = ?
 		FROM reports p
 		JOIN players owner ON owner.id = p.recipient_player_id
 		LEFT JOIN players viewer ON viewer.account_id = ?
 		LEFT JOIN alliance_members membership ON membership.player_id = viewer.id
 		WHERE p.id = ?
 		  AND (owner.account_id = ? OR (p.shared_alliance_id IS NOT NULL AND p.shared_alliance_id = membership.alliance_id))
-	`, accountID, reportID, accountID).Scan(&summary.ID, &kind, &summary.Coordinate.Galaxy, &summary.Coordinate.System,
-		&summary.Coordinate.Position, &occurredText, &readAt, &version, &document, &summary.Shared, &summary.OwnerName)
+	`, accountID, accountID, reportID, accountID).Scan(&summary.ID, &kind, &summary.Coordinate.Galaxy, &summary.Coordinate.System,
+		&summary.Coordinate.Position, &occurredText, &readAt, &version, &document, &summary.Shared,
+		&summary.OwnerName, &summary.Own)
 	if errors.Is(err, sql.ErrNoRows) {
 		return appreports.Detail{}, appreports.ErrNotFound
 	}

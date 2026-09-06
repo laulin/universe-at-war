@@ -32,6 +32,7 @@ type Summary struct {
 	OccurredAt time.Time
 	Read       bool
 	Shared     bool
+	Own        bool
 	OwnerName  string
 	Freshness  report.Freshness
 }

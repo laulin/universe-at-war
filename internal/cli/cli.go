@@ -14,7 +14,9 @@ import (
 	"strings"
 	"time"
 
+	appacs "universeatwar/internal/app/acs"
 	appadmin "universeatwar/internal/app/administration"
+	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
 	appbootstrap "universeatwar/internal/app/bootstrap"
 	appeconomy "universeatwar/internal/app/economy"
@@ -257,6 +259,17 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Completer:  events,
 		Wake:       worker.Wake,
 	}
+	alliance := appalliance.Service{
+		Clock:      clock,
+		Repository: storagesqlite.NewAllianceRepository(database.Write()),
+	}
+	operations := appacs.Service{
+		Clock:      clock,
+		Repository: acsRepository,
+		Seeds:      seeds.NewSeedGenerator(cryptorand.Reader),
+		Completer:  events,
+		Wake:       worker.Wake,
+	}
 	galaxy := appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())}
 	sensors := appphalanx.Service{
 		Clock:      clock,
@@ -297,6 +310,8 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Reports:        reports,
 		Phalanx:        sensors,
 		JumpGate:       gates,
+		Alliance:       alliance,
+		ACS:            operations,
 		Registration:   registration,
 		Logger:         logger,
 		SecureCookies:  *secureCookie,

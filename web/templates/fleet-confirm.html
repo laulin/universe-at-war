@@ -27,6 +27,23 @@
       {{range $id, $quantity := .Form.Composition}}<input type="hidden" name="composition[{{$id}}]" value="{{$quantity}}">{{end}}
       <button type="submit">Lancer la flotte</button>
     </form>
+    {{if .GroupedAttack}}
+    <form class="confirm" method="post" action="/planets/{{.Planet.ID}}/fleet/operation">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+      <input type="hidden" name="galaxy" value="{{.Form.Galaxy}}">
+      <input type="hidden" name="system" value="{{.Form.System}}">
+      <input type="hidden" name="position" value="{{.Form.Position}}">
+      <input type="hidden" name="mission" value="{{.Form.Mission}}">
+      <input type="hidden" name="speed" value="{{.Form.Speed}}">
+      <input type="hidden" name="cargo_metal" value="{{.Form.CargoMetal}}">
+      <input type="hidden" name="cargo_crystal" value="{{.Form.Crystal}}">
+      <input type="hidden" name="cargo_deuterium" value="{{.Form.Deuterium}}">
+      {{range $id, $quantity := .Form.Composition}}<input type="hidden" name="composition[{{$id}}]" value="{{$quantity}}">{{end}}
+      <button type="submit">Ouvrir une attaque groupée</button>
+    </form>
+    <p class="muted">Vos alliés pourront rejoindre l'opération jusqu'à son arrivée.</p>
+    {{end}}
     <p><a href="/planets/{{.Planet.ID}}/fleet/send">Modifier la mission</a></p>
   </section>
 {{end}}

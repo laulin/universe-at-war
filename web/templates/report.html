@@ -55,6 +55,14 @@
     </dl>
     {{end}}
 
+    {{if not .Report.Own}}<p class="muted">Partagé par {{.Report.OwnerName}}.</p>{{else}}
+    <form method="post" action="/reports/{{.Report.ID}}/share">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="shared" value="{{if .Report.Shared}}0{{else}}1{{end}}">
+      <button type="submit">{{if .Report.Shared}}Ne plus partager avec l'alliance{{else}}Partager avec l'alliance{{end}}</button>
+    </form>
+    {{end}}
+
     <p><a href="/reports">Retour aux rapports</a></p>
   </section>
 {{end}}

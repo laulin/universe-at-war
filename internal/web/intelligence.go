@@ -59,6 +59,9 @@ type reportPageSummary struct {
 	OccurredAt time.Time
 	Read       bool
 	Hostile    bool
+	Shared     bool
+	Own        bool
+	OwnerName  string
 	Freshness  string
 }
 
@@ -322,7 +325,8 @@ func summaryView(summary appreports.Summary) reportPageSummary {
 	return reportPageSummary{
 		ID: summary.ID, Kind: string(summary.Kind), KindName: reportKindName(summary.Kind),
 		Coordinate: summary.Coordinate.String(), OccurredAt: summary.OccurredAt, Read: summary.Read,
-		Hostile: summary.Kind.Hostile(), Freshness: freshnessName(summary.Freshness),
+		Hostile: summary.Kind.Hostile(), Shared: summary.Shared, Own: summary.Own, OwnerName: summary.OwnerName,
+		Freshness: freshnessName(summary.Freshness),
 	}
 }
 

@@ -1,0 +1,140 @@
+{{define "title"}}Alliance{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="alliance-title">
+    <p class="eyebrow">Équipe</p>
+    <h2 id="alliance-title">Alliance</h2>
+    {{if .Profile}}
+    <h3>{{.Profile.Name}} [{{.Profile.Tag}}]</h3>
+    <p>{{.Profile.Description}}</p>
+    <p class="muted">Votre rang : {{.Profile.Role}} — {{len .Profile.Members}} membres sur {{.Profile.MaximumSize}}.</p>
+    <p><a href="/alliance/operations">Opérations groupées</a></p>
+
+    <h3 id="members-title">Membres</h3>
+    <table class="bodies" aria-labelledby="members-title">
+      <thead><tr><th scope="col">Joueur</th><th scope="col">Rang</th><th scope="col">Depuis</th><th scope="col">Action</th></tr></thead>
+      <tbody>
+      {{range .Profile.Members}}
+        <tr>
+          <th scope="row">{{.Name}}</th>
+          <td>{{.Role}}</td>
+          <td>{{.JoinedAt.Format "2006-01-02"}}</td>
+          <td>
+            {{if $.CanExpel}}
+            <form method="post" action="/alliance/members/{{.PlayerID}}/expel">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit">Exclure</button>
+            </form>
+            {{end}}
+            {{if eq $.Profile.Role "founder"}}
+            <form method="post" action="/alliance/members/{{.PlayerID}}/role">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <label for="role-{{.PlayerID}}">Rang</label>
+              <select id="role-{{.PlayerID}}" name="role">
+                <option value="member">membre</option>
+                <option value="officer">officier</option>
+                <option value="founder">fondateur</option>
+              </select>
+              <button type="submit">Changer</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+
+    {{if .CanInvite}}
+    <h3 id="invite-title">Inviter</h3>
+    <form method="post" action="/alliance/invite" aria-labelledby="invite-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="player">Identifiant du joueur</label>
+      <input id="player" name="player" required>
+      <button type="submit">Inviter</button>
+    </form>
+    {{if .Profile.Invitations}}
+    <ul>
+      {{range .Profile.Invitations}}<li>{{.PlayerName}} — jusqu'au {{.ExpiresAt.Format "2006-01-02 15:04"}} UTC</li>{{end}}
+    </ul>
+    {{end}}
+    {{end}}
+
+    {{if .CanEdit}}
+    <h3 id="description-title">Description</h3>
+    <form method="post" action="/alliance/description" aria-labelledby="description-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="description">Texte public</label>
+      <textarea id="description" name="description" rows="3">{{.Profile.Description}}</textarea>
+      <button type="submit">Enregistrer</button>
+    </form>
+    {{end}}
+
+    <h3 id="diplomacy-title">Diplomatie</h3>
+    {{if .Profile.Relations}}
+    <ul>
+      {{range .Profile.Relations}}<li>{{.OtherName}} [{{.OtherTag}}] — {{.Kind}} depuis le {{.DeclaredAt.Format "2006-01-02"}}</li>{{end}}
+    </ul>
+    {{else}}<p class="muted">Aucune relation déclarée.</p>{{end}}
+    {{if .CanDiplomacy}}
+    <form method="post" action="/alliance/diplomacy" aria-labelledby="diplomacy-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="tag">Étiquette de l'alliance</label>
+      <input id="tag" name="tag" required>
+      <label for="relation">Relation</label>
+      <select id="relation" name="relation">
+        <option value="pact">pacte</option>
+        <option value="war">guerre</option>
+      </select>
+      <button type="submit">Déclarer</button>
+    </form>
+    {{end}}
+
+    <h3 id="shared-title">Rapports partagés</h3>
+    {{if .Shared}}
+    <ul aria-labelledby="shared-title">
+      {{range .Shared}}<li><a href="/reports/{{.ID}}">{{.KindName}} — {{.Coordinate}}</a> ({{.OccurredAt.Format "2006-01-02 15:04"}} UTC)</li>{{end}}
+    </ul>
+    {{else}}<p class="muted">Aucun rapport partagé.</p>{{end}}
+
+    <h3 id="history-title">Historique</h3>
+    {{if .Profile.History}}
+    <ul aria-labelledby="history-title">
+      {{range .Profile.History}}<li>{{.OccurredAt.Format "2006-01-02 15:04"}} UTC — {{.Action}} {{.ActorName}} {{.TargetName}}</li>{{end}}
+    </ul>
+    {{else}}<p class="muted">Rien à signaler.</p>{{end}}
+
+    <form method="post" action="/alliance/leave">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit">Quitter l'alliance</button>
+    </form>
+
+    {{else}}
+    {{if .Invitations}}
+    <h3 id="invitations-title">Invitations reçues</h3>
+    <ul aria-labelledby="invitations-title">
+      {{range .Invitations}}
+      <li>
+        {{.AllianceName}} [{{.AllianceTag}}] — invitée par {{.InvitedByName}}, jusqu'au {{.ExpiresAt.Format "2006-01-02 15:04"}} UTC
+        <form method="post" action="/alliance/invitations/{{.ID}}">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <button type="submit" name="answer" value="accept">Accepter</button>
+          <button type="submit" name="answer" value="decline">Refuser</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}<p class="muted">Aucune invitation en attente.</p>{{end}}
+
+    <h3 id="create-title">Fonder une alliance</h3>
+    <form method="post" action="/alliance" aria-labelledby="create-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="name">Nom</label>
+      <input id="name" name="name" required>
+      <label for="tag">Étiquette</label>
+      <input id="tag" name="tag" required>
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="3"></textarea>
+      <button type="submit">Fonder</button>
+    </form>
+    {{end}}
+  </section>
+{{end}}
