@@ -317,18 +317,26 @@ func parseFleetForm(request *http.Request) (fleetForm, error) {
 	form.CargoMetal = optionalQuantity(request, "cargo_metal")
 	form.Crystal = optionalQuantity(request, "cargo_crystal")
 	form.Deuterium = optionalQuantity(request, "cargo_deuterium")
+	form.Composition = parseComposition(request)
+	return form, nil
+}
+
+// parseComposition reads the ship counts of a form, ignoring anything that is
+// not a positive quantity of a known field.
+func parseComposition(request *http.Request) map[unit.ID]int64 {
+	composition := map[unit.ID]int64{}
 	for name, values := range request.PostForm {
 		id, found := strings.CutPrefix(name, "composition[")
 		if !found || !strings.HasSuffix(id, "]") || len(values) == 0 {
 			continue
 		}
-		quantity, parseErr := strconv.ParseInt(values[0], 10, 64)
-		if parseErr != nil || quantity <= 0 {
+		quantity, err := strconv.ParseInt(values[0], 10, 64)
+		if err != nil || quantity <= 0 {
 			continue
 		}
-		form.Composition[unit.ID(strings.TrimSuffix(id, "]"))] = quantity
+		composition[unit.ID(strings.TrimSuffix(id, "]"))] = quantity
 	}
-	return form, nil
+	return composition
 }
 
 func optionalQuantity(request *http.Request, name string) int64 {
@@ -351,7 +359,7 @@ func (f fleetForm) request() (appfleet.LaunchRequest, error) {
 	}
 	return appfleet.LaunchRequest{
 		Target:      universe.Coordinate{Galaxy: f.Galaxy, System: f.System, Position: f.Position},
-		TargetKind:  domainfleet.TargetPlanet,
+		TargetKind:  mission.Target(),
 		Mission:     mission,
 		Composition: composition,
 		Cargo:       domaineconomy.Resources{Metal: f.CargoMetal, Crystal: f.Crystal, Deuterium: f.Deuterium},
@@ -413,6 +421,14 @@ func missionName(mission domainfleet.Mission) string {
 		return "Transport"
 	case domainfleet.MissionDeploy:
 		return "Stationnement"
+	case domainfleet.MissionAttack:
+		return "Attaque"
+	case domainfleet.MissionEspionage:
+		return "Espionnage"
+	case domainfleet.MissionRecycle:
+		return "Recyclage"
+	case domainfleet.MissionColonize:
+		return "Colonisation"
 	default:
 		return string(mission)
 	}
@@ -449,6 +465,10 @@ func fleetError(err error) string {
 		return "Ressources insuffisantes pour ce cargo."
 	case errors.Is(err, domainfleet.ErrNoFleetSlot):
 		return "Aucun emplacement de flotte disponible."
+	case errors.Is(err, domainfleet.ErrNoColonySlot):
+		return "Aucun emplacement de colonie disponible : développez l'astrophysique."
+	case errors.Is(err, domainfleet.ErrCompositionMismatch):
+		return "Cette composition ne convient pas à cette mission."
 	case errors.Is(err, domainfleet.ErrInvalidTarget):
 		return "Destination invalide pour cette mission."
 	case errors.Is(err, domainfleet.ErrInvalidSpeed):

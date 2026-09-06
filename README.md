@@ -53,7 +53,14 @@ de débris. Elle propose d'espionner en un clic ou de préparer une flotte. Les
 rapports d'espionnage, de combat et de recyclage sont immuables et filtrés à
 leur création : une section non révélée n'est pas envoyée au navigateur. Les
 rapports hostiles non lus sont signalés par un compteur et un texte, jamais par
-la seule couleur. La
+la seule couleur.
+
+L'empire s'étend : une mission de colonisation fonde une planète si la position
+est encore libre à l'arrivée, un combat assez destructeur peut agréger une lune,
+et chaque lune a ses propres cases, bâtiments et vaisseaux. Une phalange de
+capteurs donne les horaires des flottes alentour sans jamais révéler leur
+composition, et une porte de saut transfère des vaisseaux entre deux lunes avec
+un temps de recharge durable. La
 planète mère affiche les productions, stockages, énergie et cases, ainsi que le
 catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
 worker reprend automatiquement les événements après un redémarrage.

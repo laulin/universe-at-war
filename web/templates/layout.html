@@ -19,6 +19,10 @@
       <a href="/planets/{{.ID}}/shipyard"{{if eq $.Section "shipyard"}} aria-current="page"{{end}}>Chantier</a>
       <a href="/planets/{{.ID}}/defense"{{if eq $.Section "defense"}} aria-current="page"{{end}}>Défense</a>
       <a href="/planets/{{.ID}}/fleet"{{if eq $.Section "fleet"}} aria-current="page"{{end}}>Flotte</a>
+      {{if .IsMoon}}
+      <a href="/planets/{{.ID}}/phalanx"{{if eq $.Section "phalanx"}} aria-current="page"{{end}}>Phalange</a>
+      <a href="/planets/{{.ID}}/jump"{{if eq $.Section "jump"}} aria-current="page"{{end}}>Porte de saut</a>
+      {{end}}
       {{end}}
       <a href="/galaxy/1/1"{{if eq .Section "galaxy"}} aria-current="page"{{end}}>Galaxie</a>
       <a href="/reports"{{if eq .Section "reports"}} aria-current="page"{{end}}>Rapports{{if .Alerts}} <span class="hostile">⚠ {{.Alerts}}</span>{{end}}</a>
@@ -28,7 +32,7 @@
     <form class="body-picker" method="get" action="/planets/switch">
       <label for="body-picker">Corps actif</label>
       <select id="body-picker" name="planet">
-        {{range .Bodies}}<option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.Name}} [{{.Coordinate}}]</option>{{end}}
+        {{range .Bodies}}<option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.Kind}} {{.Name}} [{{.Coordinate}}]</option>{{end}}
       </select>
       <button type="submit">Aller</button>
     </form>

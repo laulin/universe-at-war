@@ -1,0 +1,51 @@
+{{define "title"}}Phalange{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="phalanx-title">
+    <p class="eyebrow">{{.Moon.Name}} [{{.Moon.Coordinate}}]</p>
+    <h2 id="phalanx-title">Phalange de capteurs</h2>
+    <dl class="summary">
+      <dt>Niveau</dt><dd>{{.Level}}</dd>
+      <dt>Portée</dt><dd>{{.Radius}} systèmes de la galaxie {{.Moon.Coordinate.Galaxy}}</dd>
+      <dt>Coût d'un balayage</dt><dd>{{.Cost}} deutérium</dd>
+      <dt>Deutérium disponible</dt><dd>{{.Moon.Stock.Deuterium}}</dd>
+    </dl>
+    {{if .Level}}
+    <form method="post" action="/planets/{{.Moon.ID}}/phalanx">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="galaxy">Galaxie</label>
+      <input id="galaxy" name="galaxy" type="number" min="1" value="{{if .Form.Galaxy}}{{.Form.Galaxy}}{{else}}{{.Moon.Coordinate.Galaxy}}{{end}}" required>
+      <label for="system">Système</label>
+      <input id="system" name="system" type="number" min="1" value="{{if .Form.System}}{{.Form.System}}{{else}}{{.Moon.Coordinate.System}}{{end}}" required>
+      <label for="position">Position</label>
+      <input id="position" name="position" type="number" min="1" value="{{if .Form.Position}}{{.Form.Position}}{{else}}1{{end}}" required>
+      <button type="submit">Balayer</button>
+    </form>
+    {{else}}<p class="muted">Construisez une phalange de capteurs sur cette lune pour observer les alentours.</p>{{end}}
+  </section>
+
+  {{if .Scanned}}
+  <section class="panel-wide" aria-labelledby="sightings-title">
+    <p class="eyebrow">Balayage de {{.Target}}</p>
+    <h2 id="sightings-title">Missions détectées</h2>
+    {{if .Sightings}}
+    <table class="bodies">
+      <caption>Une phalange lit des masses et des horaires, jamais des cargaisons.</caption>
+      <thead>
+        <tr><th scope="col">Mission</th><th scope="col">Trajet</th><th scope="col">Vaisseaux</th><th scope="col">Arrivée</th><th scope="col">Retour</th></tr>
+      </thead>
+      <tbody>
+      {{range .Sightings}}
+        <tr>
+          <th scope="row">{{.Mission}}</th>
+          <td>{{.Origin}} → {{.Target}}</td>
+          <td>{{.Ships}}</td>
+          <td>{{.ArrivesAt.Format "15:04:05"}} (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" aria-live="off">{{.ArrivesAt.Format "15:04:05"}}</time>)</td>
+          <td>{{if .ReturnsAt}}{{.ReturnsAt.Format "15:04:05"}} (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{.ReturnsAt.Format "15:04:05"}}</time>){{else}}—{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Aucune flotte en vol vers cette position ni au départ de celle-ci.</p>{{end}}
+  </section>
+  {{end}}
+{{end}}

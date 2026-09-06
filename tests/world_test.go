@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
@@ -18,8 +19,11 @@ import (
 	appshipyard "universeatwar/internal/app/shipyard"
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/catalogue"
+	domaineconomy "universeatwar/internal/domain/economy"
+	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/random"
 	"universeatwar/internal/domain/rules"
+	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
@@ -229,4 +233,17 @@ func insertMoon(t *testing.T, ctx context.Context, database *storagesqlite.Datab
 		t.Fatalf("insert moon resources: %v", err)
 	}
 	return moonID
+}
+
+// launchTransportTowards sends a small transport, which the phalanx tests need
+// something to detect.
+func launchTransportTowards(t *testing.T, ctx context.Context, universeWorld *world, fromPlanetID int64, target universe.Coordinate) {
+	t.Helper()
+	if _, err := universeWorld.Fleet.Launch(ctx, appauth.Principal{AccountID: 2}, fromPlanetID, appfleet.LaunchRequest{
+		Target: target, TargetKind: domainfleet.TargetPlanet, Mission: domainfleet.MissionTransport,
+		Composition: domainfleet.Composition{unit.SmallCargo: 4},
+		Cargo:       domaineconomy.Resources{Metal: 100}, Percent: 10,
+	}, "phalanx-target"); err != nil {
+		t.Fatalf("Launch() error = %v", err)
+	}
 }

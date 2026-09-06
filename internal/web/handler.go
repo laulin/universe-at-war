@@ -21,6 +21,8 @@ import (
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
+	appjumpgate "universeatwar/internal/app/jumpgate"
+	appphalanx "universeatwar/internal/app/phalanx"
 	appregistration "universeatwar/internal/app/registration"
 	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
@@ -32,6 +34,7 @@ import (
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/server"
 	"universeatwar/internal/domain/unit"
+	"universeatwar/internal/domain/universe"
 	webassets "universeatwar/web"
 )
 
@@ -98,6 +101,14 @@ type fleetService interface {
 	Recall(context.Context, appauth.Principal, int64, string) (appfleet.Fleet, error)
 }
 
+// bodyKindName names a kind of celestial body for the player.
+func bodyKindName(kind building.Placement) string {
+	if kind == building.OnMoon {
+		return "Lune"
+	}
+	return "Planète"
+}
+
 type galaxyService interface {
 	System(context.Context, appauth.Principal, int, int) (appgalaxy.View, error)
 }
@@ -107,6 +118,15 @@ type reportsService interface {
 	Get(context.Context, appauth.Principal, int64) (appreports.Detail, error)
 	MarkRead(context.Context, appauth.Principal, int64) error
 	UnreadHostile(context.Context, appauth.Principal) (int, error)
+}
+
+type phalanxService interface {
+	Scan(context.Context, appauth.Principal, int64, universe.Coordinate) (appphalanx.Scan, error)
+}
+
+type jumpGateService interface {
+	Overview(context.Context, appauth.Principal, int64) (appjumpgate.Overview, error)
+	Jump(context.Context, appauth.Principal, int64, int64, domainfleet.Composition, string) (appjumpgate.Transfer, error)
 }
 
 // Dependencies are the application services required by the HTTP adapter.
@@ -121,6 +141,8 @@ type Dependencies struct {
 	Fleet          fleetService
 	Galaxy         galaxyService
 	Reports        reportsService
+	Phalanx        phalanxService
+	JumpGate       jumpGateService
 	Registration   registrationService
 	Logger         *slog.Logger
 	SecureCookies  bool
@@ -139,6 +161,8 @@ type Handler struct {
 	fleet          fleetService
 	galaxy         galaxyService
 	reports        reportsService
+	phalanx        phalanxService
+	jumpGate       jumpGateService
 	registration   registrationService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
@@ -149,7 +173,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register"}
 )
 
@@ -205,6 +229,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		fleet:          dependencies.Fleet,
 		galaxy:         dependencies.Galaxy,
 		reports:        dependencies.Reports,
+		phalanx:        dependencies.Phalanx,
+		jumpGate:       dependencies.JumpGate,
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
@@ -237,6 +263,10 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/preview", handler.previewFleet)
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/launch", handler.launchFleet)
 	handler.mux.HandleFunc("POST /fleets/{fleet}/recall", handler.recallFleet)
+	handler.mux.HandleFunc("GET /planets/{planet}/phalanx", handler.phalanxPage)
+	handler.mux.HandleFunc("POST /planets/{planet}/phalanx", handler.scanPhalanx)
+	handler.mux.HandleFunc("GET /planets/{planet}/jump", handler.jumpGatePage)
+	handler.mux.HandleFunc("POST /planets/{planet}/jump", handler.jumpShips)
 	handler.mux.HandleFunc("GET /galaxy/{galaxy}/{system}", handler.galaxyPage)
 	handler.mux.HandleFunc("POST /galaxy/{galaxy}/{system}/{position}/spy", handler.spyFromGalaxy)
 	handler.mux.HandleFunc("GET /reports", handler.reportsPage)
@@ -858,6 +888,8 @@ type bodyLink struct {
 	ID         int64
 	Name       string
 	Coordinate string
+	Kind       string
+	IsMoon     bool
 	Current    bool
 }
 
@@ -881,7 +913,10 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 		}
 	}
 	for _, planet := range planets {
-		link := bodyLink{ID: planet.ID, Name: planet.Name, Coordinate: planet.Coordinate.String(), Current: planet.ID == currentID}
+		link := bodyLink{
+			ID: planet.ID, Name: planet.Name, Coordinate: planet.Coordinate.String(),
+			Kind: bodyKindName(planet.Kind), IsMoon: planet.Kind == building.OnMoon, Current: planet.ID == currentID,
+		}
 		shell.Bodies = append(shell.Bodies, link)
 		if link.Current {
 			current := link
