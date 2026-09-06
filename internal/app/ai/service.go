@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	domainai "universeatwar/internal/domain/ai"
@@ -82,6 +83,7 @@ type Repository interface {
 	DisableAccount(context.Context, int64, time.Time) error
 	CreateProfile(context.Context, int64, domainai.Profile, time.Time, time.Time) (Profile, error)
 	Retire(context.Context, int64, time.Time) error
+	Enlistment(context.Context, int64, string) (Enlistment, error)
 	List(context.Context, time.Time) ([]Profile, error)
 	Inspect(context.Context, int64, int, time.Time) (Profile, error)
 }
@@ -91,6 +93,7 @@ type Service struct {
 	Clock      domainclock.Clock
 	Repository Repository
 	Empires    Empires
+	Alliances  Alliances
 	Seeds      Seeds
 	Completer  appeconomy.Completer
 }
@@ -191,4 +194,65 @@ func (s Service) validate(principal appauth.Principal) error {
 		return ErrForbidden
 	}
 	return nil
+}
+
+// Alliances is the team-building surface an artificial player uses. Every call
+// goes through the ordinary alliance use cases: an invitation is still an
+// invitation, and a founder still needs the right to send it.
+type Alliances interface {
+	Create(context.Context, appauth.Principal, string, string, string) (appalliance.Profile, error)
+	Invite(context.Context, appauth.Principal, string) error
+	Invitations(context.Context, appauth.Principal) ([]appalliance.Invitation, error)
+	Accept(context.Context, appauth.Principal, int64) error
+}
+
+// Enlistment is what the administration needs to know to bring an artificial
+// player into a team: who it is, and who could invite it.
+type Enlistment struct {
+	AccountID       int64
+	Name            string
+	Exists          bool
+	LeaderAccountID int64
+}
+
+// Enlist puts an artificial player into an alliance. It founds the alliance
+// when it does not exist yet; otherwise a member who may invite does so, and
+// the artificial player accepts. No shortcut exists: an alliance that will not
+// have it does not get it.
+func (s Service) Enlist(ctx context.Context, principal appauth.Principal, playerID int64, name, tag string) error {
+	if err := s.validate(principal); err != nil {
+		return err
+	}
+	if playerID <= 0 || strings.TrimSpace(name) == "" || strings.TrimSpace(tag) == "" {
+		return ErrInvalidRequest
+	}
+	if s.Alliances == nil {
+		return errors.New("ai: no alliance service")
+	}
+	enlistment, err := s.Repository.Enlistment(ctx, playerID, tag)
+	if err != nil {
+		return err
+	}
+	recruit := appauth.Principal{AccountID: enlistment.AccountID, Roles: []appauth.Role{appauth.RolePlayer}}
+	if !enlistment.Exists {
+		_, err := s.Alliances.Create(ctx, recruit, name, tag, "")
+		return err
+	}
+	if enlistment.LeaderAccountID == 0 {
+		return ErrNotFound
+	}
+	leader := appauth.Principal{AccountID: enlistment.LeaderAccountID, Roles: []appauth.Role{appauth.RolePlayer}}
+	if err := s.Alliances.Invite(ctx, leader, enlistment.Name); err != nil {
+		return err
+	}
+	invitations, err := s.Alliances.Invitations(ctx, recruit)
+	if err != nil {
+		return err
+	}
+	for _, invitation := range invitations {
+		if invitation.AllianceTag == strings.ToUpper(strings.TrimSpace(tag)) {
+			return s.Alliances.Accept(ctx, recruit, invitation.ID)
+		}
+	}
+	return ErrNotFound
 }

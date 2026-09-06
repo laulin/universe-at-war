@@ -50,6 +50,7 @@ type world struct {
 	ACS      appacs.Service
 	AI       appai.Service
 	Thinking appai.Thinking
+	Teamwork appai.Teamwork
 	Brain    *ai.Brain
 }
 
@@ -100,6 +101,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()),
 		Completer:  events,
 	}
+	alliance := appalliance.Service{Clock: clock, Repository: storagesqlite.NewAllianceRepository(database.Write())}
 	thinking := appai.Thinking{Clock: clock, Thought: aiRepository}
 	return &world{
 		Database: database,
@@ -113,7 +115,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Reports:  reportsService,
 		Phalanx:  appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
 		JumpGate: appjumpgate.Service{Clock: clock, Repository: storagesqlite.NewJumpGateRepository(database.Write(), catalogues), Completer: events},
-		Alliance: appalliance.Service{Clock: clock, Repository: storagesqlite.NewAllianceRepository(database.Write())},
+		Alliance: alliance,
 		ACS: appacs.Service{
 			Clock:      clock,
 			Repository: acsRepository,
@@ -124,13 +126,16 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 			Clock:      clock,
 			Repository: aiRepository,
 			Empires:    economy,
+			Alliances:  alliance,
 			Seeds:      random.NewSeedGenerator(rand.Reader),
 			Completer:  events,
 		},
 		Thinking: thinking,
+		Teamwork: appai.Teamwork{Shared: aiRepository},
 		Brain: &ai.Brain{
 			Clock: clock, Thinking: thinking, Economy: economy, Research: research, Shipyard: shipyard,
-			Fleet: fleetService, Reports: reportsService, Galaxy: galaxyService, Catalogues: catalogues,
+			Fleet: fleetService, Reports: reportsService, Galaxy: galaxyService,
+			Teamwork: appai.Teamwork{Shared: aiRepository}, Catalogues: catalogues,
 		},
 	}
 }

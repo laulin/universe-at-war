@@ -24,6 +24,7 @@ import (
 type Reports interface {
 	List(context.Context, appauth.Principal, appreports.Filter) ([]appreports.Summary, error)
 	Get(context.Context, appauth.Principal, int64) (appreports.Detail, error)
+	Share(context.Context, appauth.Principal, int64, bool) error
 }
 
 // Galaxy is the public map, which says who lives where and nothing more.
@@ -40,7 +41,7 @@ type Fleet interface {
 // campaign runs the operational layer: look, then strike, or put the fleet out
 // of reach before the night.
 func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
-	planets []appeconomy.Planet) []domainai.Decision {
+	planets []appeconomy.Planet, observations []observation) []domainai.Decision {
 	if b.Fleet == nil {
 		return []domainai.Decision{domainai.Skip(domainai.Operational, "campaign", "no fleet service")}
 	}
@@ -53,7 +54,7 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 	if profile.Window.LastBefore(now, profile.Interval) {
 		return []domainai.Decision{b.fleetsave(ctx, principal, profile, planets, overview)}
 	}
-	targets, memories := b.survey(ctx, principal, profile, home)
+	targets, memories := b.survey(profile, home, observations)
 	if len(memories) > 0 && b.Thinking != nil {
 		if err := b.Thinking.Remember(ctx, profile.PlayerID, memories); err != nil {
 			return []domainai.Decision{failure(domainai.Operational, "remember", err)}
@@ -69,22 +70,27 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 	return []domainai.Decision{b.spy(ctx, principal, profile, home, overview, stale)}
 }
 
-// survey reads the espionage reports of the player and grades what they say.
-// Nothing else feeds this: no report, no opinion.
-func (b *Brain) survey(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
-	home appeconomy.Planet) ([]domainai.Target, []appai.Memory) {
+// observation is one report of the player, read once and used by everything
+// that follows: what it decides alone, and what it tells its allies.
+type observation struct {
+	summary appreports.Summary
+	payload report.EspionagePayload
+	intel   domainai.Intel
+}
+
+// observe reads the espionage reports of the player and turns them into what
+// the planner reasons about. Nothing else feeds this: no report, no opinion.
+func (b *Brain) observe(ctx context.Context, principal appauth.Principal,
+	home appeconomy.Planet) []observation {
 	if b.Reports == nil {
-		return nil, nil
+		return nil
 	}
 	summaries, err := b.Reports.List(ctx, principal, appreports.Filter{Kind: report.Espionage, Page: 1})
 	if err != nil {
-		return nil, nil
+		return nil
 	}
-	now := b.Clock.Now().UTC()
-	recent := time.Duration(home.Rules.Espionage.RecentReportSeconds) * time.Second
 	seen := map[universe.Coordinate]bool{}
-	var targets []domainai.Target
-	var memories []appai.Memory
+	var observations []observation
 	for _, summary := range summaries {
 		if !summary.Own || seen[summary.Coordinate] {
 			continue
@@ -98,13 +104,28 @@ func (b *Brain) survey(ctx context.Context, principal appauth.Principal, profile
 			continue
 		}
 		seen[summary.Coordinate] = true
-		intel := b.intelOf(payload, summary, home)
-		target := domainai.ScoreTarget(intel, now, recent, profile.Preferences())
+		observations = append(observations, observation{
+			summary: summary, payload: payload, intel: b.intelOf(payload, summary, home),
+		})
+	}
+	return observations
+}
+
+// survey grades what the reports say for the character of the player.
+func (b *Brain) survey(profile domainai.Profile, home appeconomy.Planet,
+	observations []observation) ([]domainai.Target, []appai.Memory) {
+	now := b.Clock.Now().UTC()
+	recent := time.Duration(home.Rules.Espionage.RecentReportSeconds) * time.Second
+	var targets []domainai.Target
+	var memories []appai.Memory
+	for _, seen := range observations {
+		target := domainai.ScoreTarget(seen.intel, now, recent, profile.Preferences())
 		targets = append(targets, target)
 		memories = append(memories, appai.Memory{
-			Kind: "target", Coordinate: intel.Coordinate, ObservedAt: intel.ObservedAt, Score: target.Score,
+			Kind: "target", Coordinate: seen.intel.Coordinate, ObservedAt: seen.intel.ObservedAt,
+			Score: target.Score,
 			Summary: fmt.Sprintf("%s, butin %d, défense %d",
-				payload.TargetPlayerName, plunderOf(intel.Plunder), intel.Defence),
+				seen.payload.TargetPlayerName, plunderOf(seen.intel.Plunder), seen.intel.Defence),
 		})
 	}
 	return targets, memories

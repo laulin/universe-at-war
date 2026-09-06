@@ -278,6 +278,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Clock:      clock,
 		Repository: aiRepository,
 		Empires:    economy,
+		Alliances:  alliance,
 		Seeds:      seeds.NewSeedGenerator(cryptorand.Reader),
 		Completer:  events,
 	}
@@ -313,6 +314,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Fleet:      fleet,
 		Reports:    reports,
 		Galaxy:     galaxy,
+		Teamwork:   appai.Teamwork{Shared: aiRepository},
 		Catalogues: catalogues,
 		Logger:     logger,
 	}

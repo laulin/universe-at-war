@@ -37,18 +37,18 @@ type Target struct {
 // ship would die for a handful of metal.
 const MinimumHold = 1000
 
-// Role is what an artificial player expects a ship to do in a raid. A ship
+// ShipRole is what an artificial player expects a ship to do in a raid. A ship
 // fights when its guns weigh more than its hold, and hauls otherwise.
-type Role string
+type ShipRole string
 
 const (
-	Warship Role = "warship"
-	Carrier Role = "carrier"
-	Idle    Role = "idle"
+	Warship ShipRole = "warship"
+	Carrier ShipRole = "carrier"
+	Idle    ShipRole = "idle"
 )
 
-// RoleOf reads the role of a ship out of the catalogue alone.
-func RoleOf(definition unit.Definition) Role {
+// ShipRoleOf reads the role of a ship out of the catalogue alone.
+func ShipRoleOf(definition unit.Definition) ShipRole {
 	if definition.Family != unit.Ship || definition.BaseSpeed <= 0 {
 		return Idle
 	}
@@ -133,7 +133,7 @@ func ComposeRaid(inventory map[unit.ID]int64, catalogue unit.Catalogue,
 		if !known {
 			continue
 		}
-		switch RoleOf(definition) {
+		switch ShipRoleOf(definition) {
 		case Warship:
 			composition[id] = quantity
 		case Carrier:
