@@ -61,6 +61,13 @@ fait atterrir toutes ses flottes ensemble. Une flotte en stationnement planifie
 la fin de sa garde sous la clé `fleet-hold:<flotte>` ; une flotte détruite en
 défendant voit cet événement annulé.
 
+La réflexion d'un joueur artificiel porte la clé `ai-think:<joueur>:<tick>` :
+chaque tick est planifié une fois et un événement périmé est ignoré. Son
+gestionnaire ne délibère jamais — il avance l'horloge du joueur et, hors des
+heures d'activité, le rendort sans prendre la moindre décision. La délibération
+suit le lot d'événements et passe par les cas d'usage joueurs, chacun dans sa
+propre transaction.
+
 ## Traitement
 
 Dans une transaction d'écriture, le worker relit l'événement et son agrégat,

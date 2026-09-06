@@ -69,9 +69,7 @@ func BuildingPriorities(body Body) []string {
 	if body.Energy.Consumed > body.Energy.Produced {
 		wanted = append(wanted, "solar_plant")
 	}
-	for _, full := range fullStores(body) {
-		wanted = append(wanted, full)
-	}
+	wanted = append(wanted, fullStores(body)...)
 	average := body.averageMine()
 	if average >= RoboticsFrom && body.level("robotics_factory") < 2 {
 		wanted = append(wanted, "robotics_factory")

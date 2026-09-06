@@ -297,19 +297,11 @@ func (r *AIRepository) Due(ctx context.Context, now time.Time, limit int) ([]dom
 	}
 	profiles := make([]domainai.Profile, 0, len(identifiers))
 	for _, playerID := range identifiers {
-		var row aiProfileRow
-		err := withWriteTx(ctx, r.write, "ai repository: read due", func(tx *sql.Tx) error {
-			loaded, found, err := profileRow(ctx, tx, playerID)
-			if err != nil || !found {
-				return err
-			}
-			row = loaded
-			return nil
-		})
+		row, found, err := profileRow(ctx, r.write, playerID)
 		if err != nil {
 			return nil, err
 		}
-		if row.playerID == 0 {
+		if !found {
 			continue
 		}
 		profiles = append(profiles, row.profile())
@@ -380,7 +372,12 @@ func (row aiProfileRow) profile() domainai.Profile {
 	}
 }
 
-func profileRow(ctx context.Context, tx *sql.Tx, playerID int64) (aiProfileRow, bool, error) {
+// rowQuerier reads one row, from a transaction or straight from the pool.
+type rowQuerier interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func profileRow(ctx context.Context, tx rowQuerier, playerID int64) (aiProfileRow, bool, error) {
 	var row aiProfileRow
 	var state, createdText string
 	var seconds int64

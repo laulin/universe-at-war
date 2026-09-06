@@ -53,7 +53,7 @@ type world struct {
 	Brain    *ai.Brain
 }
 
-func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
+func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fake) *world {
 	t.Helper()
 	catalogues := catalogue.Default()
 	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)

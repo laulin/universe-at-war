@@ -63,6 +63,9 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 	if found {
 		return []domainai.Decision{b.raid(ctx, principal, profile, home, overview, best)}
 	}
+	if decision, sent := b.recycle(ctx, principal, profile, home, overview); sent {
+		return []domainai.Decision{decision}
+	}
 	return []domainai.Decision{b.spy(ctx, principal, profile, home, overview, stale)}
 }
 
@@ -170,6 +173,49 @@ func (b *Brain) spy(ctx context.Context, principal appauth.Principal, profile do
 	return decision
 }
 
+// recycle lifts a debris field of the home system. Fields are public, so this
+// needs no report: an artificial player sees them exactly as anybody does.
+func (b *Brain) recycle(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	home appeconomy.Planet, overview appfleet.Overview) (domainai.Decision, bool) {
+	if b.Galaxy == nil || overview.Stationed[unit.Recycler] <= 0 {
+		return domainai.Decision{}, false
+	}
+	view, err := b.Galaxy.System(ctx, principal, home.Coordinate.Galaxy, home.Coordinate.System)
+	if err != nil {
+		return domainai.Decision{}, false
+	}
+	var field domaineconomy.Resources
+	var at universe.Coordinate
+	for _, row := range view.Rows {
+		if row.Debris == nil {
+			continue
+		}
+		candidate := row.Debris.Resources()
+		if candidate.Metal+candidate.Crystal <= field.Metal+field.Crystal {
+			continue
+		}
+		field = candidate
+		at = universe.Coordinate{Galaxy: view.Galaxy, System: view.System, Position: row.Position}
+	}
+	composition, ok := domainai.ComposeRecycling(overview.Stationed, field, home.Rules.Combat.RecyclerCapacity)
+	if !ok {
+		return domainai.Decision{}, false
+	}
+	request := appfleet.LaunchRequest{
+		Target: at, TargetKind: domainfleet.TargetDebris, Mission: domainfleet.MissionRecycle,
+		Composition: domainfleet.Composition(composition), Percent: 100,
+	}
+	key := commandKey(profile, "recycle", at.String())
+	if _, err := b.Fleet.Launch(ctx, principal, home.ID, request, key); err != nil {
+		return failure(domainai.Tactical, "recycle "+at.String(), err), true
+	}
+	coordinate := at
+	return domainai.Decision{
+		Layer: domainai.Tactical, Action: "recycle " + coordinate.String(), Outcome: domainai.Done,
+		Reason: "a debris field anybody can see", BodyID: home.ID, Target: &coordinate,
+	}, true
+}
+
 // neighbour picks the closest body of somebody else in the home system.
 func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, home appeconomy.Planet) (universe.Coordinate, bool) {
 	if b.Galaxy == nil {
@@ -234,6 +280,9 @@ func (b *Brain) fleetsave(ctx context.Context, principal appauth.Principal, prof
 		return skip(domainai.Operational, "fleetsave", "no ship to hide", home.ID)
 	}
 	shelter := farthest(home, planets)
+	if shelter.ID == home.ID {
+		return skip(domainai.Operational, "fleetsave", "no reachable body to fly to", home.ID)
+	}
 	request := appfleet.LaunchRequest{
 		Target: shelter.Coordinate, TargetKind: domainfleet.TargetPlanet, Mission: domainfleet.MissionTransport,
 		Composition: domainfleet.Composition(composition), Percent: 10,

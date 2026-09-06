@@ -130,3 +130,23 @@ func TestLastReflectionBeforeTheNightIsRecognised(t *testing.T) {
 		t.Fatal("a player that never sleeps prepared for the night")
 	}
 }
+
+func TestRecyclingSendsJustEnoughRecyclers(t *testing.T) {
+	inventory := map[unit.ID]int64{unit.Recycler: 10}
+	composition, ok := ComposeRecycling(inventory, economy.Resources{Metal: 45000, Crystal: 15000}, 20000)
+	if !ok || composition[unit.Recycler] != 3 {
+		t.Fatalf("ComposeRecycling() = %v %v, want three recyclers", composition, ok)
+	}
+	// A field larger than the fleet takes everything that can go.
+	composition, _ = ComposeRecycling(inventory, economy.Resources{Metal: 900000}, 20000)
+	if composition[unit.Recycler] != 10 {
+		t.Fatalf("a huge field sent %v", composition)
+	}
+	// Nothing to lift, or nothing to lift it with.
+	if _, ok := ComposeRecycling(inventory, economy.Resources{}, 20000); ok {
+		t.Fatal("recyclers were sent to an empty field")
+	}
+	if _, ok := ComposeRecycling(map[unit.ID]int64{}, economy.Resources{Metal: 5000}, 20000); ok {
+		t.Fatal("a player without recyclers sent some")
+	}
+}

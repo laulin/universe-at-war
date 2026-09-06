@@ -76,6 +76,15 @@ les flottes survivantes selon la place qui leur reste. Une flotte envoyée en
 défense alliée attend sur place jusqu'à la fin de sa garde, se bat pour la
 planète, puis rentre.
 
+L'univers peut être peuplé de joueurs contrôlés par le serveur. Un
+administrateur les ajoute depuis la page Administration, leur donne un archétype
+et des horaires, puis suit leur santé, leur prochaine réflexion et le journal de
+leurs décisions. Une intelligence artificielle possède un compte sans mot de
+passe, fonde son empire, paie ses constructions, attend ses files, espionne
+avant d'attaquer, perd ses flottes et dort en dehors de ses heures. Elle passe
+par les mêmes cas d'usage que vous : un test structurel garantit qu'elle
+n'atteint aucune base de données ni aucune vérité adverse.
+
 Le serveur écrit des journaux structurés sur la sortie d'erreur. Chaque requête
 porte un identifiant de corrélation renvoyé dans l'en-tête `X-Request-Id` ;
 aucun secret, jeton ni cookie n'y figure. `UAW_LOG_LEVEL` choisit le niveau

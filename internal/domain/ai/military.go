@@ -222,3 +222,24 @@ func sortedUnits(inventory map[unit.ID]int64) []unit.ID {
 	})
 	return identifiers
 }
+
+// ComposeRecycling sends just enough recyclers to lift a debris field, and none
+// if the player owns none. A field nobody can reach is left where it lies.
+func ComposeRecycling(inventory map[unit.ID]int64, field economy.Resources, capacity int64) (map[unit.ID]int64, bool) {
+	owned := inventory[unit.Recycler]
+	if owned <= 0 || capacity <= 0 {
+		return nil, false
+	}
+	total := field.Metal + field.Crystal
+	if total <= 0 {
+		return nil, false
+	}
+	wanted := (total + capacity - 1) / capacity
+	if wanted > owned {
+		wanted = owned
+	}
+	if wanted < 1 {
+		wanted = 1
+	}
+	return map[unit.ID]int64{unit.Recycler: wanted}, true
+}

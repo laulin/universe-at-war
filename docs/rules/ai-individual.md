@@ -55,6 +55,10 @@ enjamber minuit. En dehors de cette plage :
 - **aucune décision nouvelle n'est prise** ;
 - la réflexion suivante est reportée à la prochaine ouverture, plus le jitter.
 
+La section `ai` du ruleset porte les valeurs recommandées de l'univers —
+intervalle de réflexion, heure d'ouverture, heure de fermeture — que
+l'administrateur reprend ou ajuste pour chaque joueur artificiel qu'il crée.
+
 Une plage dont l'ouverture égale la fermeture décrit une IA toujours éveillée.
 Ce report est appliqué dans la transaction de l'événement, avant toute
 délibération : le sommeil n'est pas une préférence, c'est une règle.
@@ -121,16 +125,16 @@ ancien peut donc envoyer l'IA à la perte, et c'est voulu.
 Un archétype est un jeu de préférences, jamais un script. Toutes les valeurs
 sont bornées et documentées ici.
 
-| Archétype | Économie | Avidité | Prudence | Marge | Sondes | Défense | Met à l'abri |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `cautious_miner` | 0,90 | 0,30 | 1,50 | 4,0 | 3 | 0,25 | toujours |
-| `raider` | 0,40 | 1,20 | 0,60 | 1,5 | 2 | 0,05 | si chargée |
-| `fleeter` | 0,50 | 0,80 | 0,80 | 2,0 | 3 | 0,10 | toujours |
-| `turtle` | 0,70 | 0,20 | 2,00 | 6,0 | 2 | 0,45 | jamais |
-| `opportunist` | 0,55 | 1,00 | 0,90 | 2,0 | 3 | 0,10 | si chargée |
-| `scout` | 0,60 | 0,50 | 1,20 | 3,0 | 5 | 0,10 | toujours |
-| `logistician` | 0,80 | 0,40 | 1,20 | 3,0 | 2 | 0,20 | toujours |
-| `defender` | 0,65 | 0,30 | 1,60 | 4,0 | 2 | 0,40 | toujours |
+| Archétype | Économie | Avidité | Prudence | Marge | Sondes | Défense | Seuil de raid | Met à l'abri |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `cautious_miner` | 0,90 | 0,30 | 1,50 | 4,0 | 3 | 0,25 | 12 000 | toujours |
+| `raider` | 0,40 | 1,20 | 0,60 | 1,5 | 2 | 0,05 | 1 500 | si chargée |
+| `fleeter` | 0,50 | 0,80 | 0,80 | 2,0 | 3 | 0,10 | 3 000 | toujours |
+| `turtle` | 0,70 | 0,20 | 2,00 | 6,0 | 2 | 0,45 | 20 000 | jamais |
+| `opportunist` | 0,55 | 1,00 | 0,90 | 2,0 | 3 | 0,10 | 2 500 | si chargée |
+| `scout` | 0,60 | 0,50 | 1,20 | 3,0 | 5 | 0,10 | 6 000 | toujours |
+| `logistician` | 0,80 | 0,40 | 1,20 | 3,0 | 2 | 0,20 | 9 000 | toujours |
+| `defender` | 0,65 | 0,30 | 1,60 | 4,0 | 2 | 0,40 | 15 000 | toujours |
 
 « Économie » est la part des réflexions consacrées au développement plutôt qu'à
 la guerre ; « Défense » la part de la production réservée aux défenses.
@@ -163,6 +167,15 @@ tortue pointe le sol beaucoup plus souvent que le raider, sans jamais suivre un
 script. La quantité commandée est la moitié de ce que le stock permet, bornée à
 dix : une IA ne vide jamais ses caisses d'un coup.
 
+## Budgets
+
+Une réflexion n'engage jamais plus d'une action par niveau : une construction,
+une recherche, une commande de chantier, une mission. Les files du jeu font le
+reste de la limitation, exactement comme pour un humain. Une commande de
+chantier ne prend que la moitié de ce que le stock permet, bornée à dix unités,
+si bien qu'il reste toujours de quoi bâtir. Un lot de réflexions est borné par
+la taille de lot du worker : un univers plein d'IA ne monopolise pas la boucle.
+
 ## Mise à l'abri
 
 Avant de dormir, une IA dont l'archétype le demande envoie sa flotte en
@@ -176,6 +189,13 @@ assumée de ce jalon.
 Chaque réflexion écrit ses décisions : le niveau, l'action, l'issue (`done`,
 `skipped`, `failed`) et une raison courte. Ces traces servent au diagnostic et
 prouvent que rien n'a été obtenu autrement que par les règles du jeu.
+
+## Coût
+
+Une réflexion complète — inventaire, construction, recherche, chantier,
+renseignement — coûte de l'ordre de vingt millisecondes sur une machine de
+développement, pour une réflexion toutes les cinq minutes de temps de jeu. Entre
+deux échéances, le worker dort : aucune boucle active ne tourne.
 
 ## Cas limites et invariants
 
