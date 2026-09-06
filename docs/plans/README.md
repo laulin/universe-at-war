@@ -21,6 +21,7 @@ commit ; l'arbre reste compilable et les tests verts à chaque étape.
 | Milestone 3 — recherches, chantier, défenses | livré |
 | Milestone 4 — moteur de flotte | livré : transport, stationnement, rappel |
 | Milestone 5 — espionnage, combat, débris | livré : rapports filtrés, moteur de combat déterministe, pillage, recyclage, carte galaxie |
+| Milestone 6 — colonisation, lunes, phalange, porte de saut | livré : colonisation transactionnelle, lunes issues des débris, renseignement temporel, transfert entre lunes |
 
 Écarts assumés par rapport au plan : le paquet de prérequis s'appelle
 `prerequisite` et non `prereq`, pour suivre le style du dépôt ; la source
@@ -28,7 +29,7 @@ aléatoire et le générateur de seed vivent tous deux dans
 `internal/domain/random` ; une arrivée de flotte porte le type d'événement de sa
 mission plutôt qu'un type unique, ce qui donne aux combats leur priorité propre.
 
-Les Milestones 6 à 10 sont cadrés dans la feuille de route ; leur plan détaillé
+Les Milestones 7 à 10 sont cadrés dans la feuille de route ; leur plan détaillé
 sera écrit au démarrage de chaque jalon, une fois les interfaces des jalons
 précédents stabilisées. Les fichiers `MILESTONE_0N_*.md` de la racine restent la
 référence fonctionnelle : en cas de contradiction, le brief prévaut et le plan

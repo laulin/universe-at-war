@@ -38,7 +38,7 @@ ne pas faire dépendre le domaine de chemins de fichiers.
 | Universe | topologie et état global | coordonnées uniques, transitions serveur valides |
 | Rules | versions et catalogue | version immuable, validation unique, non-rétroactivité |
 | Player | empire et propriété | aucune autorité administrative implicite |
-| Planet/Moon | corps célestes | une position ne possède qu'une planète |
+| Planet/Moon | corps célestes | une position porte au plus une planète et une lune |
 | Economy | stocks, production et énergie | aucune ressource négative, calcul UTC déterministe |
 | Building | niveaux et file | coût atomique, prérequis vérifiés |
 | Research | graphe et progression | graphe acyclique, une progression valide |
