@@ -320,3 +320,56 @@ func TestPlanLaunchValidatesEverything(t *testing.T) {
 		t.Fatalf("a deployment must not schedule a return: %v", plan.ReturnsAt)
 	}
 }
+
+func TestMissionCompositionRules(t *testing.T) {
+	catalogue := unit.DefaultCatalogue()
+	tests := []struct {
+		name        string
+		mission     Mission
+		composition Composition
+		wantErr     bool
+	}{
+		{name: "espionage flies probes only", mission: MissionEspionage, composition: Composition{unit.EspionageProbe: 3}},
+		{name: "espionage refuses an escort", mission: MissionEspionage, composition: Composition{unit.EspionageProbe: 3, unit.LightFighter: 1}, wantErr: true},
+		{name: "espionage needs a probe", mission: MissionEspionage, composition: Composition{unit.LightFighter: 1}, wantErr: true},
+		{name: "recycling needs a recycler", mission: MissionRecycle, composition: Composition{unit.SmallCargo: 2}, wantErr: true},
+		{name: "recycling accepts an escort", mission: MissionRecycle, composition: Composition{unit.Recycler: 1, unit.LightFighter: 4}},
+		{name: "an attack needs a weapon", mission: MissionAttack, composition: Composition{unit.EspionageProbe: 10}, wantErr: true},
+		{name: "an attack flies fighters", mission: MissionAttack, composition: Composition{unit.LightFighter: 10}},
+		{name: "a transport carries anything", mission: MissionTransport, composition: Composition{unit.SmallCargo: 1}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateComposition(test.mission, test.composition, catalogue)
+			if test.wantErr && !errors.Is(err, ErrCompositionMismatch) {
+				t.Fatalf("ValidateComposition() error = %v, want ErrCompositionMismatch", err)
+			}
+			if !test.wantErr && err != nil {
+				t.Fatalf("ValidateComposition() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestMissionTargetsAndSpeedClasses(t *testing.T) {
+	if MissionAttack.SpeedClass() != Hostile {
+		t.Fatal("an attack flies at hostile speed")
+	}
+	for _, mission := range []Mission{MissionTransport, MissionDeploy, MissionEspionage, MissionRecycle} {
+		if mission.SpeedClass() != Peaceful {
+			t.Fatalf("%s must fly at peaceful speed", mission)
+		}
+	}
+	if MissionRecycle.Target() != TargetDebris {
+		t.Fatal("a recycling aims at a debris field")
+	}
+	if !MissionAttack.TargetsForeignBody() || !MissionEspionage.TargetsForeignBody() {
+		t.Fatal("an attack and an espionage aim at somebody else")
+	}
+	if MissionTransport.TargetsForeignBody() || MissionDeploy.TargetsForeignBody() {
+		t.Fatal("a transport may aim anywhere")
+	}
+	if !MissionAttack.Returns() || !MissionEspionage.Returns() || !MissionRecycle.Returns() {
+		t.Fatal("only a deployment stays on its destination")
+	}
+}

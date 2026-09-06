@@ -10,6 +10,9 @@ type Mission string
 const (
 	MissionTransport Mission = "transport"
 	MissionDeploy    Mission = "deploy"
+	MissionAttack    Mission = "attack"
+	MissionEspionage Mission = "espionage"
+	MissionRecycle   Mission = "recycle"
 )
 
 // SpeedClass selects the universe speed applied to a mission.
@@ -33,7 +36,7 @@ const (
 // Valid reports whether the mission is one this build knows.
 func (m Mission) Valid() bool {
 	switch m {
-	case MissionTransport, MissionDeploy:
+	case MissionTransport, MissionDeploy, MissionAttack, MissionEspionage, MissionRecycle:
 		return true
 	default:
 		return false
@@ -41,13 +44,31 @@ func (m Mission) Valid() bool {
 }
 
 // Returns reports whether the fleet flies home once the mission is resolved.
+// Only a deployment settles on its destination.
 func (m Mission) Returns() bool {
-	return m == MissionTransport
+	return m != MissionDeploy
 }
 
 // SpeedClass returns the universe speed the mission travels at.
 func (m Mission) SpeedClass() SpeedClass {
+	if m == MissionAttack {
+		return Hostile
+	}
 	return Peaceful
+}
+
+// TargetsForeignBody reports whether the destination must belong to somebody
+// else, which is what makes a mission hostile or intrusive.
+func (m Mission) TargetsForeignBody() bool {
+	return m == MissionAttack || m == MissionEspionage
+}
+
+// Target reports the sort of body the mission aims at.
+func (m Mission) Target() TargetKind {
+	if m == MissionRecycle {
+		return TargetDebris
+	}
+	return TargetPlanet
 }
 
 // TargetsOwnBody reports whether the destination must belong to the player.

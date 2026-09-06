@@ -22,9 +22,25 @@ import (
 
 // Event priorities of the fleet engine, documented with the scheduled events.
 const (
-	fleetArrivalPriority = 30
-	fleetReturnPriority  = 40
+	combatEventPriority    = 10
+	espionageEventPriority = 20
+	fleetArrivalPriority   = 30
+	fleetReturnPriority    = 40
 )
+
+// arrivalEvent names the event a mission schedules for its arrival. A hostile
+// resolution is a distinct type with its own priority, so a battle settles
+// before the fleets of the same instant move on.
+func arrivalEvent(mission domainfleet.Mission) (string, int) {
+	switch mission {
+	case domainfleet.MissionAttack:
+		return "combat_resolved", combatEventPriority
+	case domainfleet.MissionEspionage:
+		return "espionage_resolved", espionageEventPriority
+	default:
+		return "fleet_arrived", fleetArrivalPriority
+	}
+}
 
 // FleetRepository persists each fleet action in one write transaction.
 type FleetRepository struct {
@@ -38,9 +54,12 @@ func NewFleetRepository(write *sql.DB, catalogues catalogue.Set) *FleetRepositor
 
 // RegisterHandlers plugs arrival and return into the shared event processor.
 func (r *FleetRepository) RegisterHandlers(processor *EventProcessor) {
-	processor.Register("fleet_arrived", func(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time) error {
+	arrival := func(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time) error {
 		return r.resolveArrival(ctx, tx, event, now)
-	})
+	}
+	processor.Register("fleet_arrived", arrival)
+	processor.Register("espionage_resolved", arrival)
+	processor.Register("combat_resolved", arrival)
 	processor.Register("fleet_returned", func(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time) error {
 		return r.resolveReturn(ctx, tx, event, now)
 	})
@@ -180,10 +199,11 @@ func (r *FleetRepository) Launch(ctx context.Context, accountID, planetID int64,
 		if err := recordTransition(ctx, tx, fleetID, "", domainfleet.Outbound, "launched", plan.DepartsAt); err != nil {
 			return err
 		}
+		eventType, priority := arrivalEvent(request.Mission)
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO scheduled_events(event_type, due_at, priority, entity_type, entity_id, ruleset_version, payload, idempotency_key, created_at)
-			VALUES ('fleet_arrived', ?, ?, 'fleet', ?, ?, json_object('mission', ?), ?, ?)
-		`, timestamp(plan.ArrivesAt), fleetArrivalPriority, strconv.FormatInt(fleetID, 10), rulesetVersion,
+			VALUES (?, ?, ?, 'fleet', ?, ?, json_object('mission', ?), ?, ?)
+		`, eventType, timestamp(plan.ArrivesAt), priority, strconv.FormatInt(fleetID, 10), rulesetVersion,
 			string(request.Mission), fmt.Sprintf("fleet-arrive:%d", fleetID), timestamp(plan.DepartsAt)); err != nil {
 			return fmt.Errorf("fleet repository: schedule arrival: %w", err)
 		}
@@ -229,14 +249,23 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 	if err != nil {
 		return domainfleet.Plan{}, appeconomy.Planet{}, 0, err
 	}
-	if request.TargetKind == domainfleet.TargetPlanet {
-		if targetPlanetID == 0 {
+	switch request.TargetKind {
+	case domainfleet.TargetPlanet:
+		if targetPlanetID == 0 || targetPlanetID == planet.ID {
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
 		}
 		if request.Mission.TargetsOwnBody() && targetOwner != playerID {
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
 		}
-		if targetPlanetID == planet.ID {
+		if request.Mission.TargetsForeignBody() && targetOwner == playerID {
+			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
+		}
+	case domainfleet.TargetDebris:
+		field, fieldErr := loadDebris(ctx, tx, request.Target)
+		if fieldErr != nil {
+			return domainfleet.Plan{}, appeconomy.Planet{}, 0, fieldErr
+		}
+		if field.Empty() {
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
 		}
 	}

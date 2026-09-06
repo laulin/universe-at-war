@@ -212,3 +212,42 @@ func Capacity(composition Composition, catalogue unit.Catalogue) (int64, error) 
 	}
 	return capacity, nil
 }
+
+// ErrCompositionMismatch reports a composition a mission cannot fly with.
+var ErrCompositionMismatch = errors.New("fleet: this composition cannot fly this mission")
+
+// ValidateComposition applies the rules a mission puts on its ships: an
+// espionage flies probes only, a recycling needs recyclers, and an attack needs
+// something that can actually fight.
+func ValidateComposition(mission Mission, composition Composition, catalogue unit.Catalogue) error {
+	switch mission {
+	case MissionEspionage:
+		for id, quantity := range composition {
+			if quantity > 0 && id != unit.EspionageProbe {
+				return ErrCompositionMismatch
+			}
+		}
+		if composition[unit.EspionageProbe] <= 0 {
+			return ErrCompositionMismatch
+		}
+	case MissionRecycle:
+		if composition[unit.Recycler] <= 0 {
+			return ErrCompositionMismatch
+		}
+	case MissionAttack:
+		armed := false
+		for id, quantity := range composition {
+			if quantity <= 0 {
+				continue
+			}
+			if definition, known := catalogue.Definition(id); known && definition.Weapon > 0 {
+				armed = true
+				break
+			}
+		}
+		if !armed {
+			return ErrCompositionMismatch
+		}
+	}
+	return nil
+}

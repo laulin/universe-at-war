@@ -60,6 +60,12 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 	if err := request.Composition.Validate(context.Catalogue); err != nil {
 		return Plan{}, err
 	}
+	if err := ValidateComposition(request.Mission, request.Composition, context.Catalogue); err != nil {
+		return Plan{}, err
+	}
+	if request.TargetKind != request.Mission.Target() {
+		return Plan{}, ErrInvalidTarget
+	}
 	for id, quantity := range request.Composition {
 		if context.Inventory[id] < quantity {
 			return Plan{}, ErrInsufficientUnits

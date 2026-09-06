@@ -49,6 +49,11 @@ valeur documentée ; une valeur plus faible est traitée en premier.
 reparte et avant qu'une production ne livre ses unités ; une intelligence
 artificielle réfléchit après que le monde a changé.
 
+L'arrivée d'une flotte porte le type de sa mission : une attaque planifie
+`combat_resolved`, un espionnage `espionage_resolved`, toute autre mission
+`fleet_arrived`. Les trois partagent la clé d'idempotence `fleet-arrive:<id>`,
+si bien qu'un rappel annule l'arrivée sans connaître le type de la mission.
+
 ## Traitement
 
 Dans une transaction d'écriture, le worker relit l'événement et son agrégat,

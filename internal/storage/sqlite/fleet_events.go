@@ -27,6 +27,7 @@ type fleetRow struct {
 	mission        domainfleet.Mission
 	speedPercent   int
 	fuel           int64
+	seed           int64
 	rulesetVersion int64
 	departedAt     time.Time
 	arrivesAt      time.Time
@@ -58,11 +59,19 @@ func (r *FleetRepository) resolveArrival(ctx context.Context, tx *sql.Tx, event 
 	if err != nil {
 		return err
 	}
-	switch {
-	case targetPlanetID == 0:
+	if row.mission == domainfleet.MissionRecycle {
+		return r.resolveRecycling(ctx, tx, row, event.DueAt, now)
+	}
+	if targetPlanetID == 0 {
 		return r.abortMission(ctx, tx, row, "target_missing", now)
-	case row.mission == domainfleet.MissionDeploy:
+	}
+	switch row.mission {
+	case domainfleet.MissionDeploy:
 		return r.completeDeployment(ctx, tx, row, targetPlanetID, cargo, event.DueAt, now)
+	case domainfleet.MissionEspionage:
+		return r.resolveEspionage(ctx, tx, row, targetPlanetID, event.DueAt, now)
+	case domainfleet.MissionAttack:
+		return r.resolveCombat(ctx, tx, row, targetPlanetID, event.DueAt, now)
 	default:
 		return r.completeTransport(ctx, tx, row, targetPlanetID, cargo, event.DueAt, now)
 	}
@@ -313,12 +322,12 @@ func loadFleetRow(ctx context.Context, tx *sql.Tx, fleetID int64) (fleetRow, err
 	err := tx.QueryRowContext(ctx, `
 		SELECT id, owner_player_id, origin_planet_id, origin_galaxy, origin_system, origin_position,
 			target_galaxy, target_system, target_position, target_kind, target_planet_id, mission,
-			speed_percent, fuel, ruleset_version, departed_at, arrives_at, returns_at, recalled_at, state, version
+			speed_percent, fuel, seed, ruleset_version, departed_at, arrives_at, returns_at, recalled_at, state, version
 		FROM fleets WHERE id = ?
 	`, fleetID).Scan(&row.id, &row.ownerPlayerID, &row.originPlanetID,
 		&row.origin.Galaxy, &row.origin.System, &row.origin.Position,
 		&row.target.Galaxy, &row.target.System, &row.target.Position, &targetKind, &targetPlanetID, &mission,
-		&row.speedPercent, &row.fuel, &row.rulesetVersion, &departedText, &arrivesText, &returnsText, &recalledText,
+		&row.speedPercent, &row.fuel, &row.seed, &row.rulesetVersion, &departedText, &arrivesText, &returnsText, &recalledText,
 		&state, &row.version)
 	if err != nil {
 		return fleetRow{}, fmt.Errorf("fleet repository: read fleet: %w", err)
