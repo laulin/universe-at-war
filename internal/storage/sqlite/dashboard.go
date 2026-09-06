@@ -99,6 +99,21 @@ func (r *DashboardRepository) Health(ctx context.Context, now time.Time) (appadm
 			return appadmin.Health{}, fmt.Errorf("dashboard repository: count: %w", err)
 		}
 	}
+	var backupName sql.NullString
+	var backupTaken sql.NullString
+	if err := r.write.QueryRowContext(ctx,
+		"SELECT name, taken_at FROM backups ORDER BY taken_at DESC, id DESC LIMIT 1").
+		Scan(&backupName, &backupTaken); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return appadmin.Health{}, fmt.Errorf("dashboard repository: read backup: %w", err)
+	}
+	if backupTaken.Valid {
+		taken, err := time.Parse(time.RFC3339Nano, backupTaken.String)
+		if err != nil {
+			return appadmin.Health{}, fmt.Errorf("dashboard repository: parse backup date: %w", err)
+		}
+		health.LastBackupAt = &taken
+		health.LastBackupName = backupName.String
+	}
 	return health, nil
 }
 

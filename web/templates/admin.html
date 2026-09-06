@@ -27,6 +27,10 @@
       <dt>Sanctions actives</dt><dd>{{.Health.ActiveBans}}</dd>
       <dt>Dernière sauvegarde</dt><dd>{{if .Health.LastBackupAt}}{{.Health.LastBackupName}} le {{.Health.LastBackupAt.Format "2006-01-02 15:04"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</dd>
     </dl>
+    <form method="post" action="/admin/backup">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit">Sauvegarder maintenant</button>
+    </form>
     <p><a href="/admin/moderation">Modération</a> · <a href="/admin/ai">Joueurs artificiels</a></p>
 
     <h3 id="accounts-title">Comptes</h3>

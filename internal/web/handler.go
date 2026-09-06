@@ -156,6 +156,7 @@ type Dependencies struct {
 	Dashboard      dashboardService
 	Invitations    invitationService
 	Moderation     moderationService
+	Backups        backupService
 	Registration   registrationService
 	Logger         *slog.Logger
 	SecureCookies  bool
@@ -182,6 +183,7 @@ type Handler struct {
 	dashboard       dashboardService
 	invitations     invitationService
 	moderation      moderationService
+	backups         backupService
 	registration    registrationService
 	secureCookies   bool
 	loginLimiter    loginRateLimiter
@@ -257,6 +259,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		dashboard:      dependencies.Dashboard,
 		invitations:    dependencies.Invitations,
 		moderation:     dependencies.Moderation,
+		backups:        dependencies.Backups,
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
@@ -323,6 +326,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /admin", handler.dashboardPage)
 	handler.mux.HandleFunc("POST /admin/accounts/{account}/role", handler.changeRole)
 	handler.mux.HandleFunc("POST /admin/accounts/{account}/status", handler.changeStatus)
+	handler.mux.HandleFunc("POST /admin/backup", handler.takeBackup)
 	handler.mux.HandleFunc("POST /admin/invitations", handler.createInvitation)
 	handler.mux.HandleFunc("POST /admin/invitations/{invitation}/revoke", handler.revokeInvitation)
 	handler.mux.HandleFunc("GET /admin/moderation", handler.moderationPage)

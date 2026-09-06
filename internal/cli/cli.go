@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -82,6 +83,8 @@ func (r Runner) Run(ctx context.Context, arguments []string) int {
 		return 0
 	case "migrate":
 		return r.runMigrate(ctx, arguments[1:])
+	case "backup":
+		return r.runBackup(ctx, arguments[1:])
 	case "doctor":
 		return r.runDoctor(ctx, arguments[1:])
 	case "serve":
@@ -126,6 +129,48 @@ func (r Runner) runMigrate(ctx context.Context, arguments []string) int {
 	return 0
 }
 
+// runBackup writes a verified snapshot of the universe next to the database.
+func (r Runner) runBackup(ctx context.Context, arguments []string) int {
+	flags := flag.NewFlagSet("backup", flag.ContinueOnError)
+	flags.SetOutput(r.Stderr)
+	databasePath := flags.String("database", r.databaseDefault(), "path to the SQLite database")
+	directory := flags.String("directory", "", "directory to write the backup into (default: next to the database)")
+	keep := flags.Int("keep", 0, "how many snapshots to keep, oldest removed first (0 keeps all)")
+	if err := flags.Parse(arguments); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		fmt.Fprintln(r.Stderr, "backup: unexpected positional arguments")
+		return 2
+	}
+	target := *directory
+	if strings.TrimSpace(target) == "" {
+		target = filepath.Join(filepath.Dir(*databasePath), "backups")
+	}
+	database, err := storagesqlite.Open(ctx, *databasePath)
+	if err != nil {
+		return r.commandError("backup", err)
+	}
+	defer database.Close()
+	if _, err := database.SchemaVersion(ctx); err != nil {
+		return r.commandError("backup", errors.New("database is not migrated"))
+	}
+	snapshot, err := database.Backup(ctx, target, time.Now().UTC())
+	if err != nil {
+		return r.commandError("backup", err)
+	}
+	fmt.Fprintf(r.Stdout, "backup: %s\nbytes: %d\nschema version: %d\nintegrity: ok\n",
+		snapshot.Path, snapshot.Bytes, snapshot.SchemaVersion)
+	removed, err := storagesqlite.PruneBackups(target, *keep)
+	if err != nil {
+		return r.commandError("backup", err)
+	}
+	for _, name := range removed {
+		fmt.Fprintf(r.Stdout, "removed: %s\n", name)
+	}
+	return 0
+}
+
 func (r Runner) runDoctor(ctx context.Context, arguments []string) int {
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	flags.SetOutput(r.Stderr)
@@ -150,7 +195,19 @@ func (r Runner) runDoctor(ctx context.Context, arguments []string) int {
 	if err := database.CheckIntegrity(ctx); err != nil {
 		return r.commandError("doctor", err)
 	}
-	fmt.Fprintf(r.Stdout, "schema version: %d\nintegrity: ok\n", version)
+	if version > storagesqlite.LatestSchemaVersion() {
+		return r.commandError("doctor", fmt.Errorf(
+			"database carries schema %d, newer than the %d this build knows", version, storagesqlite.LatestSchemaVersion()))
+	}
+	report, err := database.Diagnose(ctx)
+	if err != nil {
+		return r.commandError("doctor", err)
+	}
+	fmt.Fprintf(r.Stdout, "schema version: %d\nintegrity: ok\njournal mode: %s\nwritable: %t\nforeign keys: ok\nruleset: %s\n",
+		version, report.JournalMode, report.Writable, report.Ruleset)
+	if !report.Writable {
+		return r.commandError("doctor", errors.New("the database is not writable"))
+	}
 	return 0
 }
 
@@ -224,6 +281,11 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	moderation := appmoderation.Service{
 		Clock:      clock,
 		Repository: storagesqlite.NewModerationRepository(database.Write()),
+	}
+	backups := appadmin.BackupService{
+		Clock:      clock,
+		Repository: storagesqlite.NewBackupRepository(database, filepath.Join(filepath.Dir(*databasePath), "backups")),
+		Keep:       14,
 	}
 	dashboard := appadmin.DashboardService{
 		Clock:      clock,
@@ -356,6 +418,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Dashboard:      dashboard,
 		Invitations:    invitations,
 		Moderation:     moderation,
+		Backups:        backups,
 		Registration:   registration,
 		Logger:         logger,
 		SecureCookies:  *secureCookie,
@@ -437,7 +500,8 @@ func (r Runner) usage() {
 Commands:
   serve    start the local Universe At War server
   migrate  apply embedded SQLite migrations
-  doctor   verify database schema and integrity
+  backup   write a verified snapshot of the universe
+  doctor   verify database schema, integrity, writability and ruleset
   admin reset-password
            replace an administrator password from the local machine
   version  print application version`)

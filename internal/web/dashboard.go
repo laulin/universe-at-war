@@ -27,6 +27,11 @@ type invitationService interface {
 	Revoke(context.Context, appauth.Principal, int64) error
 }
 
+// backupService puts the universe somewhere safe.
+type backupService interface {
+	Take(context.Context, appauth.Principal) (appadmin.Snapshot, error)
+}
+
 // moderationService applies the sanctions of a universe.
 type moderationService interface {
 	Apply(context.Context, appauth.Principal, appmoderation.Request) (appmoderation.Ban, error)
@@ -96,6 +101,24 @@ func (h *Handler) renderDashboard(response http.ResponseWriter, request *http.Re
 		}
 	}
 	h.render(response, status, "admin", data)
+}
+
+// takeBackup writes a verified snapshot from the administration page.
+func (h *Handler) takeBackup(response http.ResponseWriter, request *http.Request) {
+	principal, ok := h.requireAdministrator(response, request)
+	if !ok || !h.validCSRF(response, request) {
+		return
+	}
+	if h.backups == nil {
+		http.NotFound(response, request)
+		return
+	}
+	if _, err := h.backups.Take(request.Context(), principal); err != nil {
+		h.renderDashboard(response, request, http.StatusBadRequest, principal,
+			"La sauvegarde a échoué : "+err.Error(), "")
+		return
+	}
+	http.Redirect(response, request, "/admin", http.StatusSeeOther)
 }
 
 func (h *Handler) changeRole(response http.ResponseWriter, request *http.Request) {

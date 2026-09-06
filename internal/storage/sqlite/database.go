@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"universeatwar/internal/domain/rules"
 	"universeatwar/migrations"
 
 	_ "modernc.org/sqlite"
@@ -339,4 +340,64 @@ func checkForeignKeys(ctx context.Context, transaction *sql.Tx) error {
 		return errors.New("a row no longer points at an existing parent")
 	}
 	return rows.Err()
+}
+
+// LatestSchemaVersion is the newest migration this build carries. A database or
+// a backup beyond it comes from a newer version of the game and is refused.
+func LatestSchemaVersion() int {
+	available, err := loadMigrations(migrations.Files)
+	if err != nil || len(available) == 0 {
+		return 0
+	}
+	return available[len(available)-1].version
+}
+
+// Diagnosis is what `doctor` reports beyond the integrity of the file itself.
+type Diagnosis struct {
+	JournalMode string
+	Writable    bool
+	Ruleset     string
+}
+
+// Diagnose checks that the database can actually be worked with: that it is in
+// write-ahead mode, that a write really goes through, that no foreign key is
+// dangling and that the active ruleset still decodes.
+func (d *Database) Diagnose(ctx context.Context) (Diagnosis, error) {
+	var report Diagnosis
+	if err := d.write.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&report.JournalMode); err != nil {
+		return Diagnosis{}, fmt.Errorf("sqlite: read journal mode: %w", err)
+	}
+	// A write is attempted and rolled back: reading alone would not notice a
+	// read-only file or a directory the process cannot write into.
+	transaction, err := d.write.BeginTx(ctx, nil)
+	if err == nil {
+		_, err = transaction.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS doctor_probe(id INTEGER PRIMARY KEY)")
+		report.Writable = err == nil
+		_ = transaction.Rollback()
+	}
+	rows, err := d.write.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return Diagnosis{}, fmt.Errorf("sqlite: check foreign keys: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return Diagnosis{}, errors.New("sqlite: the database holds dangling references")
+	}
+	if err := rows.Err(); err != nil {
+		return Diagnosis{}, fmt.Errorf("sqlite: check foreign keys: %w", err)
+	}
+	report.Ruleset = "none"
+	var document string
+	err = d.read.QueryRowContext(ctx, "SELECT document FROM ruleset_versions WHERE status = 'active'").Scan(&document)
+	if errors.Is(err, sql.ErrNoRows) {
+		return report, nil
+	}
+	if err != nil {
+		return Diagnosis{}, fmt.Errorf("sqlite: read ruleset: %w", err)
+	}
+	if _, err := rules.Decode([]byte(document)); err != nil {
+		return Diagnosis{}, fmt.Errorf("sqlite: the active ruleset does not decode: %w", err)
+	}
+	report.Ruleset = "ok"
+	return report, nil
 }
