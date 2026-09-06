@@ -138,13 +138,19 @@ avancé, en suivant cette priorité :
 4. **Mines** : la mine dont le niveau est le plus en retard sur les proportions
    cibles `métal 1 · cristal 0,66 · deutérium 0,4`.
 
-Une construction refusée pour cause de ressources n'est pas un échec : l'IA
-enregistre la raison et réessaiera. Le corps sans case libre est écarté.
+L'IA prend la première option de cette liste que le jeu accepte réellement,
+c'est-à-dire débloquée et payable. Une priorité qu'elle voit sans pouvoir la
+payer est nommée dans la trace (« en économisant pour … ») et laissée à la
+réflexion suivante : ainsi elle ne se bloque jamais, quitte à faire un choix
+sous-optimal.
 
 La recherche suit une file fixe, la première dont les prérequis sont satisfaits :
 énergie, combustion, espionnage, ordinateur, armes, bouclier, protection,
-impulsion, astrophysique. La production alterne entre transporteurs, chasseurs
-et défenses selon la part de défense de l'archétype.
+impulsion, astrophysique. À chaque commande, le chantier tire la part de
+défense de l'archétype depuis la seed de l'IA et son numéro de tick : la
+tortue pointe le sol beaucoup plus souvent que le raider, sans jamais suivre un
+script. La quantité commandée est la moitié de ce que le stock permet, bornée à
+dix : une IA ne vide jamais ses caisses d'un coup.
 
 ## Mise à l'abri
 

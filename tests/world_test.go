@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"universeatwar/internal/ai"
 	appacs "universeatwar/internal/app/acs"
 	appai "universeatwar/internal/app/ai"
 	appalliance "universeatwar/internal/app/alliance"
@@ -49,6 +50,7 @@ type world struct {
 	ACS      appacs.Service
 	AI       appai.Service
 	Thinking appai.Thinking
+	Brain    *ai.Brain
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -73,23 +75,26 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		Catalogue:  catalogues.Buildings,
 		Completer:  events,
 	}
+	research := appresearch.Service{
+		Clock:      clock,
+		Repository: researchRepository,
+		Catalogues: catalogues,
+		Completer:  events,
+	}
+	shipyard := appshipyard.Service{
+		Clock:      clock,
+		Repository: shipyardRepository,
+		Catalogues: catalogues,
+		Completer:  events,
+	}
+	thinking := appai.Thinking{Clock: clock, Thought: aiRepository}
 	return &world{
 		Database: database,
 		Clock:    clock,
 		Events:   events,
 		Economy:  economy,
-		Research: appresearch.Service{
-			Clock:      clock,
-			Repository: researchRepository,
-			Catalogues: catalogues,
-			Completer:  events,
-		},
-		Shipyard: appshipyard.Service{
-			Clock:      clock,
-			Repository: shipyardRepository,
-			Catalogues: catalogues,
-			Completer:  events,
-		},
+		Research: research,
+		Shipyard: shipyard,
 		Fleet: appfleet.Service{
 			Clock:      clock,
 			Repository: fleetRepository,
@@ -115,7 +120,10 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 			Seeds:      random.NewSeedGenerator(rand.Reader),
 			Completer:  events,
 		},
-		Thinking: appai.Thinking{Clock: clock, Thought: aiRepository},
+		Thinking: thinking,
+		Brain: &ai.Brain{
+			Clock: clock, Thinking: thinking, Economy: economy, Research: research, Shipyard: shipyard,
+		},
 	}
 }
 

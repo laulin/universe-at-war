@@ -14,8 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"universeatwar/internal/ai"
 	appacs "universeatwar/internal/app/acs"
 	appadmin "universeatwar/internal/app/administration"
+	appai "universeatwar/internal/app/ai"
 	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
 	appbootstrap "universeatwar/internal/app/bootstrap"
@@ -294,6 +296,14 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Catalogues: catalogues,
 		Completer:  events,
 		Wake:       worker.Wake,
+	}
+	worker.Thinker = &ai.Brain{
+		Clock:    clock,
+		Thinking: appai.Thinking{Clock: clock, Thought: aiRepository},
+		Economy:  economy,
+		Research: research,
+		Shipyard: shipyard,
+		Logger:   logger,
 	}
 	workerContext, stopWorker := context.WithCancel(ctx)
 	defer stopWorker()

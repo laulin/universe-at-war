@@ -15,10 +15,18 @@ type Processor interface {
 	NextDue(context.Context) (time.Time, bool, error)
 }
 
+// Thinker runs the reflections the artificial players owe. It acts through the
+// ordinary player use cases, which open their own transactions, so it runs
+// after the batch of events rather than inside one.
+type Thinker interface {
+	ThinkDue(context.Context, int) (int, error)
+}
+
 // Worker sleeps until the nearest known event, a wake-up, or a safety rescan.
 type Worker struct {
 	Clock          domainclock.Clock
 	Processor      Processor
+	Thinker        Thinker
 	BatchSize      int
 	RescanInterval time.Duration
 	Logger         *slog.Logger
@@ -67,6 +75,16 @@ func (w *Worker) Run(ctx context.Context) error {
 			}
 			if processed < w.BatchSize {
 				break
+			}
+		}
+		// Once the world has settled, whoever owes a reflection takes it. A
+		// failure here costs one tick, never the loop.
+		if w.Thinker != nil && !failed {
+			if _, err := w.Thinker.ThinkDue(ctx, w.BatchSize); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				logger.Error("artificial reflection failed", "error", err.Error())
 			}
 		}
 		delay := w.RescanInterval
