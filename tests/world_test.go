@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
@@ -42,6 +43,7 @@ type world struct {
 	Reports  appreports.Service
 	Phalanx  appphalanx.Service
 	JumpGate appjumpgate.Service
+	Alliance appalliance.Service
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -89,6 +91,7 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		Reports:  appreports.Service{Clock: clock, Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()), Completer: events},
 		Phalanx:  appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
 		JumpGate: appjumpgate.Service{Clock: clock, Repository: storagesqlite.NewJumpGateRepository(database.Write(), catalogues), Completer: events},
+		Alliance: appalliance.Service{Clock: clock, Repository: storagesqlite.NewAllianceRepository(database.Write())},
 	}
 }
 
