@@ -1,0 +1,63 @@
+{{define "title"}}{{.Player.Name}}{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="ai-detail-title">
+    <p class="eyebrow">Administration — vue omnisciente</p>
+    <h2 id="ai-detail-title">{{.Player.Name}}</h2>
+    <div class="alert" role="note">
+      Cette page montre l'état interne et les intentions d'un joueur artificiel.
+      Aucun joueur n'y a accès, et rien de ce qui s'y trouve n'est visible en jeu.
+    </div>
+    <dl class="summary">
+      <dt>Archétype</dt><dd>{{.Player.Archetype}}</dd>
+      <dt>Horaires</dt><dd>{{.Player.Window.Start}} h – {{.Player.Window.End}} h UTC — {{if .Player.Awake}}éveillé{{else}}endormi{{end}}</dd>
+      <dt>Intervalle</dt><dd>{{.Player.Interval}}</dd>
+      <dt>Réflexions</dt><dd>{{.Player.Tick}}</dd>
+      <dt>Corps</dt><dd>{{.Player.Bodies}}</dd>
+      <dt>Dernière réflexion</dt><dd>{{if .Player.LastThinkAt}}{{.Player.LastThinkAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">jamais</span>{{end}}</dd>
+      <dt>Prochaine réflexion</dt><dd>{{if .Player.NextThinkAt}}{{.Player.NextThinkAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</dd>
+      <dt>État</dt><dd>{{if .Player.Retired}}retiré{{else}}actif{{end}}</dd>
+    </dl>
+
+    <h3 id="diary-title">Journal des décisions</h3>
+    {{if .Player.Decisions}}
+    <table class="bodies" aria-labelledby="diary-title">
+      <thead>
+        <tr><th scope="col">Date</th><th scope="col">Niveau</th><th scope="col">Action</th>
+        <th scope="col">Issue</th><th scope="col">Raison</th><th scope="col">Score</th></tr>
+      </thead>
+      <tbody>
+      {{range .Player.Decisions}}
+        <tr>
+          <td>{{.DecidedAt.Format "01-02 15:04:05"}}</td>
+          <td>{{.Layer}}</td>
+          <th scope="row">{{.Action}}{{if .Target}} → {{.Target}}{{end}}</th>
+          <td>{{.Outcome}}</td>
+          <td>{{.Reason}}</td>
+          <td>{{if .Score}}{{printf "%.0f" .Score}}{{else}}<span class="muted">—</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Ce joueur n'a encore rien décidé.</p>{{end}}
+
+    <h3 id="memory-title">Mémoire</h3>
+    {{if .Player.Memories}}
+    <table class="bodies" aria-labelledby="memory-title">
+      <thead><tr><th scope="col">Position</th><th scope="col">Nature</th><th scope="col">Observé le</th><th scope="col">Score</th><th scope="col">Résumé</th></tr></thead>
+      <tbody>
+      {{range .Player.Memories}}
+        <tr>
+          <th scope="row">{{.Coordinate}}</th>
+          <td>{{.Kind}}</td>
+          <td>{{.ObservedAt.Format "2006-01-02 15:04"}} UTC</td>
+          <td>{{printf "%.0f" .Score}}</td>
+          <td>{{.Summary}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Ce joueur n'a encore rien observé.</p>{{end}}
+
+    <p><a href="/admin/ai">Retour aux joueurs artificiels</a></p>
+  </section>
+{{end}}

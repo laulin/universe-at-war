@@ -1,0 +1,58 @@
+{{define "title"}}Joueurs artificiels{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="ai-title">
+    <p class="eyebrow">Administration</p>
+    <h2 id="ai-title">Joueurs artificiels</h2>
+    {{if .Players}}
+    <table class="bodies">
+      <thead>
+        <tr>
+          <th scope="col">Nom</th><th scope="col">Archétype</th><th scope="col">Horaires</th>
+          <th scope="col">État</th><th scope="col">Corps</th><th scope="col">Prochaine réflexion</th>
+          <th scope="col">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+      {{range .Players}}
+        <tr>
+          <th scope="row"><a href="/admin/ai/{{.PlayerID}}">{{.Name}}</a></th>
+          <td>{{.Archetype}}</td>
+          <td>{{.Window.Start}} h – {{.Window.End}} h UTC{{if .Awake}} (éveillé){{else}} (endormi){{end}}</td>
+          <td>{{if .Retired}}retiré{{else}}actif{{end}}</td>
+          <td>{{.Bodies}}</td>
+          <td>{{if .NextThinkAt}}{{.NextThinkAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</td>
+          <td>
+            {{if not .Retired}}
+            <form method="post" action="/admin/ai/{{.PlayerID}}/retire">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit">Retirer</button>
+            </form>
+            {{else}}<span class="muted">—</span>{{end}}
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Cet univers ne compte aucun joueur artificiel.</p>{{end}}
+
+    <h3 id="add-title">Ajouter un joueur artificiel</h3>
+    <form method="post" action="/admin/ai" aria-labelledby="add-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="name">Nom</label>
+      <input id="name" name="name" required minlength="3" maxlength="32">
+      <label for="archetype">Archétype</label>
+      <select id="archetype" name="archetype">
+        {{range .Archetypes}}<option value="{{.}}">{{.}}</option>{{end}}
+      </select>
+      <label for="start_hour">Heure d'ouverture (UTC)</label>
+      <input id="start_hour" name="start_hour" type="number" min="0" max="23" value="8">
+      <label for="end_hour">Heure de fermeture (UTC)</label>
+      <input id="end_hour" name="end_hour" type="number" min="0" max="23" value="23">
+      <label for="interval_minutes">Intervalle de réflexion (minutes)</label>
+      <input id="interval_minutes" name="interval_minutes" type="number" min="1" max="1440" value="5">
+      <button type="submit">Créer</button>
+    </form>
+    <p class="muted">Un joueur artificiel paie, attend et perd comme un humain. Ouvrir et
+    fermer à la même heure décrit un joueur qui ne dort jamais.</p>
+  </section>
+{{end}}

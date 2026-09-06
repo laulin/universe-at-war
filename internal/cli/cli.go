@@ -274,6 +274,13 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Completer:  events,
 		Wake:       worker.Wake,
 	}
+	artificials := appai.Service{
+		Clock:      clock,
+		Repository: aiRepository,
+		Empires:    economy,
+		Seeds:      seeds.NewSeedGenerator(cryptorand.Reader),
+		Completer:  events,
+	}
 	galaxy := appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())}
 	sensors := appphalanx.Service{
 		Clock:      clock,
@@ -328,6 +335,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		JumpGate:       gates,
 		Alliance:       alliance,
 		ACS:            operations,
+		Artificials:    artificials,
 		Registration:   registration,
 		Logger:         logger,
 		SecureCookies:  *secureCookie,

@@ -147,6 +147,7 @@ type Dependencies struct {
 	JumpGate       jumpGateService
 	Alliance       allianceService
 	ACS            acsService
+	Artificials    artificialService
 	Registration   registrationService
 	Logger         *slog.Logger
 	SecureCookies  bool
@@ -169,6 +170,7 @@ type Handler struct {
 	jumpGate       jumpGateService
 	alliance       allianceService
 	acs            acsService
+	artificials    artificialService
 	registration   registrationService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
@@ -179,7 +181,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "admin-ai", "admin-ai-detail"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register"}
 )
 
@@ -239,6 +241,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		jumpGate:       dependencies.JumpGate,
 		alliance:       dependencies.Alliance,
 		acs:            dependencies.ACS,
+		artificials:    dependencies.Artificials,
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
@@ -296,6 +299,10 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /alliance/operations/{group}/join", handler.joinOperation)
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/operation", handler.openOperation)
 	handler.mux.HandleFunc("POST /fleets/{fleet}/withdraw", handler.withdrawFromOperation)
+	handler.mux.HandleFunc("GET /admin/ai", handler.artificialPage)
+	handler.mux.HandleFunc("POST /admin/ai", handler.createArtificial)
+	handler.mux.HandleFunc("GET /admin/ai/{player}", handler.artificialDetailPage)
+	handler.mux.HandleFunc("POST /admin/ai/{player}/retire", handler.retireArtificial)
 	handler.mux.HandleFunc("POST /planets/{planet}/defense/{unit}", handler.orderDefenses)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(requestID(requestLogger(dependencies.Logger, handler.mux))), nil
@@ -905,6 +912,9 @@ type pageShell struct {
 	Current   *bodyLink
 	Now       time.Time
 	Alerts    int
+	// Administrator opens the administration pages in the navigation. It never
+	// grants anything by itself: every route checks the role again.
+	Administrator bool
 }
 
 // bodyLink is one entry of the celestial body selector.
@@ -930,7 +940,10 @@ type loginPageData struct {
 
 // gameShell builds the navigation shell from the bodies of the account.
 func (h *Handler) gameShell(ctx context.Context, token string, principal appauth.Principal, section string, planets []appeconomy.Planet, currentID int64) pageShell {
-	shell := pageShell{CSRFToken: token, Username: principal.Username, Section: section, Now: h.clock()}
+	shell := pageShell{
+		CSRFToken: token, Username: principal.Username, Section: section, Now: h.clock(),
+		Administrator: principal.HasRole(appauth.RoleAdmin),
+	}
 	if h.reports != nil {
 		if alerts, err := h.reports.UnreadHostile(ctx, principal); err == nil {
 			shell.Alerts = alerts
