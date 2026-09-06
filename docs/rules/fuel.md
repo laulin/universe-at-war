@@ -35,6 +35,15 @@ réduit la consommation : à 50 %, le facteur vaut 2,25 au lieu de 4.
 Deux petits transporteurs offrent 10 000 de cargo ; après 8 de carburant, il
 reste 9 992 pour les ressources.
 
+## Livraison et stockage
+
+Une livraison est plafonnée par le stockage de la destination : un transport
+dépose ce que les hangars acceptent et repart avec le reste, qui revient à
+l'origine. Un stationnement n'a pas de retour : le surplus qu'il ne peut pas
+déposer est perdu, et le journal de la mission l'enregistre. Le règlement des
+ressources ramène en effet tout stock au-dessus de la capacité à cette capacité,
+si bien qu'un dépôt non plafonné disparaîtrait silencieusement.
+
 ## Cas limites et invariants
 
 Le deutérium disponible doit couvrir le carburant et la part de deutérium du

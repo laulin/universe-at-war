@@ -13,6 +13,21 @@ commit ; l'arbre reste compilable et les tests verts à chaque étape.
 | [`2026-09-05-milestone-05.md`](2026-09-05-milestone-05.md) | espionnage, combat et débris |
 | [`2026-09-05-verification.md`](2026-09-05-verification.md) | vérification de bout en bout et scénarios prouvés |
 
+## État d'avancement
+
+| Partie | État |
+| --- | --- |
+| Socle transverse | livré : dispatch d'événements par type, ruleset versionné, empire multi-planètes, layout partagé, inscription ouverte, journalisation corrélée |
+| Milestone 3 — recherches, chantier, défenses | livré |
+| Milestone 4 — moteur de flotte | livré : transport, stationnement, rappel |
+| Milestone 5 — espionnage, combat, débris | livré : rapports filtrés, moteur de combat déterministe, pillage, recyclage, carte galaxie |
+
+Écarts assumés par rapport au plan : le paquet de prérequis s'appelle
+`prerequisite` et non `prereq`, pour suivre le style du dépôt ; la source
+aléatoire et le générateur de seed vivent tous deux dans
+`internal/domain/random` ; une arrivée de flotte porte le type d'événement de sa
+mission plutôt qu'un type unique, ce qui donne aux combats leur priorité propre.
+
 Les Milestones 6 à 10 sont cadrés dans la feuille de route ; leur plan détaillé
 sera écrit au démarrage de chaque jalon, une fois les interfaces des jalons
 précédents stabilisées. Les fichiers `MILESTONE_0N_*.md` de la racine restent la
