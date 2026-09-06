@@ -8,8 +8,8 @@
       <thead>
         <tr>
           <th scope="col">Nom</th><th scope="col">Archétype</th><th scope="col">Horaires</th>
-          <th scope="col">État</th><th scope="col">Corps</th><th scope="col">Prochaine réflexion</th>
-          <th scope="col">Action</th>
+          <th scope="col">État</th><th scope="col">Alliance</th><th scope="col">Corps</th>
+          <th scope="col">Prochaine réflexion</th><th scope="col">Action</th>
         </tr>
       </thead>
       <tbody>
@@ -19,6 +19,7 @@
           <td>{{.Archetype}}</td>
           <td>{{.Window.Start}} h – {{.Window.End}} h UTC{{if .Awake}} (éveillé){{else}} (endormi){{end}}</td>
           <td>{{if .Retired}}retiré{{else}}actif{{end}}</td>
+          <td>{{with .Team}}{{.Tag}}{{if .Role}} ({{.Role}}){{end}}{{else}}<span class="muted">aucune</span>{{end}}</td>
           <td>{{.Bodies}}</td>
           <td>{{if .NextThinkAt}}{{.NextThinkAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</td>
           <td>
@@ -27,6 +28,16 @@
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               <button type="submit">Retirer</button>
             </form>
+            {{if not .Team}}
+            <form method="post" action="/admin/ai/{{.PlayerID}}/alliance">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <label for="alliance-{{.PlayerID}}">Alliance</label>
+              <input id="alliance-{{.PlayerID}}" name="alliance" required>
+              <label for="tag-{{.PlayerID}}">Étiquette</label>
+              <input id="tag-{{.PlayerID}}" name="tag" required>
+              <button type="submit">Affecter</button>
+            </form>
+            {{end}}
             {{else}}<span class="muted">—</span>{{end}}
           </td>
         </tr>

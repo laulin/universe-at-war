@@ -18,6 +18,44 @@
       <dt>État</dt><dd>{{if .Player.Retired}}retiré{{else}}actif{{end}}</dd>
     </dl>
 
+    {{with .Player.Team}}
+    <h3 id="team-title">Alliance {{.Name}} [{{.Tag}}]</h3>
+    <dl class="summary">
+      <dt>Rôle</dt><dd>{{if .Role}}{{.Role}}{{else}}<span class="muted">aucun</span>{{end}}</dd>
+      <dt>Objectif</dt>
+      <dd>
+        {{with .Objective}}{{.Kind}} sur {{.Coordinate}} — {{.State}}, quorum {{.Quorum}},
+        échéance {{.DeadlineAt.Format "2006-01-02 15:04"}} UTC{{if .GroupID}}, opération {{.GroupID}}{{end}}
+        {{else}}<span class="muted">aucun</span>{{end}}
+      </dd>
+    </dl>
+
+    <h4 id="beliefs-title">Mémoire commune et provenance</h4>
+    {{if .Beliefs}}
+    <table class="bodies" aria-labelledby="beliefs-title">
+      <thead>
+        <tr><th scope="col">Position</th><th scope="col">Nature</th><th scope="col">Auteur</th>
+        <th scope="col">Observé le</th><th scope="col">Expire le</th><th scope="col">Confiance</th>
+        <th scope="col">Rapport</th><th scope="col">Résumé</th></tr>
+      </thead>
+      <tbody>
+      {{range .Beliefs}}
+        <tr>
+          <th scope="row">{{.Coordinate}}</th>
+          <td>{{.Kind}}</td>
+          <td>{{.AuthorName}}</td>
+          <td>{{.ObservedAt.Format "01-02 15:04"}}</td>
+          <td>{{.ExpiresAt.Format "01-02 15:04"}}</td>
+          <td>{{printf "%.2f" .Confidence}}</td>
+          <td>{{if .ReportID}}#{{.ReportID}}{{else}}<span class="muted">carte publique</span>{{end}}</td>
+          <td>{{.Summary}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">L'alliance ne croit rien pour l'instant.</p>{{end}}
+    {{end}}
+
     <h3 id="diary-title">Journal des décisions</h3>
     {{if .Player.Decisions}}
     <table class="bodies" aria-labelledby="diary-title">

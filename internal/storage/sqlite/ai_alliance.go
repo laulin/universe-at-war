@@ -134,7 +134,17 @@ func (r *AIRepository) Publish(ctx context.Context, allianceID, authorID int64, 
 // longer shared with the alliance, or whose author has left it, is simply not
 // there: revocation needs no cleanup to be effective.
 func (r *AIRepository) Recall(ctx context.Context, allianceID int64, now time.Time) ([]domainai.Knowledge, error) {
-	rows, err := r.write.QueryContext(ctx, `
+	return recallBeliefs(ctx, r.write, allianceID, now)
+}
+
+// beliefQuerier reads many rows, from a transaction or straight from the pool.
+type beliefQuerier interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+// recallBeliefs reads what an alliance still believes at that instant.
+func recallBeliefs(ctx context.Context, source beliefQuerier, allianceID int64, now time.Time) ([]domainai.Knowledge, error) {
+	rows, err := source.QueryContext(ctx, `
 		SELECT m.kind, m.galaxy, m.system, m.position, m.author_player_id, p.display_name,
 			m.observed_at, m.expires_at, m.confidence, COALESCE(m.source_report_id, 0), m.payload
 		FROM ai_alliance_memory m

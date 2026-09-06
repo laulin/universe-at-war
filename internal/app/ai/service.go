@@ -46,6 +46,17 @@ type Memory struct {
 	Summary    string
 }
 
+// Teamview is what an administrator sees of the team of an artificial player:
+// its role, the plan of the alliance and every belief that plan rests on, each
+// with the member it came from.
+type Teamview struct {
+	Name      string
+	Tag       string
+	Role      domainai.Role
+	Objective *domainai.Objective
+	Beliefs   []domainai.Knowledge
+}
+
 // Profile is the administration view of one artificial player.
 type Profile struct {
 	domainai.Profile
@@ -56,6 +67,7 @@ type Profile struct {
 	Bodies      int
 	Decisions   []Decision
 	Memories    []Memory
+	Team        *Teamview
 }
 
 // Request is what an administrator asks for when adding a player.

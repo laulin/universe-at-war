@@ -147,3 +147,96 @@ func artificialHandler(t *testing.T, universeWorld *world, principal appauth.Pri
 	}
 	return handler
 }
+
+// TestWebArtificialDebugShowsTheAllianceAndItsProvenance proves an
+// administrator can see what a team of machines is doing and where each of its
+// beliefs came from, and that no player can.
+func TestWebArtificialDebugShowsTheAllianceAndItsProvenance(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, _, players := alliedArtificials(t)
+	scout := players[0]
+	setUnits(t, ctx, database, scout.bodyID, "espionage_probe", 6)
+	setResearch(t, ctx, database, scout.playerID, "espionage_technology", 3)
+	setResearch(t, ctx, database, scout.playerID, "computer_technology", 3)
+	setResources(t, ctx, database, scout.bodyID, 200000, 200000, 200000)
+	setResources(t, ctx, database, 1, 90000, 60000, 20000)
+
+	think(t, ctx, universeWorld)
+	flyEverything(t, ctx, universeWorld)
+	universeWorld.Clock.Advance(time.Minute)
+	think(t, ctx, universeWorld)
+
+	admin := appauth.Principal{AccountID: 1, Username: "player1", Roles: []appauth.Role{appauth.RoleAdmin}}
+	handler := artificialHandler(t, universeWorld, admin)
+	session := &http.Cookie{Name: "uaw_session", Value: "session"}
+	csrfCookie := &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
+
+	page := getPage(t, handler, "/admin/ai/2", session, csrfCookie)
+	for _, expected := range []string{
+		"Alliance Les Machines", "Mémoire commune et provenance", "Eclaireur", "vue omnisciente", "raid sur",
+	} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("the debug view misses %q", expected)
+		}
+	}
+
+	// A player sees none of it.
+	player := artificialHandler(t, universeWorld, appauth.Principal{
+		AccountID: 1, Username: "player1", Roles: []appauth.Role{appauth.RolePlayer},
+	})
+	if code := statusOf(t, player, "/admin/ai/2", session, csrfCookie); code != http.StatusNotFound {
+		t.Fatalf("GET the debug view as a player = %d", code)
+	}
+	// And the plans of the machines are journalled with their alliance.
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) > 0 FROM game_event_log WHERE event_type = 'ai_objective_opened' AND entity_type = 'alliance'", 1)
+}
+
+// TestWebAdministratorAssignsAnAlliance proves an administrator can put a
+// machine into a team from the page, and that the ordinary alliance rules still
+// decide whether it gets in.
+func TestWebAdministratorAssignsAnAlliance(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld := artificialWeb(t)
+	admin := appauth.Principal{AccountID: 1, Username: "player1", Roles: []appauth.Role{appauth.RoleAdmin}}
+	handler := artificialHandler(t, universeWorld, admin)
+	session := &http.Cookie{Name: "uaw_session", Value: "session"}
+	csrfCookie := &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
+
+	for _, name := range []string{"Kepler", "Galilee"} {
+		if _, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+			Name: name, Archetype: domainai.CautiousMiner,
+			Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+		}); err != nil {
+			t.Fatalf("Create(%s) error = %v", name, err)
+		}
+	}
+	page := getPage(t, handler, "/admin/ai", session, csrfCookie)
+	if !strings.Contains(page, "Affecter") {
+		t.Fatalf("the page offers no alliance: %q", page)
+	}
+	// The first founds the alliance, the second is invited into it.
+	postForm(t, handler, "/admin/ai/3/alliance", url.Values{
+		"csrf_token": {"csrf-token"}, "alliance": {"Les Machines"}, "tag": {"mch"},
+	}, http.StatusSeeOther, session, csrfCookie)
+	postForm(t, handler, "/admin/ai/4/alliance", url.Values{
+		"csrf_token": {"csrf-token"}, "alliance": {"Les Machines"}, "tag": {"mch"},
+	}, http.StatusSeeOther, session, csrfCookie)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM alliance_members", 2)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM alliances", 1)
+
+	listed := getPage(t, handler, "/admin/ai", session, csrfCookie)
+	if !strings.Contains(listed, "MCH") {
+		t.Fatalf("the page does not show the team: %q", listed)
+	}
+	// A machine already in a team is not offered a second one.
+	if strings.Contains(listed, `name="alliance"`) {
+		t.Fatal("a member was offered another alliance")
+	}
+	body := postForm(t, handler, "/admin/ai/3/alliance", url.Values{
+		"csrf_token": {"csrf-token"}, "alliance": {"Les Autres"}, "tag": {"aut"},
+	}, http.StatusBadRequest, session, csrfCookie)
+	if !strings.Contains(body, "appartient déjà") {
+		t.Fatalf("a second alliance was accepted: %q", body)
+	}
+}

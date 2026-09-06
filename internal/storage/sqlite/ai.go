@@ -436,6 +436,11 @@ func loadAIProfile(ctx context.Context, tx *sql.Tx, playerID int64, diary int, n
 		"SELECT COUNT(*) FROM planets WHERE owner_player_id = ?", playerID).Scan(&profile.Bodies); err != nil {
 		return appai.Profile{}, fmt.Errorf("ai repository: count bodies: %w", err)
 	}
+	team, err := loadTeamview(ctx, tx, playerID, now, diary > 0)
+	if err != nil {
+		return appai.Profile{}, err
+	}
+	profile.Team = team
 	if diary <= 0 {
 		return profile, nil
 	}

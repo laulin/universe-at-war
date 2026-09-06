@@ -86,6 +86,15 @@ func (r *AIRepository) OpenObjective(ctx context.Context, allianceID int64,
 		if err != nil {
 			return fmt.Errorf("ai repository: objective id: %w", err)
 		}
+		// The server journal correlates the alliance, its plan and the position
+		// it aims at, without saying a word of what anybody knows.
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload)
+			VALUES ('ai_objective_opened', 'alliance', ?, ?, json_object('objective_id', ?, 'kind', ?, 'target', ?, 'quorum', ?))
+		`, allianceID, timestamp(objective.OpenedAt), objectiveID, string(objective.Kind),
+			objective.Coordinate.String(), objective.Quorum); err != nil {
+			return fmt.Errorf("ai repository: log objective: %w", err)
+		}
 		opened, _, err = objectiveRow(ctx, tx, objectiveID)
 		return err
 	})
@@ -154,6 +163,13 @@ func (r *AIRepository) AdvanceObjective(ctx context.Context, objective domainai.
 		if affected != 1 {
 			return appai.ErrInvalidRequest
 		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload)
+			SELECT 'ai_objective_advanced', 'alliance', alliance_id, ?, json_object('objective_id', ?, 'state', ?, 'reason', ?)
+			FROM ai_alliance_objectives WHERE id = ?
+		`, timestamp(now), objective.ID, string(to), reason, objective.ID); err != nil {
+			return fmt.Errorf("ai repository: log objective: %w", err)
+		}
 		return nil
 	})
 }
@@ -219,4 +235,55 @@ func (r *AIRepository) AttachGroup(ctx context.Context, objectiveID, groupID int
 		}
 		return nil
 	})
+}
+
+// loadTeamview builds the omniscient view of the team of an artificial player:
+// its role, the plan of the alliance and what that plan rests on.
+func loadTeamview(ctx context.Context, tx *sql.Tx, playerID int64, now time.Time, withBeliefs bool) (*appai.Teamview, error) {
+	var team appai.Teamview
+	var allianceID int64
+	err := tx.QueryRowContext(ctx, `
+		SELECT a.id, a.name, a.tag FROM alliance_members m
+		JOIN alliances a ON a.id = m.alliance_id WHERE m.player_id = ?
+	`, playerID).Scan(&allianceID, &team.Name, &team.Tag)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("ai repository: read team: %w", err)
+	}
+	var role string
+	err = tx.QueryRowContext(ctx,
+		"SELECT role FROM ai_alliance_roles WHERE alliance_id = ? AND player_id = ?", allianceID, playerID).
+		Scan(&role)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("ai repository: read role: %w", err)
+	}
+	team.Role = domainai.Role(role)
+	var objectiveID int64
+	err = tx.QueryRowContext(ctx, `
+		SELECT id FROM ai_alliance_objectives
+		WHERE alliance_id = ? AND state IN ('scouting', 'assembling')
+	`, allianceID).Scan(&objectiveID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("ai repository: read plan: %w", err)
+	}
+	if objectiveID != 0 {
+		objective, found, err := objectiveRow(ctx, tx, objectiveID)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			team.Objective = &objective
+		}
+	}
+	if !withBeliefs {
+		return &team, nil
+	}
+	beliefs, err := recallBeliefs(ctx, tx, allianceID, now)
+	if err != nil {
+		return nil, err
+	}
+	team.Beliefs = beliefs
+	return &team, nil
 }

@@ -131,6 +131,18 @@ construction, la recherche et le chantier suivent toujours les règles
 individuelles. Seule la couche opérationnelle change de maître. Un membre sans
 rôle actif se conduit exactement comme une IA seule.
 
+## Observabilité
+
+La page d'administration d'un joueur artificiel montre, sous une bannière qui
+dit ce qu'elle est, l'alliance à laquelle il appartient, le rôle qu'il tient, le
+plan en cours et **chaque croyance de la mémoire commune avec sa provenance** :
+auteur, date d'observation, expiration, confiance et rapport d'origine. Aucun
+joueur n'y a accès.
+
+Le journal du serveur enregistre l'ouverture et chaque changement d'état d'un
+plan sous l'alliance concernée, avec la cible et le quorum, et rien de ce qu'un
+membre sait.
+
 ## Cas limites et invariants
 
 Un rapport non partagé reste invisible aux autres membres. Un souvenir périmé ne
