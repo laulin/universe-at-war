@@ -11,6 +11,7 @@ import (
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
+	appphalanx "universeatwar/internal/app/phalanx"
 	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
 	appshipyard "universeatwar/internal/app/shipyard"
@@ -34,6 +35,7 @@ type world struct {
 	Fleet    appfleet.Service
 	Galaxy   appgalaxy.Service
 	Reports  appreports.Service
+	Phalanx  appphalanx.Service
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -79,6 +81,7 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		},
 		Galaxy:  appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())},
 		Reports: appreports.Service{Clock: clock, Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()), Completer: events},
+		Phalanx: appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
 	}
 }
 
@@ -200,4 +203,27 @@ func newBenchmarkWorld(b *testing.B, database *storagesqlite.Database, clock *ap
 			Seeds: random.NewSeedGenerator(rand.Reader), Completer: events,
 		},
 	}
+}
+
+// insertMoon puts a moon in orbit of an existing planet.
+func insertMoon(t *testing.T, ctx context.Context, database *storagesqlite.Database, playerID, parentID int64, galaxy, system, position int) int64 {
+	t.Helper()
+	result, err := database.Write().ExecContext(ctx, `
+		INSERT INTO planets(owner_player_id, kind, parent_planet_id, name, galaxy, system, position,
+			total_fields, minimum_temperature, maximum_temperature, created_at)
+		VALUES (?, 'moon', ?, 'Lune', ?, ?, ?, 10, 10, 50, '2042-09-10T11:12:13Z')
+	`, playerID, parentID, galaxy, system, position)
+	if err != nil {
+		t.Fatalf("insert moon: %v", err)
+	}
+	moonID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Write().ExecContext(ctx,
+		"INSERT INTO planet_resources(planet_id, metal, crystal, deuterium, produced_at) VALUES (?, 0, 0, 0, '2042-09-10T11:12:13Z')",
+		moonID); err != nil {
+		t.Fatalf("insert moon resources: %v", err)
+	}
+	return moonID
 }

@@ -92,10 +92,10 @@ func TestBootstrapCreatesAdminExactlyOnce(t *testing.T) {
 	_ = accountID
 }
 
-func assertSingleValue(t *testing.T, database *storagesqlite.Database, query string, want int) {
+func assertSingleValue(t *testing.T, database *storagesqlite.Database, query string, want int, arguments ...any) {
 	t.Helper()
 	var got int
-	if err := database.Read().QueryRow(query).Scan(&got); err != nil {
+	if err := database.Read().QueryRow(query, arguments...).Scan(&got); err != nil {
 		t.Fatalf("query %q: %v", query, err)
 	}
 	if got != want {
