@@ -34,8 +34,8 @@ valeur documentée ; une valeur plus faible est traitée en premier.
 
 | Type d'événement | Priorité | Jalon |
 | --- | ---: | --- |
-| `combat_resolved` | 10 | 5 |
-| `espionage_resolved` | 20 | 5 |
+| `combat_resolved` (arrivée d'une attaque) | 10 | 5 |
+| `espionage_resolved` (arrivée d'un espionnage) | 20 | 5 |
 | `fleet_arrived` | 30 | 4 |
 | `fleet_returned` | 40 | 4 |
 | `building_completed` | 50 | 2 |

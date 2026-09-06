@@ -16,7 +16,7 @@ import (
 // CurrentSchemaVersion is the ruleset document layout produced by this build.
 // Older documents decode on top of the current defaults; a newer one is
 // refused so a downgrade never corrupts a saved universe.
-const CurrentSchemaVersion = 2
+const CurrentSchemaVersion = 3
 
 // DefaultCatalogueVersion names the content catalogue shipped with this build.
 const DefaultCatalogueVersion = "classic-1"
@@ -33,6 +33,7 @@ type Ruleset struct {
 	Time          TimeSettings        `json:"time"`
 	Economy       EconomySettings     `json:"economy"`
 	Combat        CombatSettings      `json:"combat"`
+	Espionage     EspionageSettings   `json:"espionage"`
 	Progression   ProgressionSettings `json:"progression"`
 	Team          TeamSettings        `json:"team"`
 	AI            AISettings          `json:"ai"`
@@ -96,6 +97,17 @@ type CombatSettings struct {
 	MaximumPillage       float64 `json:"maximum_pillage"`
 	RecyclerCapacity     int64   `json:"recycler_capacity"`
 	MissilesEnabled      bool    `json:"missiles_enabled"`
+}
+
+// EspionageSettings tunes what a spy report reveals and how it is noticed.
+type EspionageSettings struct {
+	ResourcesThreshold  int     `json:"resources_threshold"`
+	FleetThreshold      int     `json:"fleet_threshold"`
+	DefensesThreshold   int     `json:"defenses_threshold"`
+	BuildingsThreshold  int     `json:"buildings_threshold"`
+	ResearchThreshold   int     `json:"research_threshold"`
+	DetectionBase       float64 `json:"detection_base"`
+	RecentReportSeconds int     `json:"recent_report_seconds"`
 }
 
 type ProgressionSettings struct {
@@ -174,6 +186,11 @@ func Default() Ruleset {
 			MaximumRounds: 6, ShipsToDebris: .3, DefensesToDebris: 0,
 			DefenseRebuildChance: .7, MaximumMoonChance: .2, MaximumPillage: .5,
 			RecyclerCapacity: 20000, MissilesEnabled: true,
+		},
+		Espionage: EspionageSettings{
+			ResourcesThreshold: 1, FleetThreshold: 2, DefensesThreshold: 3,
+			BuildingsThreshold: 4, ResearchThreshold: 5,
+			DetectionBase: .0025, RecentReportSeconds: 3600,
 		},
 		Progression: ProgressionSettings{
 			BuildingCostMultiplier: 1, ResearchCostMultiplier: 1, ShipCostMultiplier: 1,
@@ -264,6 +281,21 @@ func (r Ruleset) Validate() error {
 		!ratio(r.Combat.DefenseRebuildChance) || !ratio(r.Combat.MaximumMoonChance) ||
 		!ratio(r.Combat.MaximumPillage) {
 		return errors.New("rules: invalid combat setting")
+	}
+	thresholds := []int{
+		r.Espionage.ResourcesThreshold, r.Espionage.FleetThreshold, r.Espionage.DefensesThreshold,
+		r.Espionage.BuildingsThreshold, r.Espionage.ResearchThreshold,
+	}
+	for index, threshold := range thresholds {
+		if threshold < 0 {
+			return errors.New("rules: espionage thresholds cannot be negative")
+		}
+		if index > 0 && threshold < thresholds[index-1] {
+			return errors.New("rules: espionage thresholds must not decrease")
+		}
+	}
+	if !ratio(r.Espionage.DetectionBase) || r.Espionage.RecentReportSeconds <= 0 {
+		return errors.New("rules: invalid espionage detection or freshness")
 	}
 	for _, multiplier := range []float64{
 		r.Progression.BuildingCostMultiplier, r.Progression.ResearchCostMultiplier,
