@@ -65,6 +65,17 @@ planète mère affiche les productions, stockages, énergie et cases, ainsi que 
 catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
 worker reprend automatiquement les événements après un redémarrage.
 
+Les joueurs font équipe sans jamais mettre leurs ressources en commun. Une
+alliance a des rangs, des invitations qui expirent, une diplomatie déclarative
+et un historique. Un rapport ne parvient à l'alliance que si son propriétaire le
+partage explicitement. Une attaque groupée réunit plusieurs flottes alliées sur
+une même cible à la même seconde : la page de préparation montre les
+participants et dit si la flotte que l'on ajoute retarde toute l'équipe. Le
+combat qui en résulte est unique et multi-acteurs, et le butin se répartit entre
+les flottes survivantes selon la place qui leur reste. Une flotte envoyée en
+défense alliée attend sur place jusqu'à la fin de sa garde, se bat pour la
+planète, puis rentre.
+
 Le serveur écrit des journaux structurés sur la sortie d'erreur. Chaque requête
 porte un identifiant de corrélation renvoyé dans l'en-tête `X-Request-Id` ;
 aucun secret, jeton ni cookie n'y figure. `UAW_LOG_LEVEL` choisit le niveau

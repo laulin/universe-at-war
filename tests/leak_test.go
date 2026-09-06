@@ -41,16 +41,42 @@ func TestPlayerRoutesNeverLeakAnotherEmpire(t *testing.T) {
 	setResearch(t, ctx, database, 2, "energy_technology", secretResearch)
 	setBuilding(t, ctx, database, 2, "metal_mine", 42)
 
+	// Bob also has a team and an operation under way against Alice. Neither the
+	// team nor the operation may show up anywhere on Alice's screens.
+	const (
+		secretAlliance = "Cabale de Bob"
+		secretTag      = "ZZZBOB"
+	)
+	bob := appauth.Principal{AccountID: 2}
+	if _, err := universeWorld.Alliance.Create(ctx, bob, secretAlliance, secretTag, "rien à voir"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	bobPlanets, err := universeWorld.Economy.Planets(ctx, bob)
+	if err != nil || len(bobPlanets) == 0 {
+		t.Fatalf("Planets() = %d %v", len(bobPlanets), err)
+	}
+	alicePlanets, err := universeWorld.Economy.Planets(ctx, appauth.Principal{AccountID: 1})
+	if err != nil || len(alicePlanets) == 0 {
+		t.Fatalf("Planets() = %d %v", len(alicePlanets), err)
+	}
+	setUnits(t, ctx, database, bobPlanets[0].ID, "cruiser", 5)
+	if _, err := universeWorld.ACS.Create(ctx, bob, bobPlanets[0].ID,
+		fleetOf(alicePlanets[0].Coordinate, "cruiser", 5), "leak"); err != nil {
+		t.Fatalf("ACS Create() error = %v", err)
+	}
+
 	assertRoutesHideSecrets(t, universeWorld, appauth.Principal{AccountID: 1, Username: "player1"},
 		[]string{
 			"/", "/planets/1", "/planets/1/research", "/planets/1/shipyard", "/planets/1/defense",
 			"/planets/1/fleet", "/planets/1/fleet/send", "/galaxy/1/1", "/reports",
 			"/planets/2", "/planets/2/research", "/planets/2/shipyard", "/planets/2/defense",
 			"/planets/2/fleet", "/planets/2/phalanx", "/planets/2/jump",
+			"/alliance", "/alliance/operations", "/alliance/operations/1", "/reports/1",
 		},
 		[]string{
 			fmt.Sprint(secretStock), fmt.Sprint(secretFighters),
 			fmt.Sprint(secretDefenses), fmt.Sprint(secretResearch),
+			secretAlliance, secretTag,
 		})
 }
 
@@ -75,6 +101,8 @@ func assertRoutesHideSecrets(t *testing.T, universeWorld *world, principal appau
 		Reports:        universeWorld.Reports,
 		Phalanx:        universeWorld.Phalanx,
 		JumpGate:       universeWorld.JumpGate,
+		Alliance:       universeWorld.Alliance,
+		ACS:            universeWorld.ACS,
 	})
 	if err != nil {
 		t.Fatal(err)
