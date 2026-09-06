@@ -1,0 +1,14 @@
+{{define "title"}}Univers fermé{{end}}
+{{define "content"}}
+  <section class="panel" aria-labelledby="page-title">
+    <p class="eyebrow">Universe At War</p>
+    <h1 id="page-title">L'univers n'est pas ouvert</h1>
+    <p>Cet univers n'accepte pas encore les joueurs : son administrateur est en
+    train de le configurer, ou l'a mis en pause. Rien de ce que vous possédez
+    n'est perdu ; revenez un peu plus tard.</p>
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit">Se déconnecter</button>
+    </form>
+  </section>
+{{end}}

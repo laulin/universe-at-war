@@ -199,7 +199,7 @@ type Handler struct {
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
 	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "admin-ai", "admin-ai-detail", "admin", "moderation"}
-	plainPages = []string{"login", "password-change", "empire", "setup", "register", "profiles"}
+	plainPages = []string{"login", "password-change", "empire", "setup", "register", "profiles", "closed"}
 )
 
 // parsePages clones the right base template per page so that every page may
@@ -493,7 +493,7 @@ func (h *Handler) login(response http.ResponseWriter, request *http.Request) {
 		http.Redirect(response, request, "/password/change", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(response, request, "/setup/1", http.StatusSeeOther)
+	http.Redirect(response, request, "/", http.StatusSeeOther)
 }
 
 func (h *Handler) passwordChangePage(response http.ResponseWriter, request *http.Request) {
@@ -531,7 +531,7 @@ func (h *Handler) passwordChange(response http.ResponseWriter, request *http.Req
 		return
 	}
 	h.setSessionCookie(response, result.Token, result.ExpiresAt)
-	http.Redirect(response, request, "/setup/1", http.StatusSeeOther)
+	http.Redirect(response, request, "/", http.StatusSeeOther)
 }
 
 func (h *Handler) logout(response http.ResponseWriter, request *http.Request) {
@@ -571,8 +571,12 @@ func (h *Handler) setupPage(response http.ResponseWriter, request *http.Request)
 		http.Redirect(response, request, "/", http.StatusSeeOther)
 		return
 	}
+	if errors.Is(err, appsetup.ErrForbidden) {
+		http.NotFound(response, request)
+		return
+	}
 	if err != nil {
-		http.Error(response, "setup unavailable", http.StatusForbidden)
+		http.Error(response, "setup unavailable", http.StatusInternalServerError)
 		return
 	}
 	requestedStep, err := strconv.Atoi(request.PathValue("step"))
@@ -615,8 +619,12 @@ func (h *Handler) saveSetupStep(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	draft, err := h.setup.Load(request.Context(), principal)
+	if errors.Is(err, appsetup.ErrForbidden) {
+		http.NotFound(response, request)
+		return
+	}
 	if err != nil {
-		http.Error(response, "setup unavailable", http.StatusForbidden)
+		http.Error(response, "setup unavailable", http.StatusInternalServerError)
 		return
 	}
 	if step != draft.CurrentStep {
@@ -678,7 +686,21 @@ func (h *Handler) home(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if state != server.Running {
-		http.Redirect(response, request, "/setup/1", http.StatusSeeOther)
+		// Configuring the universe is the work of an administrator. Anybody
+		// else is simply told the doors are not open, rather than being sent
+		// to a page that would only refuse them.
+		if principal.HasRole(appauth.RoleAdmin) {
+			http.Redirect(response, request, "/setup/1", http.StatusSeeOther)
+			return
+		}
+		token, ok := h.ensureCSRF(response, request)
+		if !ok {
+			return
+		}
+		h.render(response, http.StatusOK, "closed", pageData{pageShell{
+			CSRFToken: token,
+			Username:  principal.Username,
+		}})
 		return
 	}
 	if h.economy == nil {

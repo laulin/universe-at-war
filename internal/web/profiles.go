@@ -160,7 +160,11 @@ func (h *Handler) setupFailure(response http.ResponseWriter, request *http.Reque
 		http.Redirect(response, request, "/", http.StatusSeeOther)
 		return
 	}
-	http.Error(response, "setup unavailable", http.StatusForbidden)
+	if errors.Is(err, appsetup.ErrForbidden) {
+		http.NotFound(response, request)
+		return
+	}
+	http.Error(response, "setup unavailable", http.StatusInternalServerError)
 }
 
 // profileError turns a refusal into a sentence an administrator can act on.

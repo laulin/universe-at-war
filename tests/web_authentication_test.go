@@ -129,12 +129,22 @@ func TestWebBootstrapAuthenticationFlow(t *testing.T) {
 	changePost.AddCookie(csrfCookie)
 	changeResponse := httptest.NewRecorder()
 	handler.ServeHTTP(changeResponse, changePost)
-	if changeResponse.Code != http.StatusSeeOther || changeResponse.Header().Get("Location") != "/setup/1" {
+	if changeResponse.Code != http.StatusSeeOther || changeResponse.Header().Get("Location") != "/" {
 		t.Fatalf("POST /password/change = %d %q", changeResponse.Code, changeResponse.Header().Get("Location"))
 	}
 	rotatedCookie := responseCookie(t, changeResponse.Result(), "uaw_session")
 	if rotatedCookie.Value == sessionCookie.Value {
 		t.Fatal("password change did not rotate the session cookie")
+	}
+
+	// The home page is what routes each account: an administrator of a
+	// universe still being configured is sent into the setup wizard.
+	afterChange := httptest.NewRecorder()
+	homeRequest := httptest.NewRequest(http.MethodGet, "/", nil)
+	homeRequest.AddCookie(rotatedCookie)
+	handler.ServeHTTP(afterChange, homeRequest)
+	if afterChange.Code != http.StatusSeeOther || afterChange.Header().Get("Location") != "/setup/1" {
+		t.Fatalf("GET / as administrator = %d %q, want the setup", afterChange.Code, afterChange.Header().Get("Location"))
 	}
 
 	logoutRequest := postFormRequest("/logout", url.Values{"csrf_token": {changeToken}})
