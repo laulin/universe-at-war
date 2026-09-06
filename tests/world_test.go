@@ -9,6 +9,7 @@ import (
 	"time"
 
 	appacs "universeatwar/internal/app/acs"
+	appai "universeatwar/internal/app/ai"
 	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
@@ -46,6 +47,8 @@ type world struct {
 	JumpGate appjumpgate.Service
 	Alliance appalliance.Service
 	ACS      appacs.Service
+	AI       appai.Service
+	Thinking appai.Thinking
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -56,22 +59,25 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 	shipyardRepository := storagesqlite.NewShipyardRepository(database.Write(), catalogues)
 	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
 	acsRepository := storagesqlite.NewACSRepository(database.Write(), catalogues, fleetRepository)
+	aiRepository := storagesqlite.NewAIRepository(database.Write())
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	economyRepository.RegisterHandlers(events)
 	researchRepository.RegisterHandlers(events)
 	shipyardRepository.RegisterHandlers(events)
 	fleetRepository.RegisterHandlers(events)
 	acsRepository.RegisterHandlers(events)
+	aiRepository.RegisterHandlers(events)
+	economy := appeconomy.Service{
+		Clock:      clock,
+		Repository: economyRepository,
+		Catalogue:  catalogues.Buildings,
+		Completer:  events,
+	}
 	return &world{
 		Database: database,
 		Clock:    clock,
 		Events:   events,
-		Economy: appeconomy.Service{
-			Clock:      clock,
-			Repository: economyRepository,
-			Catalogue:  catalogues.Buildings,
-			Completer:  events,
-		},
+		Economy:  economy,
 		Research: appresearch.Service{
 			Clock:      clock,
 			Repository: researchRepository,
@@ -102,6 +108,14 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 			Seeds:      random.NewSeedGenerator(rand.Reader),
 			Completer:  events,
 		},
+		AI: appai.Service{
+			Clock:      clock,
+			Repository: aiRepository,
+			Empires:    economy,
+			Seeds:      random.NewSeedGenerator(rand.Reader),
+			Completer:  events,
+		},
+		Thinking: appai.Thinking{Clock: clock, Thought: aiRepository},
 	}
 }
 
@@ -158,10 +172,10 @@ func benchmarkDatabase(b *testing.B, ctx context.Context) *storagesqlite.Databas
 	return database
 }
 
-func assertSingleText(t *testing.T, database *storagesqlite.Database, query string, want string) {
+func assertSingleText(t *testing.T, database *storagesqlite.Database, query string, want string, arguments ...any) {
 	t.Helper()
 	var got string
-	if err := database.Read().QueryRow(query).Scan(&got); err != nil {
+	if err := database.Read().QueryRow(query, arguments...).Scan(&got); err != nil {
 		t.Fatalf("query %q: %v", query, err)
 	}
 	if got != want {
