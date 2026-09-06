@@ -23,6 +23,7 @@ l'interface SSR. La spécification complète se trouve dans
 go run ./cmd/universe-at-war serve
 go run ./cmd/universe-at-war migrate --database universe-at-war.db
 go run ./cmd/universe-at-war doctor --database universe-at-war.db
+go run ./cmd/universe-at-war backup --database universe-at-war.db --keep 14
 go run ./cmd/universe-at-war admin reset-password --database universe-at-war.db --username admin
 go run ./cmd/universe-at-war version
 ```
@@ -103,6 +104,18 @@ version du schéma, l'intégrité SQLite et les clés étrangères sans modifier
 données. `admin reset-password` constitue la récupération locale : elle génère
 un nouveau secret, invalide toutes les sessions du compte et exige un nouveau
 changement de mot de passe.
+
+Une flotte peut aussi partir en expédition au-delà de la dernière planète d'un
+système : elle y attend, et ce qu'elle trouve — ressources, vaisseaux, retard,
+pirates, aliens, pertes ou rien du tout — est tiré une fois depuis une seed
+persistée, donc rejouable.
+
+Un administrateur dispose d'un tableau de bord (état, base, arriéré, débit,
+population, sanctions, dernière sauvegarde), de la gestion des comptes, des
+rôles et des invitations, de la modération, des joueurs artificiels et d'une
+sauvegarde vérifiée en un clic. La mise en service complète, la matrice de
+builds et les procédures de restauration sont décrites dans
+[`docs/operations/`](docs/operations/release.md).
 
 ## Plans d'implémentation
 
