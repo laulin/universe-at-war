@@ -16,7 +16,7 @@ import (
 // CurrentSchemaVersion is the ruleset document layout produced by this build.
 // Older documents decode on top of the current defaults; a newer one is
 // refused so a downgrade never corrupts a saved universe.
-const CurrentSchemaVersion = 4
+const CurrentSchemaVersion = 5
 
 // DefaultCatalogueVersion names the content catalogue shipped with this build.
 const DefaultCatalogueVersion = "classic-1"
@@ -132,6 +132,9 @@ type ProgressionSettings struct {
 
 type TeamSettings struct {
 	AlliancesEnabled           bool   `json:"alliances_enabled"`
+	InvitationLifetimeHours    int    `json:"invitation_lifetime_hours"`
+	MaximumGroupSize           int    `json:"maximum_group_size"`
+	MaximumHoldHours           int    `json:"maximum_hold_hours"`
 	MaximumAllianceSize        int    `json:"maximum_alliance_size"`
 	ACSEnabled                 bool   `json:"acs_enabled"`
 	GroupDefenseEnabled        bool   `json:"group_defense_enabled"`
@@ -214,6 +217,7 @@ func Default() Ruleset {
 			AlliancesEnabled: true, MaximumAllianceSize: 20, ACSEnabled: true,
 			GroupDefenseEnabled: true, ReportSharingEnabled: true,
 			IntelligenceSharingEnabled: true, DiplomacyEnabled: true, StartMode: "free",
+			InvitationLifetimeHours: 168, MaximumGroupSize: 5, MaximumHoldHours: 32,
 		},
 		AI: AISettings{
 			Total: 4, IndependentCount: 2, AllianceCount: 1, AllianceSize: 2,
@@ -337,6 +341,9 @@ func (r Ruleset) Validate() error {
 	}
 	if r.Team.AlliancesEnabled && r.Team.MaximumAllianceSize <= 0 {
 		return errors.New("rules: alliance size must be positive")
+	}
+	if r.Team.InvitationLifetimeHours <= 0 || r.Team.MaximumGroupSize <= 0 || r.Team.MaximumHoldHours <= 0 {
+		return errors.New("rules: invalid team operation limits")
 	}
 	if r.AI.Total < 0 || r.AI.IndependentCount < 0 || r.AI.AllianceCount < 0 || r.AI.AllianceSize < 0 ||
 		r.AI.IndependentCount+r.AI.AllianceCount*r.AI.AllianceSize > r.AI.Total {
