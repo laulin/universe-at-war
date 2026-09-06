@@ -1,0 +1,78 @@
+{
+  "Outcome": "draw",
+  "Rounds": [
+    {
+      "Number": 1,
+      "Attackers": {
+        "Shots": 1,
+        "Damage": 50,
+        "Absorbed": 20
+      },
+      "Defenders": {
+        "Shots": 1,
+        "Damage": 80,
+        "Absorbed": 10
+      }
+    },
+    {
+      "Number": 2,
+      "Attackers": {
+        "Shots": 1,
+        "Damage": 50,
+        "Absorbed": 20
+      },
+      "Defenders": {
+        "Shots": 1,
+        "Damage": 80,
+        "Absorbed": 10
+      }
+    },
+    {
+      "Number": 3,
+      "Attackers": {
+        "Shots": 1,
+        "Damage": 50,
+        "Absorbed": 20
+      },
+      "Defenders": {
+        "Shots": 1,
+        "Damage": 80,
+        "Absorbed": 10
+      }
+    }
+  ],
+  "Attackers": [
+    {
+      "PlayerID": 1,
+      "Initial": {
+        "light_fighter": 1
+      },
+      "Survivors": {},
+      "Losses": {
+        "light_fighter": 1
+      },
+      "Rebuilt": null
+    }
+  ],
+  "Defenders": [
+    {
+      "PlayerID": 2,
+      "Initial": {
+        "rocket_launcher": 1
+      },
+      "Survivors": {
+        "rocket_launcher": 1
+      },
+      "Losses": {},
+      "Rebuilt": {
+        "rocket_launcher": 1
+      }
+    }
+  ],
+  "Debris": {
+    "Metal": 900,
+    "Crystal": 300,
+    "Deuterium": 0
+  },
+  "MoonChance": 0
+}

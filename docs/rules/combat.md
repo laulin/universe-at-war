@@ -105,10 +105,17 @@ Un chasseur léger (coque 400, bouclier 10, arme 50) contre un lance-missiles
 | 2 | 140 (70 %) | 260 (65 %) | survie du chasseur |
 | 3 | 110 (55 %) | 190 (47,5 %) | survie des deux |
 
-Avec des tirages de 0,10 puis 0,60 puis 0,40, le chasseur survit au round 2, le
-lance-missiles est détruit au round 3 et le chasseur survit : l'attaquant gagne
-en trois rounds. Les débris valent `floor(0,3 × 2000)`, soit 600 de métal, et
-aucun cristal tant que la part des défenses vaut zéro.
+Les tirages de fin de round concernent d'abord les attaquants, puis les
+défenseurs. Avec 0,10 puis 0,40 puis 0,60, le chasseur survit au round 2, survit
+encore au round 3 et le lance-missiles explose : l'attaquant gagne en trois
+rounds. Un quatrième tirage décide alors de la reconstruction du lance-missiles.
+Avec la part de débris des défenses à zéro, cette victoire ne laisse aucun
+débris.
+
+Avec 0,10 puis 0,60, le chasseur explose au round 3 avant que le lance-missiles
+ne tire son propre tirage : le défenseur gagne, et le chasseur détruit laisse
+`floor(0,3 × 3000)` de métal et `floor(0,3 × 1000)` de cristal, soit 900 et
+300.
 
 ## Cas limites et invariants
 
@@ -123,4 +130,5 @@ pillable du stock. Deux exécutions avec la même seed donnent le même résulta
 L'exemple calculable ci-dessus avec une source scriptée ; des combats témoins
 enregistrés pour cinq situations ; le déterminisme à seed égale ; le fuzz des
 invariants ; les tables de pillage et de reconstruction ; un combat de cent
-mille unités par camp pour le budget de performance.
+mille unités par camp, qui se résout en environ 120 millisecondes pour une
+centaine d'allocations.

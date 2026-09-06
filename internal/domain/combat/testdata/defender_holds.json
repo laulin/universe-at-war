@@ -1,0 +1,78 @@
+{
+  "Outcome": "defender",
+  "Rounds": [
+    {
+      "Number": 1,
+      "Attackers": {
+        "Shots": 5,
+        "Damage": 100,
+        "Absorbed": 100
+      },
+      "Defenders": {
+        "Shots": 4,
+        "Damage": 9001,
+        "Absorbed": 21
+      }
+    },
+    {
+      "Number": 2,
+      "Attackers": {
+        "Shots": 3,
+        "Damage": 100,
+        "Absorbed": 100
+      },
+      "Defenders": {
+        "Shots": 4,
+        "Damage": 9001,
+        "Absorbed": 21
+      }
+    },
+    {
+      "Number": 3,
+      "Attackers": {
+        "Shots": 1,
+        "Damage": 50,
+        "Absorbed": 50
+      },
+      "Defenders": {
+        "Shots": 4,
+        "Damage": 9001,
+        "Absorbed": 10
+      }
+    }
+  ],
+  "Attackers": [
+    {
+      "PlayerID": 1,
+      "Initial": {
+        "light_fighter": 5
+      },
+      "Survivors": {},
+      "Losses": {
+        "light_fighter": 5
+      },
+      "Rebuilt": null
+    }
+  ],
+  "Defenders": [
+    {
+      "PlayerID": 2,
+      "Initial": {
+        "large_shield_dome": 1,
+        "plasma_turret": 3
+      },
+      "Survivors": {
+        "large_shield_dome": 1,
+        "plasma_turret": 3
+      },
+      "Losses": {},
+      "Rebuilt": null
+    }
+  ],
+  "Debris": {
+    "Metal": 4500,
+    "Crystal": 1500,
+    "Deuterium": 0
+  },
+  "MoonChance": 0
+}

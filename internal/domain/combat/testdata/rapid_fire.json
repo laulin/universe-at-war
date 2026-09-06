@@ -1,0 +1,69 @@
+{
+  "Outcome": "attacker",
+  "Rounds": [
+    {
+      "Number": 1,
+      "Attackers": {
+        "Shots": 63,
+        "Damage": 25200,
+        "Absorbed": 470
+      },
+      "Defenders": {
+        "Shots": 50,
+        "Damage": 2800,
+        "Absorbed": 500
+      }
+    },
+    {
+      "Number": 2,
+      "Attackers": {
+        "Shots": 59,
+        "Damage": 23600,
+        "Absorbed": 130
+      },
+      "Defenders": {
+        "Shots": 10,
+        "Damage": 590,
+        "Absorbed": 300
+      }
+    }
+  ],
+  "Attackers": [
+    {
+      "PlayerID": 1,
+      "Initial": {
+        "cruiser": 10
+      },
+      "Survivors": {
+        "cruiser": 10
+      },
+      "Losses": {},
+      "Rebuilt": null
+    }
+  ],
+  "Defenders": [
+    {
+      "PlayerID": 2,
+      "Initial": {
+        "light_fighter": 40,
+        "rocket_launcher": 10
+      },
+      "Survivors": {
+        "rocket_launcher": 7
+      },
+      "Losses": {
+        "light_fighter": 40,
+        "rocket_launcher": 3
+      },
+      "Rebuilt": {
+        "rocket_launcher": 7
+      }
+    }
+  ],
+  "Debris": {
+    "Metal": 36000,
+    "Crystal": 12000,
+    "Deuterium": 0
+  },
+  "MoonChance": 0
+}

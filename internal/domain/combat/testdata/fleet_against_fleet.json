@@ -1,0 +1,108 @@
+{
+  "Outcome": "attacker",
+  "Rounds": [
+    {
+      "Number": 1,
+      "Attackers": {
+        "Shots": 42,
+        "Damage": 16500,
+        "Absorbed": 770
+      },
+      "Defenders": {
+        "Shots": 43,
+        "Damage": 8450,
+        "Absorbed": 1900
+      }
+    },
+    {
+      "Number": 2,
+      "Attackers": {
+        "Shots": 37,
+        "Damage": 15750,
+        "Absorbed": 710
+      },
+      "Defenders": {
+        "Shots": 29,
+        "Damage": 7050,
+        "Absorbed": 1400
+      }
+    },
+    {
+      "Number": 3,
+      "Attackers": {
+        "Shots": 33,
+        "Damage": 15150,
+        "Absorbed": 410
+      },
+      "Defenders": {
+        "Shots": 16,
+        "Damage": 4300,
+        "Absorbed": 700
+      }
+    },
+    {
+      "Number": 4,
+      "Attackers": {
+        "Shots": 25,
+        "Damage": 13950,
+        "Absorbed": 400
+      },
+      "Defenders": {
+        "Shots": 8,
+        "Damage": 3200,
+        "Absorbed": 1050
+      }
+    },
+    {
+      "Number": 5,
+      "Attackers": {
+        "Shots": 22,
+        "Damage": 13500,
+        "Absorbed": 50
+      },
+      "Defenders": {
+        "Shots": 1,
+        "Damage": 400,
+        "Absorbed": 25
+      }
+    }
+  ],
+  "Attackers": [
+    {
+      "PlayerID": 1,
+      "Initial": {
+        "battleship": 12,
+        "heavy_fighter": 30
+      },
+      "Survivors": {
+        "battleship": 12,
+        "heavy_fighter": 9
+      },
+      "Losses": {
+        "heavy_fighter": 21
+      },
+      "Rebuilt": null
+    }
+  ],
+  "Defenders": [
+    {
+      "PlayerID": 2,
+      "Initial": {
+        "cruiser": 18,
+        "light_fighter": 25
+      },
+      "Survivors": {},
+      "Losses": {
+        "cruiser": 18,
+        "light_fighter": 25
+      },
+      "Rebuilt": null
+    }
+  ],
+  "Debris": {
+    "Metal": 168300,
+    "Crystal": 70500,
+    "Deuterium": 0
+  },
+  "MoonChance": 0.02
+}

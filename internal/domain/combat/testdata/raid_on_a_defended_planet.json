@@ -1,0 +1,89 @@
+{
+  "Outcome": "attacker",
+  "Rounds": [
+    {
+      "Number": 1,
+      "Attackers": {
+        "Shots": 60,
+        "Damage": 2550,
+        "Absorbed": 450
+      },
+      "Defenders": {
+        "Shots": 25,
+        "Damage": 2100,
+        "Absorbed": 200
+      }
+    },
+    {
+      "Number": 2,
+      "Attackers": {
+        "Shots": 58,
+        "Damage": 2450,
+        "Absorbed": 390
+      },
+      "Defenders": {
+        "Shots": 20,
+        "Damage": 1700,
+        "Absorbed": 190
+      }
+    },
+    {
+      "Number": 3,
+      "Attackers": {
+        "Shots": 57,
+        "Damage": 2400,
+        "Absorbed": 125
+      },
+      "Defenders": {
+        "Shots": 6,
+        "Damage": 500,
+        "Absorbed": 60
+      }
+    }
+  ],
+  "Attackers": [
+    {
+      "PlayerID": 1,
+      "Initial": {
+        "light_fighter": 50,
+        "small_cargo": 10
+      },
+      "Survivors": {
+        "light_fighter": 45,
+        "small_cargo": 9
+      },
+      "Losses": {
+        "light_fighter": 5,
+        "small_cargo": 1
+      },
+      "Rebuilt": null
+    }
+  ],
+  "Defenders": [
+    {
+      "PlayerID": 2,
+      "Initial": {
+        "light_laser": 5,
+        "rocket_launcher": 20
+      },
+      "Survivors": {
+        "light_laser": 3,
+        "rocket_launcher": 14
+      },
+      "Losses": {
+        "light_laser": 2,
+        "rocket_launcher": 6
+      },
+      "Rebuilt": {
+        "light_laser": 3,
+        "rocket_launcher": 14
+      }
+    }
+  ],
+  "Debris": {
+    "Metal": 5100,
+    "Crystal": 2100,
+    "Deuterium": 0
+  },
+  "MoonChance": 0
+}
