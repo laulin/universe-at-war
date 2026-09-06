@@ -298,12 +298,16 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Wake:       worker.Wake,
 	}
 	worker.Thinker = &ai.Brain{
-		Clock:    clock,
-		Thinking: appai.Thinking{Clock: clock, Thought: aiRepository},
-		Economy:  economy,
-		Research: research,
-		Shipyard: shipyard,
-		Logger:   logger,
+		Clock:      clock,
+		Thinking:   appai.Thinking{Clock: clock, Thought: aiRepository},
+		Economy:    economy,
+		Research:   research,
+		Shipyard:   shipyard,
+		Fleet:      fleet,
+		Reports:    reports,
+		Galaxy:     galaxy,
+		Catalogues: catalogues,
+		Logger:     logger,
 	}
 	workerContext, stopWorker := context.WithCancel(ctx)
 	defer stopWorker()

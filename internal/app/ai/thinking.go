@@ -14,6 +14,7 @@ import (
 type Thoughts interface {
 	Due(context.Context, time.Time, int) ([]domainai.Profile, error)
 	Complete(context.Context, int64, []domainai.Decision, time.Time) error
+	Remember(context.Context, int64, []Memory) error
 }
 
 // Thinking hands the brain the players that owe a reflection and writes back
@@ -44,4 +45,19 @@ func (t Thinking) Complete(ctx context.Context, playerID int64, decisions []doma
 		return ErrNotFound
 	}
 	return t.Thought.Complete(ctx, playerID, decisions, t.Clock.Now().UTC())
+}
+
+// Remember keeps what a reflection observed. Only what the player could
+// legitimately see ever reaches this: its own reports and the public map.
+func (t Thinking) Remember(ctx context.Context, playerID int64, memories []Memory) error {
+	if t.Clock == nil || t.Thought == nil {
+		return errors.New("ai: incomplete thinking dependencies")
+	}
+	if playerID <= 0 {
+		return ErrNotFound
+	}
+	if len(memories) == 0 {
+		return nil
+	}
+	return t.Thought.Remember(ctx, playerID, memories)
 }

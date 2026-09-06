@@ -83,6 +83,14 @@ avec `péremption = 12 × recent_report_seconds`. Une information de fraîcheur
 nulle ne vaut rien : elle ne déclenche aucun raid, mais elle n'est pas effacée
 pour autant — une IA peut agir sur un rapport vieillissant et se tromper.
 
+## Rôle des vaisseaux
+
+Un raid part avec ce qui se bat et juste ce qu'il faut pour rapporter. Le rôle
+se lit dans le catalogue seul : un vaisseau **combat** si son arme est non nulle
+et vaut au moins le centième de sa soute ; sinon il **transporte** si sa soute
+atteint 1000 unités ; sinon il reste au sol. Une sonde n'emporte rien d'utile et
+ne part donc jamais en raid.
+
 ## Score d'une cible
 
 Un raid ne se décide que sur un rapport d'espionnage de l'IA elle-même.
@@ -97,6 +105,9 @@ score       = butin × fraîcheur × avidité
 
 Le raid n'est lancé que si toutes ces conditions tiennent :
 
+- le rapport est **complet**, c'est-à-dire que son niveau a atteint le rang qui
+  révèle les défenses : une section vide veut alors dire une planète vide, et
+  non une ignorance ;
 - `fraîcheur > 0` : sans rapport exploitable, l'IA espionne d'abord ;
 - `score > seuil_de_raid` de l'archétype ;
 - `puissance(flotte envoyée) ≥ puissance(défense vue) × marge` de l'archétype ;

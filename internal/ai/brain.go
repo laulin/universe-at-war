@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"log/slog"
 
+	appai "universeatwar/internal/app/ai"
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	appresearch "universeatwar/internal/app/research"
 	appshipyard "universeatwar/internal/app/shipyard"
 	domainai "universeatwar/internal/domain/ai"
 	"universeatwar/internal/domain/building"
+	"universeatwar/internal/domain/catalogue"
 	domainclock "universeatwar/internal/domain/clock"
 	"universeatwar/internal/domain/random"
 	"universeatwar/internal/domain/research"
@@ -26,6 +28,7 @@ import (
 type Thinking interface {
 	Due(context.Context, int) ([]domainai.Profile, error)
 	Complete(context.Context, int64, []domainai.Decision) error
+	Remember(context.Context, int64, []appai.Memory) error
 }
 
 // Economy is the empire page of a player.
@@ -50,12 +53,16 @@ type Shipyard interface {
 
 // Brain runs the reflections of the artificial players.
 type Brain struct {
-	Clock    domainclock.Clock
-	Thinking Thinking
-	Economy  Economy
-	Research Research
-	Shipyard Shipyard
-	Logger   *slog.Logger
+	Clock      domainclock.Clock
+	Thinking   Thinking
+	Economy    Economy
+	Research   Research
+	Shipyard   Shipyard
+	Fleet      Fleet
+	Reports    Reports
+	Galaxy     Galaxy
+	Catalogues catalogue.Set
+	Logger     *slog.Logger
 }
 
 // ThinkDue runs one reflection for each artificial player that owes one, at
@@ -97,7 +104,7 @@ func (b *Brain) think(ctx context.Context, profile domainai.Profile) []domainai.
 	decisions := []domainai.Decision{b.build(ctx, principal, profile, home.ID)}
 	decisions = append(decisions, b.research(ctx, principal, profile, home.ID))
 	decisions = append(decisions, b.produce(ctx, principal, profile, home.ID))
-	return decisions
+	return append(decisions, b.campaign(ctx, principal, profile, planets)...)
 }
 
 // build raises the one building the body wants most and can pay for.

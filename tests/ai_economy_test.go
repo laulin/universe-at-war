@@ -16,7 +16,7 @@ import (
 func TestArtificialPlayerDevelopsAnEmptyEmpire(t *testing.T) {
 	ctx := context.Background()
 	database, universeWorld, admin := aiUniverse(t)
-	universeWorld.Clock.Set(time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
 
 	profile, err := universeWorld.AI.Create(ctx, admin, appai.Request{
 		Name: "Kepler", Archetype: domainai.CautiousMiner,
@@ -74,7 +74,7 @@ func TestReflectionIsReproducibleAndArchetypesDiffer(t *testing.T) {
 	ctx := context.Background()
 	run := func(archetype domainai.Archetype, cycles int) []string {
 		database, universeWorld, admin := aiUniverse(t)
-		universeWorld.Clock.Set(time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+		setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
 		if _, err := universeWorld.AI.Create(ctx, admin, appai.Request{
 			Name: "Twin", Archetype: archetype,
 			Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,

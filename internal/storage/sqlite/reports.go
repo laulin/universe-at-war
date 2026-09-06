@@ -82,6 +82,8 @@ func (r *ReportsRepository) List(ctx context.Context, accountID int64, filter ap
 		if err != nil {
 			return nil, err
 		}
+		// This listing only ever holds the reports of the player themselves.
+		summary.Own = true
 		summaries = append(summaries, summary)
 	}
 	if err := rows.Err(); err != nil {

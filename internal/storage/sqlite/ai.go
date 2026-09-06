@@ -516,3 +516,23 @@ func loadMemories(ctx context.Context, tx *sql.Tx, playerID int64, limit int) ([
 	}
 	return memories, nil
 }
+
+// Remember keeps what a reflection observed, one record per body, the newest
+// look replacing the previous one.
+func (r *AIRepository) Remember(ctx context.Context, playerID int64, memories []appai.Memory) error {
+	return withWriteTx(ctx, r.write, "ai repository: remember", func(tx *sql.Tx) error {
+		for _, memory := range memories {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO ai_memory(player_id, kind, galaxy, system, position, observed_at, score,
+					payload_version, payload)
+				VALUES (?, ?, ?, ?, ?, ?, ?, 1, json_object('summary', ?))
+				ON CONFLICT(player_id, kind, galaxy, system, position) DO UPDATE SET
+					observed_at = excluded.observed_at, score = excluded.score, payload = excluded.payload
+			`, playerID, memory.Kind, memory.Coordinate.Galaxy, memory.Coordinate.System, memory.Coordinate.Position,
+				timestamp(memory.ObservedAt), memory.Score, memory.Summary); err != nil {
+				return fmt.Errorf("ai repository: remember: %w", err)
+			}
+		}
+		return nil
+	})
+}

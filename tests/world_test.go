@@ -87,6 +87,19 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		Catalogues: catalogues,
 		Completer:  events,
 	}
+	fleetService := appfleet.Service{
+		Clock:      clock,
+		Repository: fleetRepository,
+		Catalogues: catalogues,
+		Seeds:      random.NewSeedGenerator(rand.Reader),
+		Completer:  events,
+	}
+	galaxyService := appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())}
+	reportsService := appreports.Service{
+		Clock:      clock,
+		Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()),
+		Completer:  events,
+	}
 	thinking := appai.Thinking{Clock: clock, Thought: aiRepository}
 	return &world{
 		Database: database,
@@ -95,15 +108,9 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		Economy:  economy,
 		Research: research,
 		Shipyard: shipyard,
-		Fleet: appfleet.Service{
-			Clock:      clock,
-			Repository: fleetRepository,
-			Catalogues: catalogues,
-			Seeds:      random.NewSeedGenerator(rand.Reader),
-			Completer:  events,
-		},
-		Galaxy:   appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())},
-		Reports:  appreports.Service{Clock: clock, Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()), Completer: events},
+		Fleet:    fleetService,
+		Galaxy:   galaxyService,
+		Reports:  reportsService,
 		Phalanx:  appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
 		JumpGate: appjumpgate.Service{Clock: clock, Repository: storagesqlite.NewJumpGateRepository(database.Write(), catalogues), Completer: events},
 		Alliance: appalliance.Service{Clock: clock, Repository: storagesqlite.NewAllianceRepository(database.Write())},
@@ -123,6 +130,7 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		Thinking: thinking,
 		Brain: &ai.Brain{
 			Clock: clock, Thinking: thinking, Economy: economy, Research: research, Shipyard: shipyard,
+			Fleet: fleetService, Reports: reportsService, Galaxy: galaxyService, Catalogues: catalogues,
 		},
 	}
 }
@@ -280,5 +288,14 @@ func launchTransportTowards(t *testing.T, ctx context.Context, universeWorld *wo
 		Cargo:       domaineconomy.Resources{Metal: 100}, Percent: 10,
 	}, "phalanx-target"); err != nil {
 		t.Fatalf("Launch() error = %v", err)
+	}
+}
+
+// setClock moves the fake clock forward and refuses to hide a rejected move,
+// which would otherwise silently run a test at the wrong hour.
+func setClock(t *testing.T, clock *appclock.Fake, at time.Time) {
+	t.Helper()
+	if err := clock.Set(at); err != nil {
+		t.Fatalf("set clock to %v: %v", at, err)
 	}
 }

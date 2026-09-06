@@ -86,7 +86,7 @@ func TestReflectionSchedulesItselfAndSleepsOutsideTheHours(t *testing.T) {
 	if profile.NextThinkAt == nil {
 		t.Fatal("the first reflection was not planned")
 	}
-	universeWorld.Clock.Set(*profile.NextThinkAt)
+	setClock(t, universeWorld.Clock, *profile.NextThinkAt)
 	if _, err := universeWorld.Events.CompleteDue(ctx, 20); err != nil {
 		t.Fatalf("CompleteDue() error = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestReflectionSchedulesItselfAndSleepsOutsideTheHours(t *testing.T) {
 	}
 
 	// Once the morning comes, the reflection is owed and the chain goes on.
-	universeWorld.Clock.Set(*after.NextThinkAt)
+	setClock(t, universeWorld.Clock, *after.NextThinkAt)
 	if _, err := universeWorld.Events.CompleteDue(ctx, 20); err != nil {
 		t.Fatalf("CompleteDue() error = %v", err)
 	}
@@ -165,7 +165,7 @@ func TestRetiringAnArtificialPlayerStopsItForGood(t *testing.T) {
 func aiUniverse(t *testing.T) (*storagesqlite.Database, *world, appauth.Principal) {
 	t.Helper()
 	ctx := context.Background()
-	clock := appclock.NewFake(time.Date(2042, time.September, 10, 23, 12, 13, 0, time.UTC))
+	clock := appclock.NewFake(time.Date(2042, time.September, 10, 2, 0, 0, 0, time.UTC))
 	database := economyDatabase(t, ctx, 1)
 	universeWorld := newWorld(t, database, clock)
 	if _, err := universeWorld.Economy.CreateEmpire(ctx, appauth.Principal{AccountID: 1}, "Alice"); err != nil {
