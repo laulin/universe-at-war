@@ -11,6 +11,7 @@ import (
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
+	appjumpgate "universeatwar/internal/app/jumpgate"
 	appphalanx "universeatwar/internal/app/phalanx"
 	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
@@ -36,6 +37,7 @@ type world struct {
 	Galaxy   appgalaxy.Service
 	Reports  appreports.Service
 	Phalanx  appphalanx.Service
+	JumpGate appjumpgate.Service
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -79,9 +81,10 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 			Seeds:      random.NewSeedGenerator(rand.Reader),
 			Completer:  events,
 		},
-		Galaxy:  appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())},
-		Reports: appreports.Service{Clock: clock, Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()), Completer: events},
-		Phalanx: appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
+		Galaxy:   appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())},
+		Reports:  appreports.Service{Clock: clock, Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()), Completer: events},
+		Phalanx:  appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
+		JumpGate: appjumpgate.Service{Clock: clock, Repository: storagesqlite.NewJumpGateRepository(database.Write(), catalogues), Completer: events},
 	}
 }
 
