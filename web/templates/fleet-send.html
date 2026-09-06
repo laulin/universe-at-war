@@ -1,0 +1,59 @@
+{{define "title"}}Envoyer une flotte{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="send-title">
+    <p class="eyebrow">Depuis {{.Planet.Name}} [{{.Planet.Coordinate}}]</p>
+    <h2 id="send-title">Envoyer une flotte</h2>
+    {{if .Ships}}
+    <form method="post" action="/planets/{{.Planet.ID}}/fleet/preview">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <fieldset>
+        <legend>Composition</legend>
+        {{range .Ships}}
+        <label for="ship-{{.ID}}">{{.Name}} (max {{.Owned}})</label>
+        <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="0">
+        {{end}}
+      </fieldset>
+      <fieldset>
+        <legend>Destination</legend>
+        <label for="galaxy">Galaxie</label>
+        <input id="galaxy" name="galaxy" type="number" min="1" value="{{if .Form.Galaxy}}{{.Form.Galaxy}}{{else}}{{.Planet.Coordinate.Galaxy}}{{end}}" required>
+        <label for="system">Système</label>
+        <input id="system" name="system" type="number" min="1" value="{{if .Form.System}}{{.Form.System}}{{else}}{{.Planet.Coordinate.System}}{{end}}" required>
+        <label for="position">Position</label>
+        <input id="position" name="position" type="number" min="1" value="{{if .Form.Position}}{{.Form.Position}}{{else}}1{{end}}" required>
+      </fieldset>
+      <fieldset>
+        <legend>Mission</legend>
+        <label for="mission">Type</label>
+        <select id="mission" name="mission">
+          <option value="transport">Transport</option>
+          <option value="deploy">Stationnement</option>
+        </select>
+        <label for="speed">Vitesse</label>
+        <select id="speed" name="speed">
+          <option value="100" selected>100 %</option>
+          <option value="90">90 %</option>
+          <option value="80">80 %</option>
+          <option value="70">70 %</option>
+          <option value="60">60 %</option>
+          <option value="50">50 %</option>
+          <option value="40">40 %</option>
+          <option value="30">30 %</option>
+          <option value="20">20 %</option>
+          <option value="10">10 %</option>
+        </select>
+      </fieldset>
+      <fieldset>
+        <legend>Cargo</legend>
+        <label for="cargo_metal">Métal</label>
+        <input id="cargo_metal" name="cargo_metal" type="number" min="0" value="{{.Form.CargoMetal}}">
+        <label for="cargo_crystal">Cristal</label>
+        <input id="cargo_crystal" name="cargo_crystal" type="number" min="0" value="{{.Form.Crystal}}">
+        <label for="cargo_deuterium">Deutérium</label>
+        <input id="cargo_deuterium" name="cargo_deuterium" type="number" min="0" value="{{.Form.Deuterium}}">
+      </fieldset>
+      <button type="submit">Calculer la mission</button>
+    </form>
+    {{else}}<p class="muted">Aucun vaisseau disponible sur cette planète.</p>{{end}}
+  </section>
+{{end}}

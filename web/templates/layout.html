@@ -18,6 +18,7 @@
       <a href="/planets/{{.ID}}/research"{{if eq $.Section "research"}} aria-current="page"{{end}}>Recherche</a>
       <a href="/planets/{{.ID}}/shipyard"{{if eq $.Section "shipyard"}} aria-current="page"{{end}}>Chantier</a>
       <a href="/planets/{{.ID}}/defense"{{if eq $.Section "defense"}} aria-current="page"{{end}}>Défense</a>
+      <a href="/planets/{{.ID}}/fleet"{{if eq $.Section "fleet"}} aria-current="page"{{end}}>Flotte</a>
       {{end}}
     </nav>
     <form class="body-picker" method="get" action="/planets/switch">

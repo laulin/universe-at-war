@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"path/filepath"
 	"testing"
+	"time"
 
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
@@ -140,4 +141,11 @@ func assertSingleText(t *testing.T, database *storagesqlite.Database, query stri
 func coordinateOf(t *testing.T, galaxy, system, position int) universe.Coordinate {
 	t.Helper()
 	return universe.Coordinate{Galaxy: galaxy, System: system, Position: position}
+}
+
+// newWorldFor rebuilds the services over an existing database, for tests that
+// need a second point of view on the same universe.
+func newWorldFor(t *testing.T, database *storagesqlite.Database) *world {
+	t.Helper()
+	return newWorld(t, database, appclock.NewFake(time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)))
 }

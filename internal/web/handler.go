@@ -19,11 +19,13 @@ import (
 
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
+	appfleet "universeatwar/internal/app/fleet"
 	appregistration "universeatwar/internal/app/registration"
 	appresearch "universeatwar/internal/app/research"
 	appsetup "universeatwar/internal/app/setup"
 	appshipyard "universeatwar/internal/app/shipyard"
 	"universeatwar/internal/domain/building"
+	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/server"
@@ -87,6 +89,13 @@ type shipyardService interface {
 	OrderFamily(context.Context, appauth.Principal, int64, unit.ID, unit.Family, int64, string) (appshipyard.Order, error)
 }
 
+type fleetService interface {
+	Overview(context.Context, appauth.Principal, int64) (appfleet.Overview, error)
+	Preview(context.Context, appauth.Principal, int64, appfleet.LaunchRequest) (domainfleet.Plan, error)
+	Launch(context.Context, appauth.Principal, int64, appfleet.LaunchRequest, string) (appfleet.Fleet, error)
+	Recall(context.Context, appauth.Principal, int64, string) (appfleet.Fleet, error)
+}
+
 // Dependencies are the application services required by the HTTP adapter.
 type Dependencies struct {
 	Authentication authenticationService
@@ -96,6 +105,7 @@ type Dependencies struct {
 	Economy        economyService
 	Research       researchService
 	Shipyard       shipyardService
+	Fleet          fleetService
 	Registration   registrationService
 	Logger         *slog.Logger
 	SecureCookies  bool
@@ -111,6 +121,7 @@ type Handler struct {
 	economy        economyService
 	research       researchService
 	shipyard       shipyardService
+	fleet          fleetService
 	registration   registrationService
 	secureCookies  bool
 	loginLimiter   loginRateLimiter
@@ -121,7 +132,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register"}
 )
 
@@ -174,6 +185,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		economy:        dependencies.Economy,
 		research:       dependencies.Research,
 		shipyard:       dependencies.Shipyard,
+		fleet:          dependencies.Fleet,
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
@@ -201,6 +213,11 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /planets/{planet}/shipyard", handler.shipyardPage)
 	handler.mux.HandleFunc("POST /planets/{planet}/shipyard/{unit}", handler.orderShips)
 	handler.mux.HandleFunc("GET /planets/{planet}/defense", handler.defensePage)
+	handler.mux.HandleFunc("GET /planets/{planet}/fleet", handler.fleetPage)
+	handler.mux.HandleFunc("GET /planets/{planet}/fleet/send", handler.fleetSendPage)
+	handler.mux.HandleFunc("POST /planets/{planet}/fleet/preview", handler.previewFleet)
+	handler.mux.HandleFunc("POST /planets/{planet}/fleet/launch", handler.launchFleet)
+	handler.mux.HandleFunc("POST /fleets/{fleet}/recall", handler.recallFleet)
 	handler.mux.HandleFunc("POST /planets/{planet}/defense/{unit}", handler.orderDefenses)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	return handler.securityHeaders(requestID(requestLogger(dependencies.Logger, handler.mux))), nil
@@ -768,6 +785,11 @@ func (h *Handler) setSessionCookie(response http.ResponseWriter, token string, e
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expiresAt,
 	})
+}
+
+// shipCatalogue exposes the ship definitions in catalogue order for the views.
+func (h *Handler) shipCatalogue() []unit.Definition {
+	return unit.DefaultCatalogue().Definitions(unit.Ship)
 }
 
 func (h *Handler) render(response http.ResponseWriter, status int, name string, data any) {

@@ -1,0 +1,50 @@
+{{define "title"}}Flottes{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="slots-title">
+    <p class="eyebrow">Emplacements</p>
+    <h2 id="slots-title">{{.Used}} / {{.Slots}} flottes en vol</h2>
+    <p><a href="/planets/{{.Planet.ID}}/fleet/send">Envoyer une flotte</a></p>
+  </section>
+  <section aria-labelledby="stationed-title">
+    <p class="eyebrow">Sur place</p>
+    <h2 id="stationed-title">Vaisseaux stationnés</h2>
+    {{if .Ships}}
+    <ul class="stationed">
+      {{range .Ships}}<li>{{.Name}} <strong>{{.Owned}}</strong></li>{{end}}
+    </ul>
+    {{else}}<p class="muted">Aucun vaisseau sur cette planète.</p>{{end}}
+  </section>
+  <section aria-labelledby="missions-title">
+    <p class="eyebrow">En cours</p>
+    <h2 id="missions-title">Missions</h2>
+    {{if .Missions}}
+    <table class="bodies">
+      <caption>Horaires en temps universel.</caption>
+      <thead>
+        <tr><th scope="col">Mission</th><th scope="col">État</th><th scope="col">Trajet</th><th scope="col">Composition</th><th scope="col">Arrivée</th><th scope="col">Retour</th><th scope="col">Action</th></tr>
+      </thead>
+      <tbody>
+      {{range .Missions}}
+        <tr>
+          <th scope="row">{{.Mission}}</th>
+          <td>{{.State}}</td>
+          <td>{{.Origin}} → {{.Target}}</td>
+          <td>{{.Composition}}</td>
+          <td>{{.ArrivesAt.Format "15:04:05"}} (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" aria-live="off">{{.ArrivesAt.Format "15:04:05"}}</time>)</td>
+          <td>{{if .ReturnsAt}}{{.ReturnsAt.Format "15:04:05"}} (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{.ReturnsAt.Format "15:04:05"}}</time>){{else}}—{{end}}</td>
+          <td>
+            {{if .Recallable}}
+            <form method="post" action="/fleets/{{.ID}}/recall">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <input type="hidden" name="idempotency_key" value="{{$.CSRFToken}}:recall:{{.ID}}">
+              <button type="submit">Rappeler</button>
+            </form>
+            {{else}}<span class="muted">—</span>{{end}}
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Aucune flotte en vol.</p>{{end}}
+  </section>
+{{end}}

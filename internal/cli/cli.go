@@ -18,6 +18,7 @@ import (
 	appauth "universeatwar/internal/app/authentication"
 	appbootstrap "universeatwar/internal/app/bootstrap"
 	appeconomy "universeatwar/internal/app/economy"
+	appfleet "universeatwar/internal/app/fleet"
 	appregistration "universeatwar/internal/app/registration"
 	appresearch "universeatwar/internal/app/research"
 	appserverstate "universeatwar/internal/app/serverstate"
@@ -28,6 +29,7 @@ import (
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/catalogue"
 	"universeatwar/internal/observability"
+	seeds "universeatwar/internal/random"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 	webhandler "universeatwar/internal/web"
 )
@@ -241,6 +243,14 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Completer:  events,
 		Wake:       worker.Wake,
 	}
+	fleet := appfleet.Service{
+		Clock:      clock,
+		Repository: fleetRepository,
+		Catalogues: catalogues,
+		Seeds:      seeds.NewSeedGenerator(cryptorand.Reader),
+		Completer:  events,
+		Wake:       worker.Wake,
+	}
 	shipyard := appshipyard.Service{
 		Clock:      clock,
 		Repository: shipyardRepository,
@@ -260,6 +270,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Economy:        economy,
 		Research:       research,
 		Shipyard:       shipyard,
+		Fleet:          fleet,
 		Registration:   registration,
 		Logger:         logger,
 		SecureCookies:  *secureCookie,

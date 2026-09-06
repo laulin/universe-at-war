@@ -101,3 +101,7 @@ input:focus-visible, button:focus-visible { outline: .2rem solid #80e0ff; outlin
 
 .building-card label { font-size: .85rem; color: #9bb0c5; margin-top: .5rem; }
 .building-card input[type="number"] { width: 100%; }
+
+.stationed { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .5rem; }
+.stationed li { padding: .6rem .8rem; border: 1px solid #294967; border-radius: .5rem; background: #0c1a2a; display: flex; justify-content: space-between; }
+.stationed strong { color: #80e0ff; }

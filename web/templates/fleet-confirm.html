@@ -1,0 +1,32 @@
+{{define "title"}}Confirmer la mission{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="confirm-title">
+    <p class="eyebrow">{{.MissionName}} depuis {{.Planet.Name}}</p>
+    <h2 id="confirm-title">Confirmer la mission</h2>
+    <dl class="summary">
+      <dt>Destination</dt><dd>{{.Form.Galaxy}}:{{.Form.System}}:{{.Form.Position}}</dd>
+      <dt>Distance</dt><dd>{{.Plan.Distance}}</dd>
+      <dt>Vitesse</dt><dd>{{.Form.Speed}} % — {{.Plan.Speed}}</dd>
+      <dt>Carburant</dt><dd>{{.Plan.Fuel}} deutérium</dd>
+      <dt>Capacité restante</dt><dd>{{.Plan.Capacity}}</dd>
+      <dt>Cargo</dt><dd>M {{.Form.CargoMetal}} · C {{.Form.Crystal}} · D {{.Form.Deuterium}}</dd>
+      <dt>Arrivée prévue</dt><dd>{{.Plan.ArrivesAt.Format "2006-01-02 15:04:05"}} UTC</dd>
+      <dt>Retour prévu</dt><dd>{{if .Plan.ReturnsAt}}{{.Plan.ReturnsAt.Format "2006-01-02 15:04:05"}} UTC{{else}}aucun{{end}}</dd>
+    </dl>
+    <form class="confirm" method="post" action="/planets/{{.Planet.ID}}/fleet/launch">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+      <input type="hidden" name="galaxy" value="{{.Form.Galaxy}}">
+      <input type="hidden" name="system" value="{{.Form.System}}">
+      <input type="hidden" name="position" value="{{.Form.Position}}">
+      <input type="hidden" name="mission" value="{{.Form.Mission}}">
+      <input type="hidden" name="speed" value="{{.Form.Speed}}">
+      <input type="hidden" name="cargo_metal" value="{{.Form.CargoMetal}}">
+      <input type="hidden" name="cargo_crystal" value="{{.Form.Crystal}}">
+      <input type="hidden" name="cargo_deuterium" value="{{.Form.Deuterium}}">
+      {{range $id, $quantity := .Form.Composition}}<input type="hidden" name="composition[{{$id}}]" value="{{$quantity}}">{{end}}
+      <button type="submit">Lancer la flotte</button>
+    </form>
+    <p><a href="/planets/{{.Planet.ID}}/fleet/send">Modifier la mission</a></p>
+  </section>
+{{end}}

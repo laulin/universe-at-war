@@ -40,7 +40,13 @@ propose de fonder un empire si le compte n'en a pas encore. Chaque planète a sa
 page de bâtiments, une page de recherche, un chantier spatial et une page de
 défense. Les recherches, les vaisseaux et les défenses suivent les mêmes règles
 transactionnelles que les bâtiments : coût débité au démarrage, achèvement par
-événement planifié, reprise après redémarrage. La
+événement planifié, reprise après redémarrage.
+
+La page Flotte liste les vaisseaux stationnés, les emplacements disponibles et
+les missions en vol avec leurs horaires absolus. L'assistant d'envoi calcule
+distance, carburant, capacité, arrivée et retour avant confirmation. Une flotte
+partie est engagée : seul le rappel, tant que la mission le permet, la fait
+revenir. La
 planète mère affiche les productions, stockages, énergie et cases, ainsi que le
 catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
 worker reprend automatiquement les événements après un redémarrage.
