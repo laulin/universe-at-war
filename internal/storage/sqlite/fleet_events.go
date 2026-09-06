@@ -51,6 +51,13 @@ func (r *FleetRepository) resolveArrival(ctx context.Context, tx *sql.Tx, event 
 		// A recall won the race, or the arrival was already applied.
 		return nil
 	}
+	return r.resolveFleetArrival(ctx, tx, row, event.DueAt, now)
+}
+
+// resolveFleetArrival applies the mission of one fleet that has landed. A
+// grouped operation resolves its own fleets through this same path.
+func (r *FleetRepository) resolveFleetArrival(ctx context.Context, tx *sql.Tx, row fleetRow, dueAt, now time.Time) error {
+	fleetID := row.id
 	cargo, err := loadCargo(ctx, tx, fleetID)
 	if err != nil {
 		return err
@@ -61,22 +68,22 @@ func (r *FleetRepository) resolveArrival(ctx context.Context, tx *sql.Tx, event 
 	}
 	switch row.mission {
 	case domainfleet.MissionRecycle:
-		return r.resolveRecycling(ctx, tx, row, event.DueAt, now)
+		return r.resolveRecycling(ctx, tx, row, dueAt, now)
 	case domainfleet.MissionColonize:
-		return r.resolveColonization(ctx, tx, row, event.DueAt, now)
+		return r.resolveColonization(ctx, tx, row, dueAt, now)
 	}
 	if targetPlanetID == 0 {
 		return r.abortMission(ctx, tx, row, "target_missing", now)
 	}
 	switch row.mission {
 	case domainfleet.MissionDeploy:
-		return r.completeDeployment(ctx, tx, row, targetPlanetID, cargo, event.DueAt, now)
+		return r.completeDeployment(ctx, tx, row, targetPlanetID, cargo, dueAt, now)
 	case domainfleet.MissionEspionage:
-		return r.resolveEspionage(ctx, tx, row, targetPlanetID, event.DueAt, now)
+		return r.resolveEspionage(ctx, tx, row, targetPlanetID, dueAt, now)
 	case domainfleet.MissionAttack:
-		return r.resolveCombat(ctx, tx, row, targetPlanetID, event.DueAt, now)
+		return r.resolveCombat(ctx, tx, row, targetPlanetID, dueAt, now)
 	default:
-		return r.completeTransport(ctx, tx, row, targetPlanetID, cargo, event.DueAt, now)
+		return r.completeTransport(ctx, tx, row, targetPlanetID, cargo, dueAt, now)
 	}
 }
 

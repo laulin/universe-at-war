@@ -120,6 +120,25 @@ func (r *FleetRepository) Preview(ctx context.Context, accountID, planetID int64
 func (r *FleetRepository) Launch(ctx context.Context, accountID, planetID int64, request appfleet.LaunchRequest, seed int64, idempotencyKey string, now time.Time) (appfleet.Fleet, error) {
 	var fleet appfleet.Fleet
 	err := withWriteTx(ctx, r.write, "fleet repository: launch", func(tx *sql.Tx) error {
+		launched, _, _, err := r.launchInto(ctx, tx, accountID, planetID, request, seed, idempotencyKey, now, true)
+		fleet = launched
+		return err
+	})
+	if err != nil {
+		return appfleet.Fleet{}, err
+	}
+	return fleet, nil
+}
+
+// launchInto performs a launch inside an existing transaction. A grouped
+// operation owns the arrival of its fleets, so it asks for no own event.
+func (r *FleetRepository) launchInto(ctx context.Context, tx *sql.Tx, accountID, planetID int64,
+	request appfleet.LaunchRequest, seed int64, idempotencyKey string, now time.Time,
+	scheduleArrival bool) (appfleet.Fleet, domainfleet.Plan, int64, error) {
+	var fleet appfleet.Fleet
+	var plan domainfleet.Plan
+	var rulesetVersion int64
+	err := func() error {
 		digest := sha256.Sum256([]byte(launchSignature(planetID, request)))
 		requestHash := hex.EncodeToString(digest[:])
 		replayed, found, err := replayedFleet(ctx, tx, accountID, "launch_fleet", idempotencyKey, requestHash)
@@ -131,10 +150,11 @@ func (r *FleetRepository) Launch(ctx context.Context, accountID, planetID int64,
 			return nil
 		}
 
-		plan, planet, targetPlanetID, err := r.planLaunch(ctx, tx, accountID, planetID, request, now)
+		planned, planet, targetPlanetID, err := r.planLaunch(ctx, tx, accountID, planetID, request, now)
 		if err != nil {
 			return err
 		}
+		plan = planned
 		production, err := settledProduction(ctx, tx, planet.ID, now)
 		if err != nil {
 			return err
@@ -158,7 +178,7 @@ func (r *FleetRepository) Launch(ctx context.Context, accountID, planetID int64,
 		if err != nil {
 			return err
 		}
-		rulesetVersion, err := activeRulesetVersion(ctx, tx)
+		rulesetVersion, err = activeRulesetVersion(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -201,13 +221,15 @@ func (r *FleetRepository) Launch(ctx context.Context, accountID, planetID int64,
 		if err := recordTransition(ctx, tx, fleetID, "", domainfleet.Outbound, "launched", plan.DepartsAt); err != nil {
 			return err
 		}
-		eventType, priority := arrivalEvent(request.Mission)
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO scheduled_events(event_type, due_at, priority, entity_type, entity_id, ruleset_version, payload, idempotency_key, created_at)
-			VALUES (?, ?, ?, 'fleet', ?, ?, json_object('mission', ?), ?, ?)
-		`, eventType, timestamp(plan.ArrivesAt), priority, strconv.FormatInt(fleetID, 10), rulesetVersion,
-			string(request.Mission), fmt.Sprintf("fleet-arrive:%d", fleetID), timestamp(plan.DepartsAt)); err != nil {
-			return fmt.Errorf("fleet repository: schedule arrival: %w", err)
+		if scheduleArrival {
+			eventType, priority := arrivalEvent(request.Mission)
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO scheduled_events(event_type, due_at, priority, entity_type, entity_id, ruleset_version, payload, idempotency_key, created_at)
+				VALUES (?, ?, ?, 'fleet', ?, ?, json_object('mission', ?), ?, ?)
+			`, eventType, timestamp(plan.ArrivesAt), priority, strconv.FormatInt(fleetID, 10), rulesetVersion,
+				string(request.Mission), fmt.Sprintf("fleet-arrive:%d", fleetID), timestamp(plan.DepartsAt)); err != nil {
+				return fmt.Errorf("fleet repository: schedule arrival: %w", err)
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO idempotency_keys(actor_id, operation, key, request_hash, result_type, result_id, created_at)
@@ -227,11 +249,11 @@ func (r *FleetRepository) Launch(ctx context.Context, accountID, planetID int64,
 		}
 		fleet = loaded
 		return nil
-	})
+	}()
 	if err != nil {
-		return appfleet.Fleet{}, err
+		return appfleet.Fleet{}, domainfleet.Plan{}, 0, err
 	}
-	return fleet, nil
+	return fleet, plan, rulesetVersion, nil
 }
 
 // planLaunch validates a launch against the current state without mutating it.
@@ -309,6 +331,22 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 func (r *FleetRepository) Recall(ctx context.Context, accountID, fleetID int64, idempotencyKey string, now time.Time) (appfleet.Fleet, error) {
 	var fleet appfleet.Fleet
 	err := withWriteTx(ctx, r.write, "fleet repository: recall", func(tx *sql.Tx) error {
+		recalled, err := r.recallInto(ctx, tx, accountID, fleetID, idempotencyKey, now)
+		fleet = recalled
+		return err
+	})
+	if err != nil {
+		return appfleet.Fleet{}, err
+	}
+	return fleet, nil
+}
+
+// recallInto recalls a fleet inside an existing transaction. A fleet engaged in
+// a grouped operation has no arrival event of its own, which the caller has
+// already taken care of.
+func (r *FleetRepository) recallInto(ctx context.Context, tx *sql.Tx, accountID, fleetID int64, idempotencyKey string, now time.Time) (appfleet.Fleet, error) {
+	var fleet appfleet.Fleet
+	err := func() error {
 		digest := sha256.Sum256([]byte(strconv.FormatInt(fleetID, 10)))
 		requestHash := hex.EncodeToString(digest[:])
 		replayed, found, err := replayedFleet(ctx, tx, accountID, "recall_fleet", idempotencyKey, requestHash)
@@ -334,19 +372,25 @@ func (r *FleetRepository) Recall(ctx context.Context, accountID, fleetID int64, 
 		if !row.state.Recallable() {
 			return appfleet.ErrNotRecallable
 		}
-		result, err := tx.ExecContext(ctx,
-			"UPDATE scheduled_events SET state = 'cancelled', processed_at = ? WHERE idempotency_key = ? AND state = 'pending'",
-			timestamp(now), fmt.Sprintf("fleet-arrive:%d", fleetID))
+		grouped, err := belongsToOperation(ctx, tx, fleetID)
 		if err != nil {
-			return fmt.Errorf("fleet repository: cancel arrival: %w", err)
+			return err
 		}
-		affected, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("fleet repository: cancel arrival: %w", err)
-		}
-		if affected != 1 {
-			// The arrival was already being processed: the recall lost the race.
-			return appfleet.ErrNotRecallable
+		if !grouped {
+			result, err := tx.ExecContext(ctx,
+				"UPDATE scheduled_events SET state = 'cancelled', processed_at = ? WHERE idempotency_key = ? AND state = 'pending'",
+				timestamp(now), fmt.Sprintf("fleet-arrive:%d", fleetID))
+			if err != nil {
+				return fmt.Errorf("fleet repository: cancel arrival: %w", err)
+			}
+			affected, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("fleet repository: cancel arrival: %w", err)
+			}
+			if affected != 1 {
+				// The arrival was already being processed: the recall lost the race.
+				return appfleet.ErrNotRecallable
+			}
 		}
 		returnsAt := domainfleet.RecallReturn(row.departedAt, now)
 		if _, err := tx.ExecContext(ctx, `
@@ -379,11 +423,22 @@ func (r *FleetRepository) Recall(ctx context.Context, accountID, fleetID int64, 
 		}
 		fleet = loaded
 		return nil
-	})
+	}()
 	if err != nil {
 		return appfleet.Fleet{}, err
 	}
 	return fleet, nil
+}
+
+// belongsToOperation reports whether a fleet flies inside a grouped operation,
+// which owns its arrival event.
+func belongsToOperation(ctx context.Context, tx *sql.Tx, fleetID int64) (bool, error) {
+	var grouped bool
+	if err := tx.QueryRowContext(ctx,
+		"SELECT EXISTS(SELECT 1 FROM acs_participants WHERE fleet_id = ?)", fleetID).Scan(&grouped); err != nil {
+		return false, fmt.Errorf("fleet repository: inspect operation: %w", err)
+	}
+	return grouped, nil
 }
 
 func launchSignature(planetID int64, request appfleet.LaunchRequest) string {

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	appacs "universeatwar/internal/app/acs"
 	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
@@ -44,6 +45,7 @@ type world struct {
 	Phalanx  appphalanx.Service
 	JumpGate appjumpgate.Service
 	Alliance appalliance.Service
+	ACS      appacs.Service
 }
 
 func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -53,11 +55,13 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
 	shipyardRepository := storagesqlite.NewShipyardRepository(database.Write(), catalogues)
 	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
+	acsRepository := storagesqlite.NewACSRepository(database.Write(), catalogues, fleetRepository)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	economyRepository.RegisterHandlers(events)
 	researchRepository.RegisterHandlers(events)
 	shipyardRepository.RegisterHandlers(events)
 	fleetRepository.RegisterHandlers(events)
+	acsRepository.RegisterHandlers(events)
 	return &world{
 		Database: database,
 		Clock:    clock,
@@ -92,6 +96,12 @@ func newWorld(t *testing.T, database *storagesqlite.Database, clock *appclock.Fa
 		Phalanx:  appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
 		JumpGate: appjumpgate.Service{Clock: clock, Repository: storagesqlite.NewJumpGateRepository(database.Write(), catalogues), Completer: events},
 		Alliance: appalliance.Service{Clock: clock, Repository: storagesqlite.NewAllianceRepository(database.Write())},
+		ACS: appacs.Service{
+			Clock:      clock,
+			Repository: acsRepository,
+			Seeds:      random.NewSeedGenerator(rand.Reader),
+			Completer:  events,
+		},
 	}
 }
 
