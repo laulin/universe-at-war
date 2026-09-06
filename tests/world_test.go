@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	appshipyard "universeatwar/internal/app/shipyard"
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/catalogue"
+	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/universe"
 	"universeatwar/internal/random"
 	storagesqlite "universeatwar/internal/storage/sqlite"
@@ -148,4 +150,48 @@ func coordinateOf(t *testing.T, galaxy, system, position int) universe.Coordinat
 func newWorldFor(t *testing.T, database *storagesqlite.Database) *world {
 	t.Helper()
 	return newWorld(t, database, appclock.NewFake(time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)))
+}
+
+// benchmarkUniverse prepares a running universe with two accounts.
+func benchmarkUniverse(b *testing.B, ctx context.Context) *storagesqlite.Database {
+	b.Helper()
+	database := benchmarkDatabase(b, ctx)
+	now := "2042-09-10T11:12:13Z"
+	for id := 1; id <= 2; id++ {
+		if _, err := database.Write().ExecContext(ctx,
+			"INSERT INTO accounts(id, username, username_normalized, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			id, fmt.Sprintf("player%d", id), fmt.Sprintf("player%d", id), now, now); err != nil {
+			b.Fatal(err)
+		}
+	}
+	document, err := rules.Encode(rules.Default())
+	if err != nil {
+		b.Fatal(err)
+	}
+	if _, err := database.Write().ExecContext(ctx,
+		"INSERT INTO ruleset_versions(version, status, document, checksum, author_account_id, effective_at, created_at) VALUES (1, 'active', ?, 'bench', 1, ?, ?)",
+		string(document), now, now); err != nil {
+		b.Fatal(err)
+	}
+	return database
+}
+
+func newBenchmarkWorld(b *testing.B, database *storagesqlite.Database, clock *appclock.Fake) *world {
+	b.Helper()
+	catalogues := catalogue.Default()
+	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)
+	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
+	events := storagesqlite.NewEventProcessor(database.Write(), clock)
+	economyRepository.RegisterHandlers(events)
+	fleetRepository.RegisterHandlers(events)
+	return &world{
+		Database: database,
+		Clock:    clock,
+		Events:   events,
+		Economy:  appeconomy.Service{Clock: clock, Repository: economyRepository, Catalogue: catalogues.Buildings, Completer: events},
+		Fleet: appfleet.Service{
+			Clock: clock, Repository: fleetRepository, Catalogues: catalogues,
+			Seeds: random.NewSeedGenerator(rand.Reader), Completer: events,
+		},
+	}
 }
