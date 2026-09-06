@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	appalliance "universeatwar/internal/app/alliance"
 	appreports "universeatwar/internal/app/reports"
 	"universeatwar/internal/domain/report"
 	"universeatwar/internal/domain/universe"
@@ -49,7 +50,8 @@ func NewReportsRepository(read, write *sql.DB) *ReportsRepository {
 // List returns one page of reports, newest first.
 func (r *ReportsRepository) List(ctx context.Context, accountID int64, filter appreports.Filter, now time.Time) ([]appreports.Summary, error) {
 	query := `
-		SELECT p.id, p.kind, p.galaxy, p.system, p.position, p.occurred_at, p.read_at
+		SELECT p.id, p.kind, p.galaxy, p.system, p.position, p.occurred_at, p.read_at,
+			p.shared_alliance_id IS NOT NULL, pl.display_name
 		FROM reports p
 		JOIN players pl ON pl.id = p.recipient_player_id
 		WHERE pl.account_id = ?
@@ -95,13 +97,19 @@ func (r *ReportsRepository) Get(ctx context.Context, accountID, reportID int64, 
 	var readAt sql.NullString
 	var version int
 	var document string
+	// A report is readable by its recipient, or by the alliance it was shared
+	// with, and by nobody else.
 	err := r.read.QueryRowContext(ctx, `
-		SELECT p.id, p.kind, p.galaxy, p.system, p.position, p.occurred_at, p.read_at, p.payload_version, p.payload
+		SELECT p.id, p.kind, p.galaxy, p.system, p.position, p.occurred_at, p.read_at, p.payload_version, p.payload,
+			p.shared_alliance_id IS NOT NULL, owner.display_name
 		FROM reports p
-		JOIN players pl ON pl.id = p.recipient_player_id
-		WHERE p.id = ? AND pl.account_id = ?
-	`, reportID, accountID).Scan(&summary.ID, &kind, &summary.Coordinate.Galaxy, &summary.Coordinate.System,
-		&summary.Coordinate.Position, &occurredText, &readAt, &version, &document)
+		JOIN players owner ON owner.id = p.recipient_player_id
+		LEFT JOIN players viewer ON viewer.account_id = ?
+		LEFT JOIN alliance_members membership ON membership.player_id = viewer.id
+		WHERE p.id = ?
+		  AND (owner.account_id = ? OR (p.shared_alliance_id IS NOT NULL AND p.shared_alliance_id = membership.alliance_id))
+	`, accountID, reportID, accountID).Scan(&summary.ID, &kind, &summary.Coordinate.Galaxy, &summary.Coordinate.System,
+		&summary.Coordinate.Position, &occurredText, &readAt, &version, &document, &summary.Shared, &summary.OwnerName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return appreports.Detail{}, appreports.ErrNotFound
 	}
@@ -170,7 +178,7 @@ func scanSummary(rows *sql.Rows, now time.Time, recent time.Duration) (appreport
 	var kind, occurredText string
 	var readAt sql.NullString
 	if err := rows.Scan(&summary.ID, &kind, &summary.Coordinate.Galaxy, &summary.Coordinate.System,
-		&summary.Coordinate.Position, &occurredText, &readAt); err != nil {
+		&summary.Coordinate.Position, &occurredText, &readAt, &summary.Shared, &summary.OwnerName); err != nil {
 		return appreports.Summary{}, fmt.Errorf("reports repository: scan: %w", err)
 	}
 	summary.Kind = report.Kind(kind)
@@ -198,4 +206,85 @@ func reportFreshness(ctx context.Context, database *sql.DB) (time.Duration, erro
 		seconds = 3600
 	}
 	return time.Duration(seconds) * time.Second, nil
+}
+
+// Share puts one report on the alliance table, or takes it back. Only its
+// recipient may decide.
+func (r *ReportsRepository) Share(ctx context.Context, accountID, reportID int64, shared bool, now time.Time) error {
+	return withWriteTx(ctx, r.write, "reports repository: share", func(tx *sql.Tx) error {
+		configured, _, err := activeRuleset(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if !configured.Team.ReportSharingEnabled {
+			return appreports.ErrSharingOff
+		}
+		playerID, err := playerByAccount(ctx, tx, accountID)
+		if err != nil {
+			return err
+		}
+		var owner int64
+		err = tx.QueryRowContext(ctx, "SELECT recipient_player_id FROM reports WHERE id = ?", reportID).Scan(&owner)
+		if errors.Is(err, sql.ErrNoRows) {
+			return appreports.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("reports repository: read report owner: %w", err)
+		}
+		if owner != playerID {
+			return appreports.ErrNotTheOwner
+		}
+		allianceID, _, err := membership(ctx, tx, playerID)
+		if err != nil {
+			if errors.Is(err, appalliance.ErrNotAMember) {
+				return appreports.ErrNotInAlliance
+			}
+			return err
+		}
+		var value any
+		if shared {
+			value = allianceID
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE reports SET shared_alliance_id = ? WHERE id = ? AND recipient_player_id = ?",
+			value, reportID, playerID); err != nil {
+			return fmt.Errorf("reports repository: share report: %w", err)
+		}
+		action := "report_shared"
+		if !shared {
+			action = "report_unshared"
+		}
+		return recordHistory(ctx, tx, allianceID, playerID, action, 0, now,
+			fmt.Sprintf("json_object('report_id', %d)", reportID))
+	})
+}
+
+// SharedWithAlliance lists what the other members have put on the table.
+func (r *ReportsRepository) SharedWithAlliance(ctx context.Context, accountID int64, now time.Time) ([]appreports.Summary, error) {
+	rows, err := r.read.QueryContext(ctx, `
+		SELECT p.id, p.kind, p.galaxy, p.system, p.position, p.occurred_at, p.read_at, 1, owner.display_name
+		FROM reports p
+		JOIN players owner ON owner.id = p.recipient_player_id
+		JOIN players viewer ON viewer.account_id = ?
+		JOIN alliance_members membership ON membership.player_id = viewer.id
+		WHERE p.shared_alliance_id = membership.alliance_id
+		ORDER BY p.occurred_at DESC, p.id DESC LIMIT ?
+	`, accountID, appreports.PageSize)
+	if err != nil {
+		return nil, fmt.Errorf("reports repository: list shared: %w", err)
+	}
+	defer rows.Close()
+	recent, err := reportFreshness(ctx, r.read)
+	if err != nil {
+		return nil, err
+	}
+	var summaries []appreports.Summary
+	for rows.Next() {
+		summary, err := scanSummary(rows, now, recent)
+		if err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries, rows.Err()
 }

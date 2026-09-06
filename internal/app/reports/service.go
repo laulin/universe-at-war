@@ -14,8 +14,11 @@ import (
 )
 
 var (
-	ErrForbidden = errors.New("reports: authenticated account required")
-	ErrNotFound  = errors.New("reports: no such report for this account")
+	ErrForbidden     = errors.New("reports: authenticated account required")
+	ErrNotFound      = errors.New("reports: no such report for this account")
+	ErrSharingOff    = errors.New("reports: sharing is disabled in this universe")
+	ErrNotInAlliance = errors.New("reports: sharing needs an alliance")
+	ErrNotTheOwner   = errors.New("reports: only the recipient may share a report")
 )
 
 // PageSize is how many reports one page shows.
@@ -28,6 +31,8 @@ type Summary struct {
 	Coordinate universe.Coordinate
 	OccurredAt time.Time
 	Read       bool
+	Shared     bool
+	OwnerName  string
 	Freshness  report.Freshness
 }
 
@@ -50,6 +55,8 @@ type Repository interface {
 	Get(context.Context, int64, int64, time.Time) (Detail, error)
 	MarkRead(context.Context, int64, int64, time.Time) error
 	UnreadHostile(context.Context, int64) (int, error)
+	Share(context.Context, int64, int64, bool, time.Time) error
+	SharedWithAlliance(context.Context, int64, time.Time) ([]Summary, error)
 }
 
 // Service reads and marks the reports of one player.
@@ -105,6 +112,26 @@ func (s Service) UnreadHostile(ctx context.Context, principal appauth.Principal)
 		return 0, err
 	}
 	return s.Repository.UnreadHostile(ctx, principal.AccountID)
+}
+
+// Share hands one of the player's own reports to their alliance, or takes it
+// back. Sharing never reveals more than the report already held.
+func (s Service) Share(ctx context.Context, principal appauth.Principal, id int64, shared bool) error {
+	if err := s.validate(principal); err != nil {
+		return err
+	}
+	if id <= 0 {
+		return ErrNotFound
+	}
+	return s.Repository.Share(ctx, principal.AccountID, id, shared, s.Clock.Now().UTC())
+}
+
+// SharedWithAlliance lists what the team has put on the table.
+func (s Service) SharedWithAlliance(ctx context.Context, principal appauth.Principal) ([]Summary, error) {
+	if err := s.validate(principal); err != nil {
+		return nil, err
+	}
+	return s.Repository.SharedWithAlliance(ctx, principal.AccountID, s.Clock.Now().UTC())
 }
 
 func (s Service) validate(principal appauth.Principal) error {
