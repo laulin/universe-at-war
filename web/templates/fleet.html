@@ -30,7 +30,7 @@
           <td>{{.State}}</td>
           <td>{{.Origin}} → {{.Target}}</td>
           <td>{{.Composition}}</td>
-          <td>{{.ArrivesAt.Format "15:04:05"}} (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" aria-live="off">{{.ArrivesAt.Format "15:04:05"}}</time>)</td>
+          <td>{{.ArrivesAt.Format "15:04:05"}} (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" data-refresh="page" aria-live="off">{{.ArrivesAt.Format "15:04:05"}}</time>)</td>
           <td>{{if .ReturnsAt}}{{.ReturnsAt.Format "15:04:05"}} (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{.ReturnsAt.Format "15:04:05"}}</time>){{else}}—{{end}}</td>
           <td>
             {{if .Recallable}}

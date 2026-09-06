@@ -62,11 +62,11 @@ approximation silencieuse : il n'y en a aucune ici. Les lignes marquées
 
 | Exigence | Où | Preuve |
 | --- | --- | --- |
-| Écrans obligatoires et navigation globale | `web/templates` | `TestEveryPlayerScreenIsReachable` |
+| Écrans obligatoires et navigation globale | `web/templates` | `TestEveryPlayerScreenHoldsItsAccessibilityBasics` |
 | Horodatage serveur, comptes à rebours non autoritatifs | `web/static/app.js` (existant) | `TestGamePagesShareLayoutWithoutInlineScripts` |
-| Rafraîchissement ciblé sans dépendance | en-tête `Refresh` documenté, repli par rechargement | `TestPagesCarryTheirRefreshHint` |
-| Responsive, focus visible, contraste, labels | `web/static/app.css` | `TestAccessibilityBasicsHold` |
-| Hostiles jamais signalés par la seule couleur | icône et texte (existant) | `TestAccessibilityBasicsHold` |
+| Rafraîchissement ciblé sans dépendance | `data-refresh` sur l'échéance qui change la page, repli : temps absolus rendus par le serveur | `TestPagesAskForOneTargetedRefresh` |
+| Responsive, focus visible, lien d'évitement, labels | `web/static/app.css`, `layout.html` | `TestEveryPlayerScreenHoldsItsAccessibilityBasics` |
+| Hostiles jamais signalés par la seule couleur | icône et texte | `TestEveryPlayerScreenHoldsItsAccessibilityBasics` |
 | Textes UI séparés des identifiants | `internal/web/labels` | audit de code |
 | Assets embarqués sans pipeline Node | `web/assets.go` (existant) | `go build` |
 

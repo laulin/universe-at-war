@@ -8,6 +8,7 @@
   <script src="/static/app.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Aller au contenu</a>
   <header class="game-header">
     <a class="brand" href="/">Universe At War</a>
     {{if .Bodies}}
@@ -49,7 +50,7 @@
       <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Déconnexion</button></form>
     </div>
   </header>
-  <main class="game-shell">
+  <main class="game-shell" id="main-content" tabindex="-1">
     {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
     {{template "content" .}}
   </main>

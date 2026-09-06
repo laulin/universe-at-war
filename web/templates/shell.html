@@ -7,7 +7,8 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <main class="auth-shell">
+  <a class="skip-link" href="#main-content">Aller au contenu</a>
+  <main class="auth-shell" id="main-content" tabindex="-1">
     {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
     {{template "content" .}}
   </main>

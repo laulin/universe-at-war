@@ -21,8 +21,22 @@
     return;
   }
 
+  // When the earliest deadline on the page passes, the server knows something
+  // this page does not. One reload is asked for, once, a moment later so the
+  // event has been settled. Without JavaScript the page stays correct: it shows
+  // absolute server times and the visitor reloads when they choose to.
+  let reloadAsked = false;
+  const askForRefresh = () => {
+    if (reloadAsked || document.hidden) {
+      return;
+    }
+    reloadAsked = true;
+    window.setTimeout(() => window.location.reload(), 2000);
+  };
+
   const tick = () => {
     const now = Date.now() + skew;
+    let passed = false;
     for (const node of countdowns) {
       const deadline = Date.parse(node.getAttribute("datetime"));
       if (Number.isNaN(deadline)) {
@@ -30,6 +44,12 @@
       }
       const remaining = deadline - now;
       node.textContent = remaining <= 0 ? node.dataset.done || "terminé" : format(remaining);
+      if (remaining <= 0 && node.dataset.refresh === "page") {
+        passed = true;
+      }
+    }
+    if (passed) {
+      askForRefresh();
     }
   };
 

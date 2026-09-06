@@ -114,3 +114,37 @@ input:focus-visible, button:focus-visible { outline: .2rem solid #80e0ff; outlin
 .bodies form { margin: 0; display: flex; gap: .4rem; align-items: end; }
 .bodies form input[type="number"] { width: 5rem; }
 .bodies form button { margin-top: 0; }
+
+/* A keyboard visitor reaches the content without walking the whole navigation. */
+.skip-link {
+  position: absolute;
+  left: -100vw;
+  top: .5rem;
+  padding: .6rem 1rem;
+  background: #147da2;
+  color: white;
+  border-radius: .35rem;
+  z-index: 10;
+}
+.skip-link:focus-visible { left: 1rem; outline: .2rem solid #80e0ff; }
+main:focus-visible { outline: none; }
+a:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: .2rem solid #80e0ff;
+  outline-offset: .15rem;
+}
+
+/* Nothing here animates, but a visitor who asked for calm gets it anyway. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* A narrow screen keeps one column and full-width controls. */
+@media (max-width: 40rem) {
+  .game-header { flex-direction: column; align-items: stretch; }
+  .game-header nav { gap: .75rem 1rem; }
+  .body-picker, .session { flex-wrap: wrap; }
+  .summary { grid-template-columns: 1fr; gap: .2rem 0; }
+  .summary dt { margin-top: .6rem; }
+  .bodies form { flex-wrap: wrap; }
+  .bodies form input[type="number"] { width: 100%; }
+}

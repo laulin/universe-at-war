@@ -11,7 +11,7 @@
     <p class="eyebrow">Production en cours</p>
     <h2 id="running-title">{{$.ActiveName}}</h2>
     <p>{{.Delivered}} / {{.Quantity}} livrés — fin prévue à {{.CompletesAt.Format "15:04:05"}} UTC
-      (<time datetime="{{$.CompletesAt}}" data-countdown data-done="terminée" aria-live="off">{{.CompletesAt.Format "15:04:05"}}</time>)</p>
+      (<time datetime="{{$.CompletesAt}}" data-countdown data-done="terminée" data-refresh="page" aria-live="off">{{.CompletesAt.Format "15:04:05"}}</time>)</p>
   </section>
   {{end}}
   <section aria-labelledby="production-title">
