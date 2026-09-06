@@ -27,7 +27,7 @@
       <a href="/galaxy/1/1"{{if eq .Section "galaxy"}} aria-current="page"{{end}}>Galaxie</a>
       <a href="/reports"{{if eq .Section "reports"}} aria-current="page"{{end}}>Rapports{{if .Alerts}} <span class="hostile">⚠ {{.Alerts}}</span>{{end}}</a>
       <a href="/alliance"{{if eq .Section "alliance"}} aria-current="page"{{end}}>Alliance</a>
-      {{if .Administrator}}<a href="/admin/ai"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>{{end}}
+      {{if .Administrator}}<a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>{{end}}
       {{with .Current}}
       {{end}}
     </nav>
@@ -41,7 +41,7 @@
     {{end}}
     {{if and .Administrator (not .Bodies)}}
     <nav aria-label="Navigation administrateur">
-      <a href="/admin/ai"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>
+      <a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>
     </nav>
     {{end}}
     <div class="session">

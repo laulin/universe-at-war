@@ -153,6 +153,9 @@ type Dependencies struct {
 	Alliance       allianceService
 	ACS            acsService
 	Artificials    artificialService
+	Dashboard      dashboardService
+	Invitations    invitationService
+	Moderation     moderationService
 	Registration   registrationService
 	Logger         *slog.Logger
 	SecureCookies  bool
@@ -176,6 +179,9 @@ type Handler struct {
 	alliance        allianceService
 	acs             acsService
 	artificials     artificialService
+	dashboard       dashboardService
+	invitations     invitationService
+	moderation      moderationService
 	registration    registrationService
 	secureCookies   bool
 	loginLimiter    loginRateLimiter
@@ -187,7 +193,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "admin-ai", "admin-ai-detail"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "admin-ai", "admin-ai-detail", "admin", "moderation"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register", "profiles"}
 )
 
@@ -248,6 +254,9 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		alliance:       dependencies.Alliance,
 		acs:            dependencies.ACS,
 		artificials:    dependencies.Artificials,
+		dashboard:      dependencies.Dashboard,
+		invitations:    dependencies.Invitations,
+		moderation:     dependencies.Moderation,
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
@@ -311,6 +320,14 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /alliance/operations/{group}/join", handler.joinOperation)
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/operation", handler.openOperation)
 	handler.mux.HandleFunc("POST /fleets/{fleet}/withdraw", handler.withdrawFromOperation)
+	handler.mux.HandleFunc("GET /admin", handler.dashboardPage)
+	handler.mux.HandleFunc("POST /admin/accounts/{account}/role", handler.changeRole)
+	handler.mux.HandleFunc("POST /admin/accounts/{account}/status", handler.changeStatus)
+	handler.mux.HandleFunc("POST /admin/invitations", handler.createInvitation)
+	handler.mux.HandleFunc("POST /admin/invitations/{invitation}/revoke", handler.revokeInvitation)
+	handler.mux.HandleFunc("GET /admin/moderation", handler.moderationPage)
+	handler.mux.HandleFunc("POST /admin/moderation", handler.applyBan)
+	handler.mux.HandleFunc("POST /admin/moderation/{ban}/lift", handler.liftBan)
 	handler.mux.HandleFunc("GET /admin/ai", handler.artificialPage)
 	handler.mux.HandleFunc("POST /admin/ai", handler.createArtificial)
 	handler.mux.HandleFunc("GET /admin/ai/{player}", handler.artificialDetailPage)

@@ -72,7 +72,7 @@ func TestPlayerRoutesNeverLeakAnotherEmpire(t *testing.T) {
 			"/planets/2", "/planets/2/research", "/planets/2/shipyard", "/planets/2/defense",
 			"/planets/2/fleet", "/planets/2/phalanx", "/planets/2/jump",
 			"/alliance", "/alliance/operations", "/alliance/operations/1", "/reports/1",
-			"/admin/ai", "/admin/ai/1", "/admin/ai/2",
+			"/admin/ai", "/admin/ai/1", "/admin/ai/2", "/admin", "/admin/moderation",
 		},
 		[]string{
 			fmt.Sprint(secretStock), fmt.Sprint(secretFighters),

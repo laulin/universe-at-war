@@ -1,0 +1,100 @@
+{{define "title"}}Administration{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="admin-title">
+    <p class="eyebrow">Administration</p>
+    <h2 id="admin-title">État de l'univers</h2>
+    {{if .Playing}}
+    <div class="alert" role="note">
+      ⚠ Vous administrez cet univers et vous y jouez. Vos pouvoirs d'administration
+      ne vous donnent aucun avantage en jeu, mais gardez cette double casquette à l'esprit.
+    </div>
+    {{end}}
+    {{if .Code}}
+    <div class="alert" role="status">
+      Code d'invitation créé : <code>{{.Code}}</code> — il ne sera plus jamais affiché.
+    </div>
+    {{end}}
+
+    <dl class="summary">
+      <dt>État</dt><dd>{{.Health.State}}</dd>
+      <dt>En service depuis</dt><dd>{{.Health.Uptime}}</dd>
+      <dt>Base</dt><dd>schéma {{.Health.SchemaVersion}}, journal {{.Health.JournalMode}}, {{.Health.DatabaseBytes}} octets</dd>
+      <dt>Ruleset actif</dt><dd>version {{.Health.RulesetVersion}}{{if not .Health.RulesetSince.IsZero}} depuis le {{.Health.RulesetSince.Format "2006-01-02 15:04"}} UTC{{end}}</dd>
+      <dt>Prochain événement</dt><dd>{{if .Health.NextEventAt}}{{.Health.NextEventType}} le {{.Health.NextEventAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">aucun</span>{{end}}</dd>
+      <dt>Arriéré</dt><dd>{{.Health.PendingEvents}} dus, {{.Health.FailedEvents}} en échec</dd>
+      <dt>Débit</dt><dd>{{.Health.RecentEvents}} événements sur la dernière heure</dd>
+      <dt>Population</dt><dd>{{.Health.Accounts}} comptes, {{.Health.Players}} empires, {{.Health.Artificials}} machines</dd>
+      <dt>Sanctions actives</dt><dd>{{.Health.ActiveBans}}</dd>
+      <dt>Dernière sauvegarde</dt><dd>{{if .Health.LastBackupAt}}{{.Health.LastBackupName}} le {{.Health.LastBackupAt.Format "2006-01-02 15:04"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</dd>
+    </dl>
+    <p><a href="/admin/moderation">Modération</a> · <a href="/admin/ai">Joueurs artificiels</a></p>
+
+    <h3 id="accounts-title">Comptes</h3>
+    <table class="bodies" aria-labelledby="accounts-title">
+      <thead>
+        <tr><th scope="col">Compte</th><th scope="col">Nature</th><th scope="col">Rôles</th>
+        <th scope="col">État</th><th scope="col">Empire</th><th scope="col">Actions</th></tr>
+      </thead>
+      <tbody>
+      {{range .Accounts}}
+        <tr>
+          <th scope="row">{{.Username}}</th>
+          <td>{{.Kind}}</td>
+          <td>{{range .Roles}}{{.}} {{end}}</td>
+          <td>{{.Status}}{{if .Banned}} — <span class="hostile">⚠ banni</span>{{end}}</td>
+          <td>{{if .HasEmpire}}oui{{else}}non{{end}}</td>
+          <td>
+            <form method="post" action="/admin/accounts/{{.ID}}/role">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <label for="role-{{.ID}}">Rôle</label>
+              <select id="role-{{.ID}}" name="role">
+                <option value="PLAYER">PLAYER</option>
+                <option value="MODERATOR">MODERATOR</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
+              <button type="submit" name="granted" value="1">Accorder</button>
+              <button type="submit" name="granted" value="0">Retirer</button>
+            </form>
+            <form method="post" action="/admin/accounts/{{.ID}}/status">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" name="status" value="{{if eq .Status "active"}}disabled{{else}}active{{end}}">
+                {{if eq .Status "active"}}Désactiver{{else}}Réactiver{{end}}
+              </button>
+            </form>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+
+    <h3 id="invitations-title">Invitations</h3>
+    <form method="post" action="/admin/invitations" aria-labelledby="invitations-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="label">Pour qui</label>
+      <input id="label" name="label" maxlength="64">
+      <button type="submit">Créer une invitation</button>
+    </form>
+    {{if .Invitations}}
+    <table class="bodies">
+      <thead><tr><th scope="col">Étiquette</th><th scope="col">Expire</th><th scope="col">État</th><th scope="col">Action</th></tr></thead>
+      <tbody>
+      {{range .Invitations}}
+        <tr>
+          <th scope="row">{{if .Label}}{{.Label}}{{else}}<span class="muted">sans étiquette</span>{{end}}</th>
+          <td>{{.ExpiresAt.Format "2006-01-02 15:04"}} UTC</td>
+          <td>{{if .UsedAt}}utilisée par {{.UsedBy}}{{else if .Revoked}}révoquée{{else}}en attente{{end}}</td>
+          <td>
+            {{if and (not .UsedAt) (not .Revoked)}}
+            <form method="post" action="/admin/invitations/{{.ID}}/revoke">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit">Révoquer</button>
+            </form>
+            {{else}}<span class="muted">—</span>{{end}}
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Aucune invitation.</p>{{end}}
+  </section>
+{{end}}

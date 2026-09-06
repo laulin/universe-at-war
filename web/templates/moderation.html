@@ -1,0 +1,56 @@
+{{define "title"}}Modération{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="moderation-title">
+    <p class="eyebrow">{{if .Moderator}}Modération{{else}}Administration{{end}}</p>
+    <h2 id="moderation-title">Sanctions</h2>
+    <p>Une sanction ferme l'accès au jeu. Elle ne gèle ni la production, ni les
+    files, ni les flottes : l'empire d'un joueur banni continue d'exister.</p>
+    {{if .Moderator}}
+    <p class="muted">En tant que modérateur, vous ne pouvez sanctionner que des
+    joueurs ordinaires.</p>
+    {{end}}
+
+    <h3 id="apply-title">Appliquer une sanction</h3>
+    <form method="post" action="/admin/moderation" aria-labelledby="apply-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="account">Identifiant du compte</label>
+      <input id="account" name="account" type="number" min="1" required>
+      <label for="hours">Durée en heures (0 pour définitif)</label>
+      <input id="hours" name="hours" type="number" min="0" value="24">
+      <label for="justification">Justification</label>
+      <input id="justification" name="justification" maxlength="500" required>
+      <button type="submit">Bannir</button>
+    </form>
+
+    <h3 id="bans-title">Historique</h3>
+    {{if .Bans}}
+    <table class="bodies" aria-labelledby="bans-title">
+      <thead>
+        <tr><th scope="col">Compte</th><th scope="col">Par</th><th scope="col">Depuis</th>
+        <th scope="col">Jusqu'à</th><th scope="col">État</th><th scope="col">Justification</th>
+        <th scope="col">Action</th></tr>
+      </thead>
+      <tbody>
+      {{range .Bans}}
+        <tr>
+          <th scope="row">{{.Username}}{{if .Administrator}} <span class="muted">(privilégié)</span>{{end}}</th>
+          <td>{{.AuthorName}}</td>
+          <td>{{.StartsAt.Format "2006-01-02 15:04"}} UTC</td>
+          <td>{{if .EndsAt}}{{.EndsAt.Format "2006-01-02 15:04"}} UTC{{else}}définitif{{end}}</td>
+          <td>{{if .LiftedAt}}levée{{else}}active{{end}}</td>
+          <td>{{.Justification}}</td>
+          <td>
+            {{if not .LiftedAt}}
+            <form method="post" action="/admin/moderation/{{.ID}}/lift">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit">Lever</button>
+            </form>
+            {{else}}<span class="muted">—</span>{{end}}
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Aucune sanction n'a été prononcée.</p>{{end}}
+  </section>
+{{end}}

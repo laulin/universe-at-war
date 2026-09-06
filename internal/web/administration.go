@@ -50,7 +50,7 @@ func (h *Handler) requireAdministrator(response http.ResponseWriter, request *ht
 		http.Redirect(response, request, "/password/change", http.StatusSeeOther)
 		return appauth.Principal{}, false
 	}
-	if h.artificials == nil || !principal.HasRole(appauth.RoleAdmin) {
+	if !principal.HasRole(appauth.RoleAdmin) {
 		http.NotFound(response, request)
 		return appauth.Principal{}, false
 	}
@@ -59,7 +59,10 @@ func (h *Handler) requireAdministrator(response http.ResponseWriter, request *ht
 
 func (h *Handler) artificialPage(response http.ResponseWriter, request *http.Request) {
 	principal, ok := h.requireAdministrator(response, request)
-	if !ok {
+	if !ok || h.artificials == nil {
+		if ok {
+			http.NotFound(response, request)
+		}
 		return
 	}
 	h.renderArtificials(response, request, http.StatusOK, principal, "")

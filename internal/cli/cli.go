@@ -25,6 +25,7 @@ import (
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appjumpgate "universeatwar/internal/app/jumpgate"
+	appmoderation "universeatwar/internal/app/moderation"
 	appphalanx "universeatwar/internal/app/phalanx"
 	appregistration "universeatwar/internal/app/registration"
 	appreports "universeatwar/internal/app/reports"
@@ -215,6 +216,19 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	states := appserverstate.Service{
 		Repository: storagesqlite.NewServerStateRepository(database.Read(), database.Write()),
 	}
+	invitations := appadmin.InvitationService{
+		Clock:      clock,
+		Secrets:    auth.NewSecretGenerator(random, 24),
+		Repository: storagesqlite.NewInvitationRepository(database.Write()),
+	}
+	moderation := appmoderation.Service{
+		Clock:      clock,
+		Repository: storagesqlite.NewModerationRepository(database.Write()),
+	}
+	dashboard := appadmin.DashboardService{
+		Clock:      clock,
+		Repository: storagesqlite.NewDashboardRepository(database.Write(), *databasePath, clock.Now().UTC()),
+	}
 	registration := appregistration.Service{
 		Clock:      clock,
 		Passwords:  passwords,
@@ -339,6 +353,9 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Alliance:       alliance,
 		ACS:            operations,
 		Artificials:    artificials,
+		Dashboard:      dashboard,
+		Invitations:    invitations,
+		Moderation:     moderation,
 		Registration:   registration,
 		Logger:         logger,
 		SecureCookies:  *secureCookie,
