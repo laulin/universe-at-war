@@ -1,6 +1,7 @@
 package building
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -46,24 +47,58 @@ func TestValidateStart(t *testing.T) {
 	configured := rules.Default()
 	levels := Levels{RoboticsFactory: 9}
 	researches := prerequisite.Levels{"computer_technology": 10}
-	if _, err := catalogue.Plan(NaniteFactory, levels, researches, 20, 100, configured); err == nil {
+	if _, err := catalogue.Plan(NaniteFactory, OnPlanet, levels, researches, 20, 100, configured); err == nil {
 		t.Fatal("missing prerequisite accepted")
 	}
 	levels[RoboticsFactory] = 10
-	if _, err := catalogue.Plan(NaniteFactory, levels, prerequisite.Levels{"computer_technology": 9}, 20, 100, configured); err == nil {
+	if _, err := catalogue.Plan(NaniteFactory, OnPlanet, levels, prerequisite.Levels{"computer_technology": 9}, 20, 100, configured); err == nil {
 		t.Fatal("missing research prerequisite accepted")
 	}
-	plan, err := catalogue.Plan(NaniteFactory, levels, researches, 20, 100, configured)
+	plan, err := catalogue.Plan(NaniteFactory, OnPlanet, levels, researches, 20, 100, configured)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if plan.TargetLevel != 1 || plan.Cost != (economy.Resources{Metal: 1_000_000, Crystal: 500_000, Deuterium: 100_000}) {
 		t.Fatalf("plan = %#v", plan)
 	}
-	if _, err := catalogue.Plan(MetalMine, Levels{}, nil, 1, 1, configured); err == nil {
+	if _, err := catalogue.Plan(MetalMine, OnPlanet, Levels{}, nil, 1, 1, configured); err == nil {
 		t.Fatal("full planet accepted")
 	}
 	if err := prerequisite.ValidateGraph(catalogue.RequirementEdges()); err != nil {
 		t.Fatalf("default building graph invalid: %v", err)
+	}
+}
+
+func TestPlacementSeparatesPlanetsFromMoons(t *testing.T) {
+	catalogue := DefaultCatalogue()
+	configured := rules.Default()
+	planetLevels := Levels{RoboticsFactory: 2}
+	moonLevels := Levels{LunarBase: 1}
+	researches := prerequisite.Levels{"hyperspace_technology": 7}
+
+	if _, err := catalogue.Plan(LunarBase, OnPlanet, planetLevels, researches, 0, 100, configured); !errors.Is(err, ErrWrongPlacement) {
+		t.Fatalf("a lunar base on a planet error = %v, want ErrWrongPlacement", err)
+	}
+	if _, err := catalogue.Plan(MetalMine, OnMoon, moonLevels, researches, 0, 10, configured); !errors.Is(err, ErrWrongPlacement) {
+		t.Fatalf("a mine on a moon error = %v, want ErrWrongPlacement", err)
+	}
+	if _, err := catalogue.Plan(LunarBase, OnMoon, Levels{}, researches, 0, 1, configured); err != nil {
+		t.Fatalf("Plan(lunar base on a moon) error = %v", err)
+	}
+	if _, err := catalogue.Plan(SensorPhalanx, OnMoon, Levels{}, researches, 0, 4, configured); err == nil {
+		t.Fatal("a phalanx was accepted without a lunar base")
+	}
+	if _, err := catalogue.Plan(JumpGate, OnMoon, moonLevels, prerequisite.Levels{}, 0, 4, configured); err == nil {
+		t.Fatal("a jump gate was accepted without hyperspace technology")
+	}
+
+	moonBuildings := catalogue.DefinitionsFor(OnMoon)
+	if len(moonBuildings) != 3 {
+		t.Fatalf("the moon catalogue holds %d buildings, want 3", len(moonBuildings))
+	}
+	for _, definition := range catalogue.DefinitionsFor(OnPlanet) {
+		if definition.Placement != OnPlanet {
+			t.Fatalf("%s is not a planetary building", definition.ID)
+		}
 	}
 }

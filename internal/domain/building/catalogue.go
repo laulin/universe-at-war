@@ -27,11 +27,25 @@ const (
 	ResearchLab          ID = "research_lab"
 	MissileSilo          ID = "missile_silo"
 	Terraformer          ID = "terraformer"
+
+	LunarBase     ID = "lunar_base"
+	SensorPhalanx ID = "sensor_phalanx"
+	JumpGate      ID = "jump_gate"
+)
+
+// Placement says which kind of celestial body may hold a building. A lunar
+// building never appears on a planet, and the other way round.
+type Placement string
+
+const (
+	OnPlanet Placement = "planet"
+	OnMoon   Placement = "moon"
 )
 
 // Definition contains all data needed by generic construction algorithms.
 type Definition struct {
 	ID            ID
+	Placement     Placement
 	BaseCost      economy.Resources
 	Growth        float64
 	Prerequisites []prerequisite.Requirement
@@ -85,19 +99,46 @@ func DefaultCatalogue() Catalogue {
 		{ID: ResearchLab, BaseCost: economy.Resources{Metal: 200, Crystal: 400, Deuterium: 200}, Growth: 2},
 		{ID: MissileSilo, BaseCost: economy.Resources{Metal: 20_000, Crystal: 20_000, Deuterium: 1000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(Shipyard, 1)}},
 		{ID: Terraformer, BaseCost: economy.Resources{Crystal: 50_000, Deuterium: 100_000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(NaniteFactory, 1), requiresResearch("energy_technology", 12)}},
+
+		{ID: LunarBase, Placement: OnMoon, BaseCost: economy.Resources{Metal: 20_000, Crystal: 40_000, Deuterium: 20_000}, Growth: 2},
+		{ID: SensorPhalanx, Placement: OnMoon, BaseCost: economy.Resources{Metal: 20_000, Crystal: 40_000, Deuterium: 20_000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(LunarBase, 1)}},
+		{ID: JumpGate, Placement: OnMoon, BaseCost: economy.Resources{Metal: 2_000_000, Crystal: 4_000_000, Deuterium: 2_000_000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(LunarBase, 1), requiresResearch("hyperspace_technology", 7)}},
 	}
 	indexed := make(map[ID]Definition, len(definitions))
 	for _, definition := range definitions {
+		if definition.Placement == "" {
+			definition.Placement = OnPlanet
+		}
 		indexed[definition.ID] = definition
 	}
 	return Catalogue{definitions: indexed}
 }
 
+// order is the stable interface order of the catalogue.
+var order = []ID{
+	MetalMine, CrystalMine, DeuteriumSynthesizer, SolarPlant, MetalStorage, CrystalStorage, DeuteriumTank,
+	RoboticsFactory, NaniteFactory, Shipyard, ResearchLab, MissileSilo, Terraformer,
+	LunarBase, SensorPhalanx, JumpGate,
+}
+
 // Definitions returns catalogue entries in stable UI order.
 func (c Catalogue) Definitions() []Definition {
 	result := make([]Definition, 0, len(c.definitions))
-	for _, id := range []ID{MetalMine, CrystalMine, DeuteriumSynthesizer, SolarPlant, MetalStorage, CrystalStorage, DeuteriumTank, RoboticsFactory, NaniteFactory, Shipyard, ResearchLab, MissileSilo, Terraformer} {
-		result = append(result, c.definitions[id])
+	for _, id := range order {
+		if definition, known := c.definitions[id]; known {
+			result = append(result, definition)
+		}
+	}
+	return result
+}
+
+// DefinitionsFor returns the entries one kind of body may hold.
+func (c Catalogue) DefinitionsFor(placement Placement) []Definition {
+	result := make([]Definition, 0, len(c.definitions))
+	for _, definition := range c.Definitions() {
+		if definition.Placement == placement {
+			result = append(result, definition)
+		}
 	}
 	return result
 }
@@ -151,14 +192,21 @@ func (c Catalogue) Duration(cost economy.Resources, roboticsLevel, naniteLevel i
 	return time.Duration(int64(seconds)) * time.Second, nil
 }
 
-// Plan validates fields and prerequisites and calculates the next level.
-func (c Catalogue) Plan(id ID, levels Levels, researches prerequisite.Levels, usedFields, totalFields int, configured rules.Ruleset) (Plan, error) {
+// ErrWrongPlacement reports a building that cannot stand on this body.
+var ErrWrongPlacement = errors.New("building: this building cannot be built here")
+
+// Plan validates placement, fields and prerequisites and calculates the next
+// level.
+func (c Catalogue) Plan(id ID, placement Placement, levels Levels, researches prerequisite.Levels, usedFields, totalFields int, configured rules.Ruleset) (Plan, error) {
 	if err := configured.Validate(); err != nil {
 		return Plan{}, err
 	}
 	definition, ok := c.definitions[id]
 	if !ok {
 		return Plan{}, errors.New("building: unknown building")
+	}
+	if definition.Placement != placement {
+		return Plan{}, ErrWrongPlacement
 	}
 	if usedFields < 0 || totalFields <= 0 || usedFields >= totalFields {
 		return Plan{}, errors.New("building: no free field")

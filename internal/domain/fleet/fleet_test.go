@@ -373,3 +373,19 @@ func TestMissionTargetsAndSpeedClasses(t *testing.T) {
 		t.Fatal("only a deployment stays on its destination")
 	}
 }
+
+func TestColonizationNeedsAColonyShipAndAnEmptyPosition(t *testing.T) {
+	catalogue := unit.DefaultCatalogue()
+	if err := ValidateComposition(MissionColonize, Composition{unit.SmallCargo: 1}, catalogue); !errors.Is(err, ErrCompositionMismatch) {
+		t.Fatalf("colonising without a colony ship error = %v", err)
+	}
+	if err := ValidateComposition(MissionColonize, Composition{unit.ColonyShip: 1, unit.SmallCargo: 3}, catalogue); err != nil {
+		t.Fatalf("colonising with an escort error = %v", err)
+	}
+	if MissionColonize.Target() != TargetEmpty {
+		t.Fatalf("a colonisation aims at %q, want an empty position", MissionColonize.Target())
+	}
+	if !MissionColonize.Returns() || MissionColonize.TargetsForeignBody() || MissionColonize.TargetsOwnBody() {
+		t.Fatal("a colonisation comes home and belongs to nobody yet")
+	}
+}

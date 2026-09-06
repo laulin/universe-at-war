@@ -234,6 +234,10 @@ func ValidateComposition(mission Mission, composition Composition, catalogue uni
 		if composition[unit.Recycler] <= 0 {
 			return ErrCompositionMismatch
 		}
+	case MissionColonize:
+		if composition[unit.ColonyShip] <= 0 {
+			return ErrCompositionMismatch
+		}
 	case MissionAttack:
 		armed := false
 		for id, quantity := range composition {

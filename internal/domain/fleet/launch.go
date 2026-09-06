@@ -54,7 +54,9 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 	if !request.Mission.Valid() {
 		return Plan{}, ErrInvalidMission
 	}
-	if request.TargetKind != TargetPlanet && request.TargetKind != TargetMoon && request.TargetKind != TargetDebris {
+	switch request.TargetKind {
+	case TargetPlanet, TargetMoon, TargetDebris, TargetEmpty:
+	default:
 		return Plan{}, ErrInvalidTarget
 	}
 	if err := request.Composition.Validate(context.Catalogue); err != nil {

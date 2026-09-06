@@ -94,7 +94,7 @@ func (r *EconomyRepository) CreateEmpire(ctx context.Context, accountID int64, n
 		return appeconomy.Planet{}, fmt.Errorf("economy repository: log empire: %w", err)
 	}
 	planet := appeconomy.Planet{
-		ID: planetID, Name: "Planète mère", PlayerName: name, Coordinate: coordinate,
+		ID: planetID, Kind: building.OnPlanet, Name: "Planète mère", PlayerName: name, Coordinate: coordinate,
 		TotalFields: fields, MinimumTemperature: maximumTemperature - 40, MaximumTemperature: maximumTemperature,
 		Stock: economy.Resources{Metal: 500, Crystal: 500}, Levels: building.Levels{}, Rules: configured,
 	}
@@ -250,7 +250,7 @@ func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, pl
 	if err := facilityIsIdle(ctx, tx, planet.ID, id); err != nil {
 		return appeconomy.Queue{}, err
 	}
-	plan, err := catalogue.Plan(id, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
+	plan, err := catalogue.Plan(id, planet.Kind, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
 	if err != nil {
 		return appeconomy.Queue{}, err
 	}
@@ -405,6 +405,7 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 	if err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
+	planet.Kind = building.OnPlanet
 	planet.Rules = configured
 	if err := enrichEconomy(&planet); err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err

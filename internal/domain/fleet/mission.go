@@ -13,6 +13,8 @@ const (
 	MissionAttack    Mission = "attack"
 	MissionEspionage Mission = "espionage"
 	MissionRecycle   Mission = "recycle"
+	MissionColonize  Mission = "colonize"
+	MissionJump      Mission = "jump"
 )
 
 // SpeedClass selects the universe speed applied to a mission.
@@ -31,12 +33,13 @@ const (
 	TargetPlanet TargetKind = "planet"
 	TargetMoon   TargetKind = "moon"
 	TargetDebris TargetKind = "debris"
+	TargetEmpty  TargetKind = "empty"
 )
 
 // Valid reports whether the mission is one this build knows.
 func (m Mission) Valid() bool {
 	switch m {
-	case MissionTransport, MissionDeploy, MissionAttack, MissionEspionage, MissionRecycle:
+	case MissionTransport, MissionDeploy, MissionAttack, MissionEspionage, MissionRecycle, MissionColonize:
 		return true
 	default:
 		return false
@@ -65,10 +68,14 @@ func (m Mission) TargetsForeignBody() bool {
 
 // Target reports the sort of body the mission aims at.
 func (m Mission) Target() TargetKind {
-	if m == MissionRecycle {
+	switch m {
+	case MissionRecycle:
 		return TargetDebris
+	case MissionColonize:
+		return TargetEmpty
+	default:
+		return TargetPlanet
 	}
-	return TargetPlanet
 }
 
 // TargetsOwnBody reports whether the destination must belong to the player.

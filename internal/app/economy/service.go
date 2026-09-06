@@ -43,6 +43,8 @@ type Queue struct {
 // Planet is the complete economic projection returned after lazy settlement.
 type Planet struct {
 	ID                 int64
+	Kind               building.Placement
+	ParentID           int64
 	Name               string
 	PlayerName         string
 	Coordinate         universe.Coordinate
@@ -140,10 +142,10 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 	if err != nil {
 		return Planet{}, nil, err
 	}
-	choices := make([]BuildingChoice, 0, len(s.Catalogue.Definitions()))
-	for _, definition := range s.Catalogue.Definitions() {
+	choices := make([]BuildingChoice, 0, len(s.Catalogue.DefinitionsFor(planet.Kind)))
+	for _, definition := range s.Catalogue.DefinitionsFor(planet.Kind) {
 		choice := BuildingChoice{Definition: definition, Level: planet.Levels[definition.ID]}
-		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
+		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Kind, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
 		if planErr == nil {
 			choice.Plan = plan
 			choice.Available = planet.ActiveQueue == nil
