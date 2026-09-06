@@ -14,10 +14,13 @@ type loginAttempt struct {
 // LoginLimiter implements an in-process progressive login backoff. Persistent
 // audit remains in SQLite; this limiter protects the live process from bursts.
 type LoginLimiter struct {
-	mu       sync.Mutex
-	now      func() time.Time
-	attempts map[string]loginAttempt
-	checks   uint
+	mu sync.Mutex
+	// FreeAttempts is how many mistakes are forgiven before the backoff starts.
+	// Signing in forgives none; filling a sign-up form forgives a few typos.
+	FreeAttempts uint
+	now          func() time.Time
+	attempts     map[string]loginAttempt
+	checks       uint
 }
 
 func NewLoginLimiter(now func() time.Time) *LoginLimiter {
@@ -54,7 +57,12 @@ func (l *LoginLimiter) Failure(key string) {
 	now := l.now()
 	attempt := l.attempts[key]
 	attempt.failures++
-	exponent := attempt.failures - 1
+	attempt.lastSeen = now
+	if attempt.failures <= l.FreeAttempts {
+		l.attempts[key] = attempt
+		return
+	}
+	exponent := attempt.failures - 1 - l.FreeAttempts
 	if exponent > 6 {
 		exponent = 6
 	}

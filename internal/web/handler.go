@@ -78,7 +78,7 @@ type setupService interface {
 
 type registrationService interface {
 	Policy(context.Context) (string, error)
-	Register(context.Context, string, string) (int64, error)
+	Register(context.Context, string, string, string) (int64, error)
 }
 
 type economyService interface {
@@ -161,27 +161,28 @@ type Dependencies struct {
 
 // Handler serves the minimal bootstrap and authentication interface.
 type Handler struct {
-	authentication authenticationService
-	serverState    stateService
-	csrfSecrets    secretGenerator
-	setup          setupService
-	economy        economyService
-	research       researchService
-	shipyard       shipyardService
-	fleet          fleetService
-	galaxy         galaxyService
-	reports        reportsService
-	phalanx        phalanxService
-	jumpGate       jumpGateService
-	alliance       allianceService
-	acs            acsService
-	artificials    artificialService
-	registration   registrationService
-	secureCookies  bool
-	loginLimiter   loginRateLimiter
-	clock          func() time.Time
-	pages          map[string]*template.Template
-	mux            *http.ServeMux
+	authentication  authenticationService
+	serverState     stateService
+	csrfSecrets     secretGenerator
+	setup           setupService
+	economy         economyService
+	research        researchService
+	shipyard        shipyardService
+	fleet           fleetService
+	galaxy          galaxyService
+	reports         reportsService
+	phalanx         phalanxService
+	jumpGate        jumpGateService
+	alliance        allianceService
+	acs             acsService
+	artificials     artificialService
+	registration    registrationService
+	secureCookies   bool
+	loginLimiter    loginRateLimiter
+	registerLimiter loginRateLimiter
+	clock           func() time.Time
+	pages           map[string]*template.Template
+	mux             *http.ServeMux
 }
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
@@ -250,9 +251,11 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		registration:   dependencies.Registration,
 		secureCookies:  dependencies.SecureCookies,
 		loginLimiter:   limiter,
-		clock:          func() time.Time { return time.Now().UTC() },
-		pages:          pages,
-		mux:            http.NewServeMux(),
+		// Signing up forgives a few typos before it starts slowing down.
+		registerLimiter: &LoginLimiter{FreeAttempts: 3, now: time.Now, attempts: map[string]loginAttempt{}},
+		clock:           func() time.Time { return time.Now().UTC() },
+		pages:           pages,
+		mux:             http.NewServeMux(),
 	}
 	handler.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
 	handler.mux.HandleFunc("GET /healthz", handler.health)
@@ -321,11 +324,23 @@ func New(dependencies Dependencies) (http.Handler, error) {
 // registrationOpen reports whether the universe currently accepts players. A
 // closed or unavailable universe simply hides the whole registration path.
 func (h *Handler) registrationOpen(ctx context.Context) bool {
+	return h.registrationPolicy(ctx) != ""
+}
+
+// registrationPolicy reports the policy when the universe accepts anybody at
+// all, and nothing when it is closed.
+func (h *Handler) registrationPolicy(ctx context.Context) string {
 	if h.registration == nil {
-		return false
+		return ""
 	}
 	policy, err := h.registration.Policy(ctx)
-	return err == nil && policy == appregistration.PolicyOpen
+	if err != nil {
+		return ""
+	}
+	if policy == appregistration.PolicyOpen || policy == appregistration.PolicyInvitation {
+		return policy
+	}
+	return ""
 }
 
 func (h *Handler) registerPage(response http.ResponseWriter, request *http.Request) {
@@ -337,7 +352,10 @@ func (h *Handler) registerPage(response http.ResponseWriter, request *http.Reque
 	if !ok {
 		return
 	}
-	h.render(response, http.StatusOK, "register", pageData{pageShell{CSRFToken: token}})
+	h.render(response, http.StatusOK, "register", registerPageData{
+		pageShell:  pageShell{CSRFToken: token},
+		Invitation: h.registrationPolicy(request.Context()) == appregistration.PolicyInvitation,
+	})
 }
 
 func (h *Handler) register(response http.ResponseWriter, request *http.Request) {
@@ -348,25 +366,49 @@ func (h *Handler) register(response http.ResponseWriter, request *http.Request) 
 	if !h.validCSRF(response, request) {
 		return
 	}
+	// Signing up is rate limited like signing in: a closed universe must not be
+	// brute forced through its invitation field.
+	key := rateLimitKey(request, "register")
+	if wait, allowed := h.registerLimiter.Allow(key); !allowed {
+		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		h.renderRegistration(response, request, "Trop de tentatives. Réessayez dans un instant.")
+		return
+	}
 	username := request.PostFormValue("username")
 	password := request.PostFormValue("password")
 	if password != request.PostFormValue("password_confirmation") {
-		h.render(response, http.StatusBadRequest, "register", pageData{pageShell{
-			CSRFToken: request.PostFormValue("csrf_token"),
-			Error:     "Les deux mots de passe doivent être identiques.",
-		}})
+		h.renderRegistration(response, request, "Les deux mots de passe doivent être identiques.")
 		return
 	}
-	if _, err := h.registration.Register(request.Context(), username, password); err != nil {
-		// The same neutral message covers every refusal so the form never
-		// reveals which usernames already exist.
-		h.render(response, http.StatusBadRequest, "register", pageData{pageShell{
-			CSRFToken: request.PostFormValue("csrf_token"),
-			Error:     "Inscription impossible avec ces informations. Choisissez un autre identifiant de 3 à 32 caractères (a-z, 0-9, _) et un mot de passe d'au moins 12 caractères.",
-		}})
+	if _, err := h.registration.Register(request.Context(), username, password,
+		request.PostFormValue("invitation")); err != nil {
+		// The same neutral message covers every refusal, so the form never says
+		// which usernames exist nor which invitations are real.
+		h.registerLimiter.Failure(key)
+		h.renderRegistration(response, request,
+			"Inscription impossible avec ces informations. Choisissez un autre identifiant de 3 à 32 caractères (a-z, 0-9, _) et un mot de passe d'au moins 12 caractères.")
 		return
 	}
+	h.registerLimiter.Success(key)
 	http.Redirect(response, request, "/login?registered=1", http.StatusSeeOther)
+}
+
+// registerPageData is the sign-up form. It says whether an invitation is
+// needed, never whether a given one exists.
+type registerPageData struct {
+	pageShell
+	Invitation bool
+}
+
+// renderRegistration draws the form again with a message that reveals nothing.
+func (h *Handler) renderRegistration(response http.ResponseWriter, request *http.Request, message string) {
+	h.render(response, http.StatusBadRequest, "register", registerPageData{
+		pageShell: pageShell{
+			CSRFToken: request.PostFormValue("csrf_token"),
+			Error:     message,
+		},
+		Invitation: h.registrationPolicy(request.Context()) == appregistration.PolicyInvitation,
+	})
 }
 
 func (h *Handler) health(response http.ResponseWriter, request *http.Request) {

@@ -12,6 +12,10 @@
       <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" required>
       <label for="password_confirmation">Confirmation du mot de passe</label>
       <input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="12" required>
+      {{if .Invitation}}
+      <label for="invitation">Code d'invitation</label>
+      <input id="invitation" name="invitation" required autocomplete="off">
+      {{end}}
       <button type="submit">Créer le compte</button>
     </form>
     <p><a href="/login">Retour à la connexion</a></p>

@@ -3,6 +3,8 @@ package registration
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"regexp"
 	"strings"
@@ -12,11 +14,12 @@ import (
 )
 
 var (
-	ErrClosed           = errors.New("registration: registrations are closed")
-	ErrInvalidUsername  = errors.New("registration: username must contain 3 to 32 characters among a-z, 0-9 and _")
-	ErrWeakPassword     = errors.New("registration: password must contain at least 12 characters")
-	ErrUsernameTaken    = errors.New("registration: username is already used")
-	ErrServerNotRunning = errors.New("registration: universe is not running")
+	ErrClosed            = errors.New("registration: registrations are closed")
+	ErrInvalidUsername   = errors.New("registration: username must contain 3 to 32 characters among a-z, 0-9 and _")
+	ErrWeakPassword      = errors.New("registration: password must contain at least 12 characters")
+	ErrUsernameTaken     = errors.New("registration: username is already used")
+	ErrInvalidInvitation = errors.New("registration: this invitation cannot be used")
+	ErrServerNotRunning  = errors.New("registration: universe is not running")
 )
 
 // Policies accepted by the ruleset. Invitations arrive with the release
@@ -37,11 +40,21 @@ type Passwords interface {
 }
 
 // Record is the account to create.
+// Digest hides an invitation code: only its digest is ever stored, so reading
+// the database gives nobody a way in.
+func Digest(code string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(code)))
+	return hex.EncodeToString(sum[:])
+}
+
 type Record struct {
 	Username       string
 	NormalizedName string
 	EncodedHash    string
 	OccurredAt     time.Time
+	// InvitationDigest is set only when the universe runs on invitations. The
+	// ticket is spent in the transaction that creates the account.
+	InvitationDigest string
 }
 
 // Repository reads the active policy and creates accounts atomically.
@@ -66,7 +79,7 @@ func (s Service) Policy(ctx context.Context) (string, error) {
 }
 
 // Register creates a player account and grants it the player role only.
-func (s Service) Register(ctx context.Context, username, password string) (int64, error) {
+func (s Service) Register(ctx context.Context, username, password, invitation string) (int64, error) {
 	if s.Clock == nil || s.Passwords == nil || s.Repository == nil {
 		return 0, errors.New("registration: incomplete service dependencies")
 	}
@@ -81,17 +94,29 @@ func (s Service) Register(ctx context.Context, username, password string) (int64
 	if err != nil {
 		return 0, err
 	}
-	if policy != PolicyOpen {
+	switch policy {
+	case PolicyOpen:
+	case PolicyInvitation:
+		if strings.TrimSpace(invitation) == "" {
+			return 0, ErrInvalidInvitation
+		}
+	default:
 		return 0, ErrClosed
 	}
 	encoded, err := s.Passwords.Hash(password)
 	if err != nil {
 		return 0, err
 	}
-	return s.Repository.CreateAccount(ctx, Record{
+	record := Record{
 		Username:       strings.TrimSpace(username),
 		NormalizedName: normalized,
 		EncodedHash:    encoded,
 		OccurredAt:     s.Clock.Now().UTC(),
-	})
+	}
+	if policy == PolicyInvitation {
+		// The ticket is spent in the very transaction that creates the account,
+		// so a code cannot let two people in.
+		record.InvitationDigest = Digest(invitation)
+	}
+	return s.Repository.CreateAccount(ctx, record)
 }

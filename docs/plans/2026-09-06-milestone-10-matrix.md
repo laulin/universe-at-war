@@ -30,10 +30,10 @@ approximation silencieuse : il n'y en a aucune ici. Les lignes marquées
 
 | Exigence | Où | Preuve |
 | --- | --- | --- |
-| Politiques fermée, ouverte, sur invitation | `internal/app/registration` | `TestRegistrationFollowsEveryPolicy` |
-| Invitation à usage unique, rejeu refusé | table `invitations` | `TestAnInvitationIsSpentOnce` |
-| Limitation d'abus | `internal/web` (limiteur existant, étendu à l'inscription) | `TestRegistrationIsRateLimited` |
-| Messages sans énumération | `internal/web/registration` | `TestRegistrationNeverRevealsAnAccount` |
+| Politiques fermée, ouverte, sur invitation | `internal/app/registration` | `TestRegistrationFollowsTheRulesetPolicy`, `TestInvitationLetsExactlyOnePlayerIn` |
+| Invitation à usage unique, rejeu refusé | table `invitations`, `appadmin.InvitationService` | `TestInvitationLetsExactlyOnePlayerIn` |
+| Limitation d'abus | limiteur dédié à l'inscription, quelques fautes pardonnées | `TestWebRegistrationIsRateLimited` |
+| Messages sans énumération | message unique pour tout refus | `TestWebRegistrationRefusalsAreIndistinguishable` |
 | Création concurrente sûre | contrainte UNIQUE | `TestConcurrentRegistrationsOfTheSameNameCreateOneAccount` (existant) |
 
 ## 4. Administration et modération (spec §37-42, §61, brief 4)

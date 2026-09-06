@@ -69,6 +69,21 @@ func (r *RegistrationRepository) CreateAccount(ctx context.Context, record appre
 		`, accountID, record.EncodedHash, moment); err != nil {
 			return fmt.Errorf("registration repository: store credential: %w", err)
 		}
+		if record.InvitationDigest != "" {
+			// The ticket is spent in the very transaction that creates the
+			// account: a code that is used, revoked or out of date lets nobody
+			// in, and a refusal here undoes the account with it.
+			claimed, err := tx.ExecContext(ctx, `
+				UPDATE invitations SET used_at = ?, used_by_account_id = ?
+				WHERE code_digest = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?
+			`, moment, accountID, record.InvitationDigest, moment)
+			if err != nil {
+				return fmt.Errorf("registration repository: claim invitation: %w", err)
+			}
+			if affected, _ := claimed.RowsAffected(); affected != 1 {
+				return appregistration.ErrInvalidInvitation
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO audit_log(actor_account_id, action, target_type, target_id, occurred_at)
 			VALUES (?, 'account_registered', 'account', ?, ?)
