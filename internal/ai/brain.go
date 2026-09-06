@@ -63,6 +63,7 @@ type Brain struct {
 	Reports    Reports
 	Galaxy     Galaxy
 	Teamwork   Teamwork
+	Operations Operations
 	Catalogues catalogue.Set
 	Logger     *slog.Logger
 }
@@ -136,10 +137,11 @@ func (b *Brain) think(ctx context.Context, profile domainai.Profile) []domainai.
 			}
 		}
 		if leader, ok := alliance.Leader(); ok && leader.PlayerID == profile.PlayerID {
-			decisions = append(decisions, b.lead(ctx, profile, alliance, beliefs)...)
+			decisions = append(decisions, b.lead(ctx, principal, profile, alliance, beliefs)...)
 		}
 	}
-	return append(decisions, b.campaign(ctx, principal, profile, planets, observations, team)...)
+	plan := b.assignment(ctx, profile, alliance, beliefs, allied)
+	return append(decisions, b.campaign(ctx, principal, profile, planets, observations, team, plan)...)
 }
 
 // build raises the one building the body wants most and can pay for.

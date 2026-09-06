@@ -199,3 +199,24 @@ func sortedPlayers(roles map[int64]domainai.Role) []int64 {
 	}
 	return identifiers
 }
+
+// AttachGroup ties a grouped operation to the plan it serves.
+func (r *AIRepository) AttachGroup(ctx context.Context, objectiveID, groupID int64) error {
+	return withWriteTx(ctx, r.write, "ai repository: attach group", func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `
+			UPDATE ai_alliance_objectives SET group_id = ?, version = version + 1
+			WHERE id = ? AND group_id IS NULL AND state IN ('scouting', 'assembling')
+		`, groupID, objectiveID)
+		if err != nil {
+			return fmt.Errorf("ai repository: attach group: %w", err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("ai repository: attach group: %w", err)
+		}
+		if affected != 1 {
+			return appai.ErrInvalidRequest
+		}
+		return nil
+	})
+}

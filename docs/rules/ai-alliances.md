@@ -79,7 +79,9 @@ assembling → abandoned
   rapport partagé frais et complet. Les éclaireurs vont la regarder. Aucune
   attaque n'est préparée tant que personne n'a vu.
 - **assembling** : le renseignement est là. Le meneur ouvre une opération
-  groupée sur la cible ; les fleeters y engagent leur flotte.
+  groupée sur la cible **à 10 % de vitesse** : sa propre flotte rampe, et c'est
+  précisément ce qui laisse aux alliés le temps de la rejoindre. Les fleeters
+  s'y engagent à pleine vitesse et se synchronisent sur elle.
 - **resolved** : l'opération est arrivée.
 - **abandoned** : l'échéance passe sans quorum, la cible disparaît, ou plus
   personne ne peut y aller. Le meneur retire alors sa propre flotte, ce qui
@@ -90,6 +92,11 @@ quorum   = max(2, membres_éveillés / 2)
 échéance = ouverture + 6 × intervalle_de_réflexion_du_meneur
 ```
 
+L'échéance ne borne que l'attente d'un renseignement : dès que les flottes sont
+en route, l'opération suit sa propre heure d'arrivée. Le meneur ne renonce alors
+que si le quorum n'est toujours pas atteint à la dernière réflexion avant
+l'atterrissage — il retire alors sa flotte, ce qui annule l'opération.
+
 Le score d'une cible reprend celui d'une IA seule, appliqué aux préférences du
 meneur, avec la confiance du souvenir partagé en facteur supplémentaire : une
 information de seconde main vaut moins qu'un rapport que l'on a soi-même
@@ -98,13 +105,14 @@ rapporté.
 ## Défense d'un membre
 
 Un membre attaqué publie une menace dans la mémoire commune, tirée de son propre
-rapport de combat. Tant que cette menace est fraîche, les défenseurs éveillés
-qui ont des vaisseaux vont stationner sur le corps visé, par le cas d'usage de
-défense groupée du Milestone 7, jusqu'à la fin de la fenêtre.
+rapport de combat. Tant que cette menace est fraîche, **tous les membres éveillés qui ont des
+vaisseaux** vont stationner sur le corps visé, par le cas d'usage de défense
+groupée du Milestone 7, pour trois heures.
 
-Un défenseur sans vaisseau, endormi, ou dont l'emplacement de flotte est déjà
-pris, ne part pas : il enregistre la raison. Une alliance qui n'a pas les moyens
-de défendre ne défend pas.
+Un membre sans vaisseau, endormi, ou dont l'emplacement de flotte est déjà pris,
+ne part pas : il enregistre la raison. La victime elle-même ne se porte pas
+secours : son corps est déjà le sien. Une alliance qui n'a pas les moyens de
+défendre ne défend pas.
 
 ## Ce qu'une alliance ne vise jamais
 
@@ -113,6 +121,10 @@ ses membres et les positions qu'ils ont déclarées sont écartés des cibles av
 tout calcul, y compris lorsqu'un vieux rapport en parle encore.
 
 ## Conflit entre objectif individuel et collectif
+
+Tant que l'alliance tient une cible, aucun membre n'ouvre sa propre attaque
+dessus : deux flottes de la même équipe ne se courent pas après. Le reste de la
+carte lui reste ouvert.
 
 Le collectif passe avant, mais ne consomme jamais l'économie d'un membre : la
 construction, la recherche et le chantier suivent toujours les règles

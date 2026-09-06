@@ -20,6 +20,7 @@ type Shared interface {
 	OpenObjective(context.Context, int64, domainai.Objective) (domainai.Objective, error)
 	Objective(context.Context, int64) (domainai.Objective, bool, error)
 	AdvanceObjective(context.Context, domainai.Objective, domainai.ObjectiveState, int64, string, time.Time) error
+	AttachGroup(context.Context, int64, int64) error
 }
 
 // Alliance is what an artificial player knows of its own team: who is in it,
@@ -137,4 +138,16 @@ func (t Teamwork) AdvanceObjective(ctx context.Context, objective domainai.Objec
 		return ErrInvalidRequest
 	}
 	return t.Shared.AdvanceObjective(ctx, objective, to, groupID, reason, now)
+}
+
+// AttachGroup ties the grouped operation an alliance opened to the plan it
+// serves, without moving that plan along.
+func (t Teamwork) AttachGroup(ctx context.Context, objectiveID, groupID int64) error {
+	if t.Shared == nil {
+		return errors.New("ai: incomplete teamwork dependencies")
+	}
+	if objectiveID <= 0 || groupID <= 0 {
+		return ErrInvalidRequest
+	}
+	return t.Shared.AttachGroup(ctx, objectiveID, groupID)
 }

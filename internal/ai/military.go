@@ -41,7 +41,7 @@ type Fleet interface {
 // campaign runs the operational layer: look, then strike, or put the fleet out
 // of reach before the night.
 func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
-	planets []appeconomy.Planet, observations []observation, team friends) []domainai.Decision {
+	planets []appeconomy.Planet, observations []observation, team friends, plan mission) []domainai.Decision {
 	if b.Fleet == nil {
 		return []domainai.Decision{domainai.Skip(domainai.Operational, "campaign", "no fleet service")}
 	}
@@ -54,13 +54,17 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 	if profile.Window.LastBefore(now, profile.Interval) {
 		return []domainai.Decision{b.fleetsave(ctx, principal, profile, planets, overview)}
 	}
+	// What the alliance asks comes before what one would do alone.
+	if decision, taken := b.serve(ctx, principal, profile, home, overview, plan); taken {
+		return []domainai.Decision{decision}
+	}
 	targets, memories := b.survey(profile, home, observations)
 	if len(memories) > 0 && b.Thinking != nil {
 		if err := b.Thinking.Remember(ctx, profile.PlayerID, memories); err != nil {
 			return []domainai.Decision{failure(domainai.Operational, "remember", err)}
 		}
 	}
-	best, stale, found := domainai.BestTarget(targets, profile.Preferences())
+	best, stale, found := domainai.BestTarget(reserve(targets, plan.reserved), profile.Preferences())
 	if found {
 		return []domainai.Decision{b.raid(ctx, principal, profile, home, overview, best)}
 	}
@@ -370,4 +374,19 @@ func inventoryOf(document map[string]int64) map[unit.ID]int64 {
 
 func plunderOf(resources domaineconomy.Resources) int64 {
 	return resources.Metal + resources.Crystal + resources.Deuterium
+}
+
+// reserve keeps out of a private plan whatever the alliance already has in
+// hand: two fleets of the same team do not race each other to the same body.
+func reserve(targets []domainai.Target, at universe.Coordinate) []domainai.Target {
+	if at.Galaxy == 0 {
+		return targets
+	}
+	kept := make([]domainai.Target, 0, len(targets))
+	for _, target := range targets {
+		if target.Coordinate != at {
+			kept = append(kept, target)
+		}
+	}
+	return kept
 }

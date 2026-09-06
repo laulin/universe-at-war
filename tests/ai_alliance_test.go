@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -186,28 +187,30 @@ func beliefOf(beliefs []domainai.Knowledge, kind domainai.KnowledgeKind) (domain
 	return domainai.Knowledge{}, false
 }
 
-// flyEverything settles every mission in flight, however long it takes.
+// flightHorizon bounds how far a test lets the clock run to settle missions, so
+// that watching a stationed fleet does not also watch it come home again.
+const flightHorizon = 90 * time.Minute
+
+// flyEverything settles the missions that land within the horizon.
 func flyEverything(t *testing.T, ctx context.Context, universeWorld *world) {
 	t.Helper()
-	for attempt := 0; attempt < 10; attempt++ {
-		var pending int
-		if err := universeWorld.Database.Read().QueryRowContext(ctx,
-			"SELECT COUNT(*) FROM scheduled_events WHERE state = 'pending' AND event_type <> 'ai_think'").
-			Scan(&pending); err != nil {
-			t.Fatal(err)
-		}
-		if pending == 0 {
-			return
-		}
-		var due string
+	limit := universeWorld.Clock.Now().UTC().Add(flightHorizon)
+	for attempt := 0; attempt < 12; attempt++ {
+		var due sql.NullString
 		if err := universeWorld.Database.Read().QueryRowContext(ctx, `
 			SELECT MIN(due_at) FROM scheduled_events WHERE state = 'pending' AND event_type <> 'ai_think'
 		`).Scan(&due); err != nil {
 			t.Fatal(err)
 		}
-		at, err := time.Parse(time.RFC3339Nano, due)
+		if !due.Valid {
+			return
+		}
+		at, err := time.Parse(time.RFC3339Nano, due.String)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if at.After(limit) {
+			return
 		}
 		if at.After(universeWorld.Clock.Now().UTC()) {
 			setClock(t, universeWorld.Clock, at)

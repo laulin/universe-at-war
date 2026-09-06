@@ -25,6 +25,7 @@ type Teamwork interface {
 	OpenObjective(context.Context, int64, domainai.Objective) (domainai.Objective, error)
 	Objective(context.Context, int64) (domainai.Objective, bool, error)
 	AdvanceObjective(context.Context, domainai.Objective, domainai.ObjectiveState, int64, string, time.Time) error
+	AttachGroup(context.Context, int64, int64) error
 }
 
 // contribute tells the alliance what this member has seen. Reports are shared
@@ -137,8 +138,8 @@ func (b *Brain) team(ctx context.Context, profile domainai.Profile) (appai.Allia
 // lead is what the leader of an alliance does on top of its own reflection: it
 // hands out the roles and keeps the single collective plan moving. It reasons
 // on the common memory alone.
-func (b *Brain) lead(ctx context.Context, profile domainai.Profile, alliance appai.Alliance,
-	beliefs []domainai.Knowledge) []domainai.Decision {
+func (b *Brain) lead(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	alliance appai.Alliance, beliefs []domainai.Knowledge) []domainai.Decision {
 	now := b.Clock.Now().UTC()
 	capabilities := declarationsOf(beliefs)
 	roles := domainai.AssignRoles(capabilities)
@@ -154,7 +155,7 @@ func (b *Brain) lead(ctx context.Context, profile domainai.Profile, alliance app
 		return append(decisions, failure(domainai.Strategic, "objective", err))
 	}
 	if running {
-		return append(decisions, b.steer(ctx, profile, objective, beliefs, now))
+		return append(decisions, b.steer(ctx, principal, profile, objective, beliefs, now))
 	}
 	kind, at, found := domainai.ChooseObjective(beliefs, profile.Preferences(), now)
 	if !found {
@@ -182,9 +183,17 @@ const objectiveWindow = 6
 
 // steer keeps a running plan honest: it moves to gathering once somebody has
 // actually looked, and gives up when the window closes or the reason is gone.
-func (b *Brain) steer(ctx context.Context, profile domainai.Profile, objective domainai.Objective,
-	beliefs []domainai.Knowledge, now time.Time) domainai.Decision {
+func (b *Brain) steer(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	objective domainai.Objective, beliefs []domainai.Knowledge, now time.Time) domainai.Decision {
 	coordinate := objective.Coordinate
+	// Once the fleets are on their way the operation carries its own clock: the
+	// window only bounds how long the alliance waits for somebody to look.
+	if objective.State == domainai.Assembling {
+		if b.Operations == nil {
+			return domainai.Skip(domainai.Strategic, "operation", "no operation service")
+		}
+		return b.superviseOperation(ctx, principal, profile, objective, now)
+	}
 	if !now.Before(objective.DeadlineAt) {
 		if err := b.Teamwork.AdvanceObjective(ctx, objective, domainai.Abandoned, 0,
 			"the window closed", now); err != nil {
@@ -194,9 +203,6 @@ func (b *Brain) steer(ctx context.Context, profile domainai.Profile, objective d
 			Layer: domainai.Strategic, Action: "abandon " + coordinate.String(),
 			Outcome: domainai.Done, Reason: "the window closed", Target: &coordinate,
 		}
-	}
-	if objective.State != domainai.Scouting {
-		return domainai.Skip(domainai.Strategic, "objective", "the alliance is already gathering")
 	}
 	if !seenProperly(beliefs, objective, now) {
 		return domainai.Skip(domainai.Strategic, "objective", "nobody has looked at it yet")
@@ -248,4 +254,27 @@ func awakeCount(capabilities []domainai.Capability) int {
 		}
 	}
 	return awake
+}
+
+// assignment is what the alliance asks of this member for this reflection.
+func (b *Brain) assignment(ctx context.Context, profile domainai.Profile, alliance appai.Alliance,
+	beliefs []domainai.Knowledge, allied bool) mission {
+	if !allied || b.Teamwork == nil {
+		return mission{}
+	}
+	objective, running, err := b.Teamwork.Objective(ctx, alliance.ID)
+	if err != nil || !running {
+		return mission{alliance: alliance}
+	}
+	roles, err := b.Teamwork.Roles(ctx, alliance.ID)
+	if err != nil {
+		return mission{alliance: alliance}
+	}
+	leader, hasLeader := alliance.Leader()
+	return mission{
+		alliance: alliance, objective: objective, beliefs: beliefs, running: true,
+		reserved: objective.Coordinate,
+		role:     roles[profile.PlayerID],
+		leader:   hasLeader && leader.PlayerID == profile.PlayerID,
+	}
 }
