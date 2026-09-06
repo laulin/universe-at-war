@@ -319,3 +319,18 @@ func moderationError(err error) string {
 		return "Action impossible."
 	}
 }
+
+// metricsPage serves the counters of this process as plain lines. It is
+// reserved for administrators: a local operator reads it, nobody else.
+func (h *Handler) metricsPage(response http.ResponseWriter, request *http.Request) {
+	if _, ok := h.requireAdministrator(response, request); !ok {
+		return
+	}
+	if h.metrics == nil {
+		http.NotFound(response, request)
+		return
+	}
+	response.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write([]byte(h.metrics.Read().String()))
+}

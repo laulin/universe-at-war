@@ -8,6 +8,7 @@ import (
 	"time"
 
 	domainclock "universeatwar/internal/domain/clock"
+	"universeatwar/internal/observability"
 )
 
 type Processor interface {
@@ -30,6 +31,7 @@ type Worker struct {
 	BatchSize      int
 	RescanInterval time.Duration
 	Logger         *slog.Logger
+	Metrics        *observability.Metrics
 	wake           chan struct{}
 }
 
@@ -80,11 +82,13 @@ func (w *Worker) Run(ctx context.Context) error {
 		// Once the world has settled, whoever owes a reflection takes it. A
 		// failure here costs one tick, never the loop.
 		if w.Thinker != nil && !failed {
-			if _, err := w.Thinker.ThinkDue(ctx, w.BatchSize); err != nil {
+			if thought, err := w.Thinker.ThinkDue(ctx, w.BatchSize); err != nil {
 				if ctx.Err() != nil {
 					return nil
 				}
 				logger.Error("artificial reflection failed", "error", err.Error())
+			} else {
+				w.Metrics.Reflection(thought)
 			}
 		}
 		delay := w.RescanInterval

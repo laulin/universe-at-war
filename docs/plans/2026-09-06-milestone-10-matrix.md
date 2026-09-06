@@ -80,11 +80,11 @@ livré à moitié.
 
 | Exigence | Où | Preuve |
 | --- | --- | --- |
-| Métriques internes | `internal/observability/metrics.go` | `TestMetricsCountRequestsAndEvents` |
+| Métriques internes, lisibles sur `/admin/metrics` | `internal/observability/metrics.go` | `TestMetricsCountWhatWentThroughAndNothingElse` |
 | Logs corrélés sans secrets | `internal/web/middleware.go` (existant) | `TestRequestLoggerCorrelatesWithoutLeakingSecrets` |
-| Bancs production, événements, combat, galaxie, IA | `tests/*_bench_test.go` | `go test -bench` |
+| Bancs production, événements, combat, galaxie, IA | `tests/*_bench_test.go`, `internal/domain/*` | `docs/operations/performance.md` |
 | Aucune boucle active au repos | `Worker` (existant) | `TestScheduleKeepsTheWorkerAsleepBetweenReflections` |
-| Budgets documentés | `docs/operations/release.md` | revue documentaire |
+| Budgets documentés | `docs/operations/performance.md` | revue documentaire |
 | Matrice de builds et notes de version | `Makefile`, `docs/operations/release.md` | cross-builds |
 
 ## Scénarios de la spécification (§63)

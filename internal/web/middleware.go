@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+	"universeatwar/internal/observability"
 )
 
 type contextKey int
@@ -54,8 +55,8 @@ func (r *statusRecorder) Write(data []byte) (int, error) {
 
 // requestLogger records one line per request. Only the path is logged: the
 // query string and the cookies may carry secrets.
-func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
-	if logger == nil {
+func requestLogger(logger *slog.Logger, metrics *observability.Metrics, next http.Handler) http.Handler {
+	if logger == nil && metrics == nil {
 		return next
 	}
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -65,6 +66,10 @@ func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
 		status := recorder.status
 		if status == 0 {
 			status = http.StatusOK
+		}
+		metrics.Request(status, time.Since(started))
+		if logger == nil {
+			return
 		}
 		logger.Info("http request",
 			"method", request.Method,

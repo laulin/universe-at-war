@@ -10,6 +10,7 @@ import (
 	"time"
 
 	domainclock "universeatwar/internal/domain/clock"
+	"universeatwar/internal/observability"
 )
 
 // ErrUnknownEventType reports a scheduled event whose type has no handler.
@@ -43,6 +44,8 @@ type EventProcessor struct {
 	handlers    map[string]EventHandler
 	MaxAttempts int
 	Logger      *slog.Logger
+	// Metrics counts what went through, for the local operator alone.
+	Metrics *observability.Metrics
 }
 
 // NewEventProcessor builds a processor without any handler.
@@ -170,8 +173,10 @@ func (p *EventProcessor) apply(ctx context.Context, event ScheduledEvent, now ti
 		})
 	}
 	if err == nil {
+		p.Metrics.Event(1, false)
 		return true, nil
 	}
+	p.Metrics.Event(0, true)
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}

@@ -7,12 +7,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"universeatwar/internal/observability"
 )
 
 func TestRequestLoggerCorrelatesWithoutLeakingSecrets(t *testing.T) {
 	var recorded bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&recorded, nil))
-	handler := requestID(requestLogger(logger, http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	metrics := observability.NewMetrics()
+	handler := requestID(requestLogger(logger, metrics, http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if RequestIDFrom(request.Context()) == "" {
 			t.Error("handler saw no request identifier in its context")
 		}

@@ -35,6 +35,7 @@ import (
 	"universeatwar/internal/domain/server"
 	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
+	"universeatwar/internal/observability"
 	webassets "universeatwar/web"
 )
 
@@ -159,6 +160,7 @@ type Dependencies struct {
 	Backups        backupService
 	Registration   registrationService
 	Logger         *slog.Logger
+	Metrics        *observability.Metrics
 	SecureCookies  bool
 	LoginLimiter   loginRateLimiter
 }
@@ -184,6 +186,7 @@ type Handler struct {
 	invitations     invitationService
 	moderation      moderationService
 	backups         backupService
+	metrics         *observability.Metrics
 	registration    registrationService
 	secureCookies   bool
 	loginLimiter    loginRateLimiter
@@ -339,7 +342,9 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /admin/ai/{player}/alliance", handler.enlistArtificial)
 	handler.mux.HandleFunc("POST /planets/{planet}/defense/{unit}", handler.orderDefenses)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
-	return handler.securityHeaders(requestID(requestLogger(dependencies.Logger, handler.mux))), nil
+	handler.metrics = dependencies.Metrics
+	handler.mux.HandleFunc("GET /admin/metrics", handler.metricsPage)
+	return handler.securityHeaders(requestID(requestLogger(dependencies.Logger, dependencies.Metrics, handler.mux))), nil
 }
 
 // registrationOpen reports whether the universe currently accepts players. A

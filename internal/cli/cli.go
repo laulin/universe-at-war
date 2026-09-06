@@ -307,8 +307,10 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
 	acsRepository := storagesqlite.NewACSRepository(database.Write(), catalogues, fleetRepository)
 	aiRepository := storagesqlite.NewAIRepository(database.Write())
+	metrics := observability.NewMetrics()
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	events.Logger = logger
+	events.Metrics = metrics
 	economyRepository.RegisterHandlers(events)
 	researchRepository.RegisterHandlers(events)
 	shipyardRepository.RegisterHandlers(events)
@@ -317,6 +319,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	aiRepository.RegisterHandlers(events)
 	worker := appsimulation.NewWorker(clock, events)
 	worker.Logger = logger
+	worker.Metrics = metrics
 	economy := appeconomy.Service{
 		Clock:      clock,
 		Repository: economyRepository,
@@ -421,6 +424,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Backups:        backups,
 		Registration:   registration,
 		Logger:         logger,
+		Metrics:        metrics,
 		SecureCookies:  *secureCookie,
 	})
 	if err != nil {
