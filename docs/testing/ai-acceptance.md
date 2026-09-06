@@ -36,7 +36,9 @@
     n'importent pas non plus les cas d'usage.
 16. Cinq cents cycles de réflexion mesurés, worker au repos entre deux
     échéances.
-17. L'audit de fuite balaie les pages d'administration : un joueur ordinaire n'y
+17. Une IA qui possède des recycleurs lève un champ de débris visible sur la
+    carte, avec exactement le nombre de recycleurs qu'il faut.
+18. L'audit de fuite balaie les pages d'administration : un joueur ordinaire n'y
     trouve rien, pas même l'existence d'un joueur artificiel.
 
 ## Contrôles

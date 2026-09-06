@@ -6,6 +6,7 @@ import (
 	"time"
 
 	appai "universeatwar/internal/app/ai"
+	appauth "universeatwar/internal/app/authentication"
 	domainai "universeatwar/internal/domain/ai"
 )
 
@@ -197,4 +198,44 @@ func think(t *testing.T, ctx context.Context, universeWorld *world) {
 	if _, err := universeWorld.Brain.ThinkDue(ctx, 10); err != nil {
 		t.Fatalf("ThinkDue() error = %v", err)
 	}
+}
+
+// TestArtificialPlayerLiftsDebrisItCanSee proves an artificial player collects
+// what the map shows to everybody, with just enough recyclers for the field.
+func TestArtificialPlayerLiftsDebrisItCanSee(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+
+	if _, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Ferrailleur", Archetype: domainai.Logistician,
+		Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	setUnits(t, ctx, database, 2, "recycler", 10)
+	setResearch(t, ctx, database, 2, "computer_technology", 3)
+	setResources(t, ctx, database, 2, 200000, 200000, 200000)
+
+	// A field left by somebody else's battle, in plain sight on the map.
+	home, err := universeWorld.Economy.Planet(ctx, appauth.Principal{AccountID: 1}, 1)
+	if err != nil {
+		t.Fatalf("Planet() error = %v", err)
+	}
+	if _, err := database.Write().ExecContext(ctx, `
+		INSERT INTO debris_fields(galaxy, system, position, metal, crystal, created_at, updated_at)
+		VALUES (?, ?, ?, 45000, 15000, '2042-09-10T12:00:00Z', '2042-09-10T12:00:00Z')
+	`, home.Coordinate.Galaxy, home.Coordinate.System, home.Coordinate.Position); err != nil {
+		t.Fatal(err)
+	}
+
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE mission = 'recycle' AND owner_player_id = 2", 1)
+	// Sixty thousand of wreckage, twenty thousand a hold: three recyclers.
+	assertSingleValue(t, database, `
+		SELECT quantity FROM fleet_ships s JOIN fleets f ON f.id = s.fleet_id
+		WHERE f.mission = 'recycle' AND s.unit_id = 'recycler'`, 3)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) > 0 FROM ai_decisions WHERE action LIKE 'recycle %' AND outcome = 'done'", 1)
 }

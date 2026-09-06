@@ -24,6 +24,9 @@ joueur n'obtiendrait pas.
 | opérationnel | minutes à heures | qui espionner, quelle cible vaut un raid, quand mettre la flotte à l'abri |
 | tactique | l'instant | la composition, la vitesse, le cargo, les recycleurs |
 
+Une flotte de raid emporte ses vaisseaux de combat et juste assez de soutes pour
+le butin espéré ; un ramassage de débris emporte juste assez de recycleurs.
+
 Chaque réflexion parcourt les trois niveaux dans cet ordre et n'engage au plus
 qu'une action par niveau : une construction, une recherche, une commande, une
 mission. Les files du jeu font le reste de la limitation.
@@ -166,6 +169,14 @@ défense de l'archétype depuis la seed de l'IA et son numéro de tick : la
 tortue pointe le sol beaucoup plus souvent que le raider, sans jamais suivre un
 script. La quantité commandée est la moitié de ce que le stock permet, bornée à
 dix : une IA ne vide jamais ses caisses d'un coup.
+
+## Recyclage
+
+Un champ de débris est public : il se lit sur la carte, sans rapport et sans
+espionnage. Une IA qui possède des recycleurs et voit un champ dans son système
+y envoie juste ce qu'il faut de recycleurs pour le lever, dans la limite de ce
+qu'elle possède. Elle s'y met après avoir renoncé à un raid : une bataille laisse
+des débris, et la réflexion suivante va les chercher.
 
 ## Budgets
 
