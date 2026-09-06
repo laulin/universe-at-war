@@ -6,8 +6,10 @@ Une lune est un corps céleste distinct de sa planète : elle a ses propres case
 ses propres bâtiments, son propre stock et sa propre flotte stationnée. Rien
 n'est partagé avec la planète qui l'accompagne, sinon la position.
 
-Une lune ne produit aucune ressource. Elle peut en stocker, en recevoir et en
-envoyer, mais ses hangars ne se remplissent jamais tout seuls.
+Une lune ne produit aucune ressource. Elle peut en recevoir, en stocker et en
+envoyer, mais rien n'y pousse. Elle n'a pas de hangar et ne connaît donc aucun
+plafond de stockage : ce qu'on y dépose y reste, ce qui permet d'y financer des
+bâtiments bien plus chers que la capacité d'une planète neuve.
 
 Une position ne porte qu'une seule lune. Une seconde tentative de création sur
 une position qui en possède déjà une échoue sans effet.

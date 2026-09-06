@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	appeconomy "universeatwar/internal/app/economy"
 	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/combat"
 	"universeatwar/internal/domain/debris"
@@ -160,6 +161,7 @@ func (r *FleetRepository) resolveCombat(ctx context.Context, tx *sql.Tx, row fle
 	if err != nil {
 		return err
 	}
+	source := random.NewSeeded(uint64(row.seed))
 	result, err := combat.Resolve(combat.Input{
 		Attackers: []combat.Party{{PlayerID: row.ownerPlayerID, Units: composition, Technologies: factorsOf(attackerResearch)}},
 		Defenders: []combat.Party{{PlayerID: defenderPlayerID, Units: fightingUnits(target.Units, r.catalogues.Units), Technologies: factorsOf(target.Researches)}},
@@ -168,7 +170,7 @@ func (r *FleetRepository) resolveCombat(ctx context.Context, tx *sql.Tx, row fle
 			Ship: target.Rules.Progression.ShipCostMultiplier, Defense: target.Rules.Progression.DefenseCostMultiplier,
 		},
 		Catalogue: r.catalogues.Units,
-	}, random.NewSeeded(uint64(row.seed)))
+	}, source)
 	if err != nil {
 		return err
 	}
@@ -184,6 +186,12 @@ func (r *FleetRepository) resolveCombat(ctx context.Context, tx *sql.Tx, row fle
 	}
 	if err := addDebris(ctx, tx, row.target,
 		debris.Field{Metal: result.Debris.Metal, Crystal: result.Debris.Crystal}, now); err != nil {
+		return err
+	}
+	// The moon draw continues the very sequence the battle used, so replaying
+	// the fight from its seed replays the moon as well.
+	moonCreated, err := r.attemptMoon(ctx, tx, row, targetPlanetID, target, result.MoonChance, source, now)
+	if err != nil {
 		return err
 	}
 
@@ -229,9 +237,9 @@ func (r *FleetRepository) resolveCombat(ctx context.Context, tx *sql.Tx, row fle
 		return err
 	}
 	if err := logFleetEvent(ctx, tx, "combat_resolved", row.id, targetPlanetID, now,
-		fmt.Sprintf("json_object('outcome', '%s', 'seed', %d, 'rounds', %d, 'debris_metal', %d, 'debris_crystal', %d, 'loot_metal', %d, 'loot_crystal', %d, 'loot_deuterium', %d, 'moon_chance', %f)",
+		fmt.Sprintf("json_object('outcome', '%s', 'seed', %d, 'rounds', %d, 'debris_metal', %d, 'debris_crystal', %d, 'loot_metal', %d, 'loot_crystal', %d, 'loot_deuterium', %d, 'moon_chance', %f, 'moon_created', %t)",
 			result.Outcome, row.seed, len(result.Rounds), result.Debris.Metal, result.Debris.Crystal,
-			loot.Metal, loot.Crystal, loot.Deuterium, result.MoonChance)); err != nil {
+			loot.Metal, loot.Crystal, loot.Deuterium, result.MoonChance, moonCreated)); err != nil {
 		return err
 	}
 	if totalShips(survivors) == 0 {
@@ -656,4 +664,65 @@ func consumeColonyShip(ctx context.Context, tx *sql.Tx, fleetID int64, compositi
 		return fmt.Errorf("fleet repository: consume colony ship: %w", err)
 	}
 	return nil
+}
+
+// attemptMoon draws whether the wreckage gathers into a moon. A position that
+// already carries one never gets a second.
+func (r *FleetRepository) attemptMoon(ctx context.Context, tx *sql.Tx, row fleetRow, planetID int64,
+	target appeconomy.Planet, chance float64, source random.Source, now time.Time) (bool, error) {
+	if chance <= 0 {
+		return false, nil
+	}
+	existing, err := moonAt(ctx, tx, row.target)
+	if err != nil {
+		return false, err
+	}
+	if existing != 0 {
+		return false, nil
+	}
+	if !random.Chance(source, chance) {
+		return false, nil
+	}
+	owner, err := playerOfPlanet(ctx, tx, planetID)
+	if err != nil {
+		return false, err
+	}
+	moonID, err := createBody(ctx, tx, bodyRecord{
+		ownerPlayerID: owner,
+		kind:          building.OnMoon,
+		parentID:      planetID,
+		name:          "Lune",
+		at:            row.target,
+		traits: universe.Characteristics{
+			TotalFields:        target.Rules.Expansion.BaseMoonFields,
+			MinimumTemperature: target.MinimumTemperature,
+			MaximumTemperature: target.MaximumTemperature,
+		},
+		createdAt: now,
+	})
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload)
+		VALUES ('moon_created', 'planet', ?, ?, json_object('coordinate', ?, 'chance', ?, 'seed', ?, 'parent_planet_id', ?))
+	`, moonID, timestamp(now), row.target.String(), chance, row.seed, planetID); err != nil {
+		return false, fmt.Errorf("fleet repository: log moon: %w", err)
+	}
+	return true, nil
+}
+
+// moonAt returns the moon of a position, if it has one.
+func moonAt(ctx context.Context, tx *sql.Tx, at universe.Coordinate) (int64, error) {
+	var moonID int64
+	err := tx.QueryRowContext(ctx,
+		"SELECT id FROM planets WHERE galaxy = ? AND system = ? AND position = ? AND kind = 'moon'",
+		at.Galaxy, at.System, at.Position).Scan(&moonID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("fleet repository: read moon: %w", err)
+	}
+	return moonID, nil
 }

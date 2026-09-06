@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -583,20 +584,12 @@ func loadUnits(ctx context.Context, tx *sql.Tx, planetID int64) (unit.Inventory,
 
 func enrichEconomy(planet *appeconomy.Planet) error {
 	if planet.Kind == building.OnMoon {
-		// A moon has no mines and no base production: it only stores.
+		// A moon produces nothing and has no storage building, so nothing caps
+		// what it holds: whatever is landed there stays there.
 		planet.Rates = economy.Rates{}
 		planet.Energy = economy.Energy{}
-		var err error
-		planet.Capacity.Metal, err = economy.Capacity(planet.Rules.Economy.BaseStorage, planet.Levels[building.MetalStorage])
-		if err != nil {
-			return err
-		}
-		planet.Capacity.Crystal, err = economy.Capacity(planet.Rules.Economy.BaseStorage, planet.Levels[building.CrystalStorage])
-		if err != nil {
-			return err
-		}
-		planet.Capacity.Deuterium, err = economy.Capacity(planet.Rules.Economy.BaseStorage, planet.Levels[building.DeuteriumTank])
-		return err
+		planet.Capacity = economy.Resources{Metal: math.MaxInt64, Crystal: math.MaxInt64, Deuterium: math.MaxInt64}
+		return nil
 	}
 	levels := economy.Levels{
 		MetalMine: planet.Levels[building.MetalMine], CrystalMine: planet.Levels[building.CrystalMine],
