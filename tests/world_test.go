@@ -14,9 +14,9 @@ import (
 	appshipyard "universeatwar/internal/app/shipyard"
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/catalogue"
+	"universeatwar/internal/domain/random"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/universe"
-	"universeatwar/internal/random"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 

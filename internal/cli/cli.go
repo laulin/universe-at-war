@@ -28,8 +28,8 @@ import (
 	"universeatwar/internal/auth"
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/catalogue"
+	seeds "universeatwar/internal/domain/random"
 	"universeatwar/internal/observability"
-	seeds "universeatwar/internal/random"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 	webhandler "universeatwar/internal/web"
 )
