@@ -29,8 +29,11 @@ type Context struct {
 	Inventory    unit.Inventory
 	Stock        economy.Resources
 	ActiveFleets int
-	Rules        rules.Ruleset
-	Now          time.Time
+	// ActiveExpeditions is how many expeditions are already out there, which
+	// astrophysics bounds just as it bounds colonies.
+	ActiveExpeditions int
+	Rules             rules.Ruleset
+	Now               time.Time
 }
 
 // Plan is the immutable calculation captured when a fleet leaves.
@@ -57,7 +60,7 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 		return Plan{}, ErrInvalidMission
 	}
 	switch request.TargetKind {
-	case TargetPlanet, TargetMoon, TargetDebris, TargetEmpty:
+	case TargetPlanet, TargetMoon, TargetDebris, TargetEmpty, TargetSpace:
 	default:
 		return Plan{}, ErrInvalidTarget
 	}
@@ -83,6 +86,15 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 		return Plan{}, ErrNoFleetSlot
 	}
 	distance, err := Distance(request.Origin, request.Target, context.Rules.Topology)
+	if request.Mission == MissionExpedition {
+		if !context.Rules.Expedition.Enabled {
+			return Plan{}, ErrExpeditionsDisabled
+		}
+		if context.ActiveExpeditions >= context.Levels.ExpeditionSlots() {
+			return Plan{}, ErrNoExpeditionSlot
+		}
+		distance, err = ExpeditionDistance(request.Origin, request.Target, context.Rules.Topology)
+	}
 	if err != nil {
 		return Plan{}, err
 	}
@@ -96,6 +108,8 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 		universeSpeed = context.Rules.Time.HostileFleetSpeed
 	case Stationary:
 		universeSpeed = context.Rules.Time.HoldingFleetSpeed
+	case Expeditionary:
+		universeSpeed = context.Rules.Time.ExpeditionSpeed
 	}
 	minimum := time.Duration(context.Rules.Time.MinimumMissionSeconds) * time.Second
 	duration, err := Duration(distance, speed, request.Percent, universeSpeed, minimum)
@@ -136,6 +150,14 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 	}
 	if request.Mission.Returns() {
 		returnsAt := arrivesAt.Add(duration)
+		plan.ReturnsAt = &returnsAt
+	}
+	if request.Mission == MissionExpedition {
+		// An expedition waits out there before it turns round: the wait is what
+		// the trip is for.
+		holdsUntil := arrivesAt.Add(time.Duration(context.Rules.Expedition.HoldHours) * time.Hour)
+		returnsAt := holdsUntil.Add(duration)
+		plan.HoldsUntil = &holdsUntil
 		plan.ReturnsAt = &returnsAt
 	}
 	if request.Mission.Defends() {

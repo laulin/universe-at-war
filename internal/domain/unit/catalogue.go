@@ -283,6 +283,23 @@ func (c Catalogue) Definitions(family Family) []Definition {
 }
 
 // Definition returns one entry of the catalogue.
+// Strength grades a pile of units by what each brings to a battle: its gun, its
+// shield and its hull. It is a rough measure, and it is meant to be.
+func (c Catalogue) Strength(units map[ID]int64) int64 {
+	var total int64
+	for id, quantity := range units {
+		if quantity <= 0 {
+			continue
+		}
+		definition, known := c.Definition(id)
+		if !known {
+			continue
+		}
+		total += quantity * (definition.Weapon + definition.Shield + definition.Hull())
+	}
+	return total
+}
+
 func (c Catalogue) Definition(id ID) (Definition, bool) {
 	definition, known := c.definitions[id]
 	return definition, known

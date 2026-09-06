@@ -26,7 +26,9 @@ mission, en traitant cette position comme une position ordinaire.
 ## Conditions
 
 - la mission est activée dans le ruleset ;
-- la flotte compte au moins un vaisseau capable de porter quelque chose ;
+- la flotte respecte les règles ordinaires de composition ; ce qu'elle ramène
+  est de toute façon borné par sa soute, donc une flotte sans place ne ramène
+  rien ;
 - le joueur a un emplacement d'expédition libre :
   `floor(√astrophysique)` moins les expéditions déjà en vol ;
 - le carburant, le cargo et les emplacements de flotte suivent les règles

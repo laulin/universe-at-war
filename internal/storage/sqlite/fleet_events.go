@@ -72,6 +72,9 @@ func (r *FleetRepository) resolveFleetArrival(ctx context.Context, tx *sql.Tx, r
 		return r.resolveRecycling(ctx, tx, row, dueAt, now)
 	case domainfleet.MissionColonize:
 		return r.resolveColonization(ctx, tx, row, dueAt, now)
+	case domainfleet.MissionExpedition:
+		// An expedition lands on nothing at all and waits there.
+		return r.beginHold(ctx, tx, row, 0, now)
 	}
 	if targetPlanetID == 0 {
 		return r.abortMission(ctx, tx, row, "target_missing", now)

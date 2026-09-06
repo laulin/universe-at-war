@@ -24,6 +24,8 @@ var (
 	ErrNoFleetSlot          = errors.New("fleet: no free fleet slot")
 	ErrNoColonySlot         = errors.New("fleet: no free colony slot")
 	ErrInvalidHold          = errors.New("fleet: the holding time must end after the arrival and within the allowed window")
+	ErrExpeditionsDisabled  = errors.New("fleet: expeditions are disabled in this universe")
+	ErrNoExpeditionSlot     = errors.New("fleet: no free expedition slot")
 )
 
 // Composition maps stable ship identifiers to the quantity sent.
@@ -69,11 +71,33 @@ func (c Composition) Validate(catalogue unit.Catalogue) error {
 
 // Distance is the travel distance between two coordinates under a topology.
 func Distance(from, to universe.Coordinate, topology rules.TopologySettings) (int64, error) {
-	limits := universe.Limits{
+	return distanceWithin(from, to, topology, universe.Limits{
 		Galaxies:  topology.Galaxies,
 		Systems:   topology.SystemsPerGalaxy,
 		Positions: topology.PositionsPerSystem,
+	})
+}
+
+// ExpeditionSlot is the position an expedition flies to: the one that follows
+// the last planet of a system, where no body exists or ever will.
+func ExpeditionSlot(topology rules.TopologySettings) int {
+	return topology.PositionsPerSystem + 1
+}
+
+// ExpeditionDistance measures the trip to the expedition slot. It is the very
+// same arithmetic, with the room for that one extra position.
+func ExpeditionDistance(from, to universe.Coordinate, topology rules.TopologySettings) (int64, error) {
+	if to.Position != ExpeditionSlot(topology) {
+		return 0, ErrInvalidTarget
 	}
+	return distanceWithin(from, to, topology, universe.Limits{
+		Galaxies:  topology.Galaxies,
+		Systems:   topology.SystemsPerGalaxy,
+		Positions: ExpeditionSlot(topology),
+	})
+}
+
+func distanceWithin(from, to universe.Coordinate, topology rules.TopologySettings, limits universe.Limits) (int64, error) {
 	if err := from.Validate(limits); err != nil {
 		return 0, errors.Join(ErrInvalidTarget, err)
 	}

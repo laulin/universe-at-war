@@ -28,6 +28,7 @@ const (
 	CombatAttack      Kind = "combat_attack"
 	CombatDefense     Kind = "combat_defense"
 	Recycling         Kind = "recycling"
+	Expedition        Kind = "expedition"
 )
 
 // Hostile reports whether a report tells its recipient they are under threat.
@@ -38,7 +39,7 @@ func (k Kind) Hostile() bool {
 // Valid reports whether the kind is one this build knows.
 func (k Kind) Valid() bool {
 	switch k {
-	case Espionage, EspionageDetected, CombatAttack, CombatDefense, Recycling:
+	case Espionage, EspionageDetected, CombatAttack, CombatDefense, Recycling, Expedition:
 		return true
 	default:
 		return false
@@ -137,6 +138,20 @@ type RecyclingPayload struct {
 	Remaining economy.Resources   `json:"remaining"`
 }
 
+// ExpeditionPayload is what a fleet brings back from beyond the last planet:
+// what it met, what it found and what it lost.
+type ExpeditionPayload struct {
+	Position  universe.Coordinate `json:"position"`
+	Outcome   string              `json:"outcome"`
+	Found     economy.Resources   `json:"found,omitempty"`
+	Gained    map[string]int64    `json:"gained,omitempty"`
+	Lost      map[string]int64    `json:"lost,omitempty"`
+	Ambush    map[string]int64    `json:"ambush,omitempty"`
+	Survivors map[string]int64    `json:"survivors,omitempty"`
+	DelayedBy int64               `json:"delayed_by_seconds,omitempty"`
+	Story     string              `json:"story"`
+}
+
 // Marshal encodes a payload with the version this build writes.
 func Marshal(kind Kind, payload any) (int, []byte, error) {
 	if !kind.Valid() {
@@ -166,6 +181,8 @@ func Unmarshal(kind Kind, version int, document []byte) (any, error) {
 		return decode[CombatPayload](document)
 	case Recycling:
 		return decode[RecyclingPayload](document)
+	case Expedition:
+		return decode[ExpeditionPayload](document)
 	default:
 		return nil, fmt.Errorf("report: unknown kind %q", kind)
 	}
@@ -192,6 +209,8 @@ func matches(kind Kind, payload any) error {
 		valid = kind == CombatAttack || kind == CombatDefense
 	case RecyclingPayload:
 		valid = kind == Recycling
+	case ExpeditionPayload:
+		valid = kind == Expedition
 	}
 	if !valid {
 		return fmt.Errorf("report: payload does not match kind %q", kind)

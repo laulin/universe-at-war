@@ -101,11 +101,11 @@ func TestDecodeRejectsFutureSchemaAndUnknownFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
-	future := bytes.Replace(document, []byte(`"schema_version":5`), []byte(`"schema_version":99`), 1)
+	future := bytes.Replace(document, []byte(`"schema_version":6`), []byte(`"schema_version":99`), 1)
 	if _, err := Decode(future); !errors.Is(err, ErrFutureSchema) {
 		t.Fatalf("Decode(future schema) error = %v, want ErrFutureSchema", err)
 	}
-	unknown := bytes.Replace(document, []byte(`"schema_version":5`), []byte(`"schema_version":5,"mystery":1`), 1)
+	unknown := bytes.Replace(document, []byte(`"schema_version":6`), []byte(`"schema_version":5,"mystery":1`), 1)
 	if _, err := Decode(unknown); err == nil {
 		t.Fatal("Decode(unknown field) accepted a document with an unknown field")
 	}

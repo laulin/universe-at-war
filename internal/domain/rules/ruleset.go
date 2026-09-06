@@ -16,7 +16,7 @@ import (
 // CurrentSchemaVersion is the ruleset document layout produced by this build.
 // Older documents decode on top of the current defaults; a newer one is
 // refused so a downgrade never corrupts a saved universe.
-const CurrentSchemaVersion = 5
+const CurrentSchemaVersion = 6
 
 // DefaultCatalogueVersion names the content catalogue shipped with this build.
 const DefaultCatalogueVersion = "classic-1"
@@ -38,6 +38,7 @@ type Ruleset struct {
 	Progression   ProgressionSettings `json:"progression"`
 	Team          TeamSettings        `json:"team"`
 	AI            AISettings          `json:"ai"`
+	Expedition    ExpeditionSettings  `json:"expedition"`
 	Protection    ProtectionSettings  `json:"protection"`
 }
 
@@ -158,6 +159,37 @@ type AISettings struct {
 	Diplomacy               string  `json:"diplomacy"`
 }
 
+// ExpeditionSettings drives what a fleet finds beyond the last planet of a
+// system. Every weight is configurable, and a table of zeroes is refused.
+type ExpeditionSettings struct {
+	Enabled        bool               `json:"enabled"`
+	HoldHours      int                `json:"hold_hours"`
+	ResourceFactor float64            `json:"resource_factor"`
+	RareFactor     float64            `json:"rare_factor"`
+	ShipFactor     float64            `json:"ship_factor"`
+	DelayFactor    float64            `json:"delay_factor"`
+	LossShare      float64            `json:"loss_share"`
+	Weights        ExpeditionOutcomes `json:"weights"`
+}
+
+// ExpeditionOutcomes is the weighted table of what an expedition may bring
+// back. A weight of zero simply removes an outcome from the table.
+type ExpeditionOutcomes struct {
+	Resources int `json:"resources"`
+	Nothing   int `json:"nothing"`
+	Ships     int `json:"ships"`
+	Delay     int `json:"delay"`
+	Pirates   int `json:"pirates"`
+	Aliens    int `json:"aliens"`
+	Losses    int `json:"losses"`
+	Rare      int `json:"rare"`
+}
+
+// Total is the sum the draw is made on.
+func (o ExpeditionOutcomes) Total() int {
+	return o.Resources + o.Nothing + o.Ships + o.Delay + o.Pirates + o.Aliens + o.Losses + o.Rare
+}
+
 type ProtectionSettings struct {
 	BeginnerProtectionPoints int64   `json:"beginner_protection_points"`
 	MaximumPointRatio        float64 `json:"maximum_point_ratio"`
@@ -224,6 +256,13 @@ func Default() Ruleset {
 			Difficulty: "normal", ThinkIntervalSeconds: 300, ActivityStartHour: 8,
 			ActivityEndHour: 23, InitialDevelopmentLevel: 0, Coordination: .5,
 			Diplomacy: "dynamic",
+		},
+		Expedition: ExpeditionSettings{
+			Enabled: true, HoldHours: 1, ResourceFactor: .4, RareFactor: 1.2, ShipFactor: .2,
+			DelayFactor: .5, LossShare: .25,
+			Weights: ExpeditionOutcomes{
+				Resources: 30, Nothing: 25, Ships: 10, Delay: 10, Pirates: 10, Aliens: 5, Losses: 5, Rare: 5,
+			},
 		},
 		Protection: ProtectionSettings{
 			BeginnerProtectionPoints: 5000, MaximumPointRatio: 5,
@@ -355,6 +394,25 @@ func (r Ruleset) Validate() error {
 	if r.AI.ThinkIntervalSeconds <= 0 || r.AI.ActivityStartHour < 0 || r.AI.ActivityStartHour > 23 ||
 		r.AI.ActivityEndHour < 1 || r.AI.ActivityEndHour > 24 || r.AI.InitialDevelopmentLevel < 0 || !ratio(r.AI.Coordination) {
 		return errors.New("rules: invalid AI timing or coordination")
+	}
+	if r.Expedition.Enabled {
+		if r.Expedition.HoldHours <= 0 || r.Expedition.Weights.Total() <= 0 {
+			return errors.New("rules: an expedition needs a duration and a result table")
+		}
+		if !nonNegativeFinite(r.Expedition.ResourceFactor) || !nonNegativeFinite(r.Expedition.RareFactor) ||
+			!nonNegativeFinite(r.Expedition.ShipFactor) || !nonNegativeFinite(r.Expedition.DelayFactor) ||
+			!ratio(r.Expedition.LossShare) {
+			return errors.New("rules: invalid expedition factors")
+		}
+		for _, weight := range []int{
+			r.Expedition.Weights.Resources, r.Expedition.Weights.Nothing, r.Expedition.Weights.Ships,
+			r.Expedition.Weights.Delay, r.Expedition.Weights.Pirates, r.Expedition.Weights.Aliens,
+			r.Expedition.Weights.Losses, r.Expedition.Weights.Rare,
+		} {
+			if weight < 0 {
+				return errors.New("rules: an expedition weight cannot be negative")
+			}
+		}
 	}
 	if r.Protection.BeginnerProtectionPoints < 0 || r.Protection.MaximumPointRatio < 1 ||
 		r.Protection.AccountsPerInstallation <= 0 || r.Protection.InactiveAfterDays < 0 ||

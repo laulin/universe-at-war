@@ -8,23 +8,25 @@ import "time"
 type Mission string
 
 const (
-	MissionTransport Mission = "transport"
-	MissionDeploy    Mission = "deploy"
-	MissionAttack    Mission = "attack"
-	MissionEspionage Mission = "espionage"
-	MissionRecycle   Mission = "recycle"
-	MissionColonize  Mission = "colonize"
-	MissionHold      Mission = "hold"
-	MissionJump      Mission = "jump"
+	MissionTransport  Mission = "transport"
+	MissionDeploy     Mission = "deploy"
+	MissionAttack     Mission = "attack"
+	MissionEspionage  Mission = "espionage"
+	MissionRecycle    Mission = "recycle"
+	MissionColonize   Mission = "colonize"
+	MissionHold       Mission = "hold"
+	MissionExpedition Mission = "expedition"
+	MissionJump       Mission = "jump"
 )
 
 // SpeedClass selects the universe speed applied to a mission.
 type SpeedClass string
 
 const (
-	Peaceful   SpeedClass = "peaceful"
-	Hostile    SpeedClass = "hostile"
-	Stationary SpeedClass = "holding"
+	Peaceful      SpeedClass = "peaceful"
+	Hostile       SpeedClass = "hostile"
+	Stationary    SpeedClass = "holding"
+	Expeditionary SpeedClass = "expedition"
 )
 
 // TargetKind is the sort of body a mission aims at.
@@ -35,12 +37,14 @@ const (
 	TargetMoon   TargetKind = "moon"
 	TargetDebris TargetKind = "debris"
 	TargetEmpty  TargetKind = "empty"
+	TargetSpace  TargetKind = "space"
 )
 
 // Valid reports whether the mission is one this build knows.
 func (m Mission) Valid() bool {
 	switch m {
-	case MissionTransport, MissionDeploy, MissionAttack, MissionEspionage, MissionRecycle, MissionColonize, MissionHold:
+	case MissionTransport, MissionDeploy, MissionAttack, MissionEspionage, MissionRecycle,
+		MissionColonize, MissionHold, MissionExpedition:
 		return true
 	default:
 		return false
@@ -60,6 +64,8 @@ func (m Mission) SpeedClass() SpeedClass {
 		return Hostile
 	case MissionHold:
 		return Stationary
+	case MissionExpedition:
+		return Expeditionary
 	default:
 		return Peaceful
 	}
@@ -78,6 +84,8 @@ func (m Mission) Target() TargetKind {
 		return TargetDebris
 	case MissionColonize:
 		return TargetEmpty
+	case MissionExpedition:
+		return TargetSpace
 	default:
 		return TargetPlanet
 	}
@@ -87,6 +95,12 @@ func (m Mission) Target() TargetKind {
 // against it, and therefore waits there until its holding time is over.
 func (m Mission) Defends() bool {
 	return m == MissionHold
+}
+
+// Waits reports whether the fleet stays where it lands before coming home. A
+// stationing waits to defend, an expedition waits to see what it finds.
+func (m Mission) Waits() bool {
+	return m == MissionHold || m == MissionExpedition
 }
 
 // TargetsOwnBody reports whether the destination must belong to the player.

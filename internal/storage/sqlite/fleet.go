@@ -305,6 +305,10 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 		if err := colonySlotAvailable(ctx, tx, playerID, planet.Researches, planet.Rules); err != nil {
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, err
 		}
+	case domainfleet.TargetSpace:
+		if request.Target.Position != domainfleet.ExpeditionSlot(planet.Rules.Topology) {
+			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
+		}
 	case domainfleet.TargetDebris:
 		field, fieldErr := loadDebris(ctx, tx, request.Target)
 		if fieldErr != nil {
@@ -318,6 +322,10 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 	if err != nil {
 		return domainfleet.Plan{}, appeconomy.Planet{}, 0, err
 	}
+	expeditions, err := activeExpeditionCount(ctx, tx, playerID)
+	if err != nil {
+		return domainfleet.Plan{}, appeconomy.Planet{}, 0, err
+	}
 	plan, err := domainfleet.PlanLaunch(domainfleet.LaunchRequest{
 		Origin:      planet.Coordinate,
 		Target:      request.Target,
@@ -328,13 +336,14 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 		Percent:     request.Percent,
 		HoldUntil:   request.HoldUntil,
 	}, domainfleet.Context{
-		Catalogue:    r.catalogues.Units,
-		Levels:       planet.Researches,
-		Inventory:    planet.Units,
-		Stock:        planet.Stock,
-		ActiveFleets: active,
-		Rules:        planet.Rules,
-		Now:          now,
+		Catalogue:         r.catalogues.Units,
+		Levels:            planet.Researches,
+		Inventory:         planet.Units,
+		Stock:             planet.Stock,
+		ActiveFleets:      active,
+		ActiveExpeditions: expeditions,
+		Rules:             planet.Rules,
+		Now:               now,
 	})
 	if err != nil {
 		return domainfleet.Plan{}, appeconomy.Planet{}, 0, err

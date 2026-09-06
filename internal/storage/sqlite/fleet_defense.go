@@ -53,7 +53,7 @@ func (r *FleetRepository) beginHold(ctx context.Context, tx *sql.Tx, row fleetRo
 		return fmt.Errorf("fleet repository: schedule holding end: %w", err)
 	}
 	return logFleetEvent(ctx, tx, "fleet_holding", row.id, targetPlanetID, now,
-		fmt.Sprintf("json_object('holds_until', '%s')", timestamp(*row.holdsUntil)))
+		fmt.Sprintf("json_object('mission', '%s', 'holds_until', '%s')", row.mission, timestamp(*row.holdsUntil)))
 }
 
 // resolveHoldingEnd sends a stationed fleet home once its watch is over.
@@ -69,6 +69,10 @@ func (r *FleetRepository) resolveHoldingEnd(ctx context.Context, tx *sql.Tx, eve
 	if row.state != domainfleet.Holding {
 		// The fleet was destroyed defending, or already left.
 		return nil
+	}
+	if row.mission == domainfleet.MissionExpedition {
+		// The wait is what the trip was for: this is where the draw happens.
+		return r.resolveExpedition(ctx, tx, row, event.DueAt, now)
 	}
 	returnsAt := event.DueAt.Add(event.DueAt.Sub(row.arrivesAt))
 	if row.returnsAt != nil {

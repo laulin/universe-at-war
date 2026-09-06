@@ -67,11 +67,12 @@ type reportPageSummary struct {
 
 type reportPageData struct {
 	pageShell
-	Report    reportPageSummary
-	Espionage *report.EspionagePayload
-	Detected  *report.DetectedPayload
-	Combat    *report.CombatPayload
-	Recycling *report.RecyclingPayload
+	Report     reportPageSummary
+	Espionage  *report.EspionagePayload
+	Detected   *report.DetectedPayload
+	Combat     *report.CombatPayload
+	Recycling  *report.RecyclingPayload
+	Expedition *report.ExpeditionPayload
 }
 
 func (h *Handler) galaxyPage(response http.ResponseWriter, request *http.Request) {
@@ -290,6 +291,8 @@ func (h *Handler) reportPage(response http.ResponseWriter, request *http.Request
 		data.Combat = &payload
 	case report.RecyclingPayload:
 		data.Recycling = &payload
+	case report.ExpeditionPayload:
+		data.Expedition = &payload
 	}
 	h.render(response, http.StatusOK, "report", data)
 }
@@ -343,6 +346,8 @@ func reportKindName(kind report.Kind) string {
 		return "Rapport d'espionnage"
 	case report.EspionageDetected:
 		return "Espionnage détecté"
+	case report.Expedition:
+		return "Rapport d'expédition"
 	case report.CombatAttack:
 		return "Rapport d'attaque"
 	case report.CombatDefense:

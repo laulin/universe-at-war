@@ -55,6 +55,18 @@
     </dl>
     {{end}}
 
+    {{with .Expedition}}
+    <dl class="summary">
+      <dt>Position</dt><dd>{{.Position}}</dd>
+      <dt>Issue</dt><dd>{{.Outcome}} — {{.Story}}</dd>
+      <dt>Trouvaille</dt><dd>{{if .Found.Metal}}M {{.Found.Metal}} · C {{.Found.Crystal}} · D {{.Found.Deuterium}}{{else}}<span class="muted">rien</span>{{end}}</dd>
+      <dt>Vaisseaux ramenés</dt><dd>{{if .Gained}}{{range $id, $quantity := .Gained}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">aucun</span>{{end}}</dd>
+      <dt>Rencontre</dt><dd>{{if .Ambush}}{{range $id, $quantity := .Ambush}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">aucune</span>{{end}}</dd>
+      <dt>Pertes</dt><dd>{{if .Lost}}{{range $id, $quantity := .Lost}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">aucune</span>{{end}}</dd>
+      <dt>Retard</dt><dd>{{if .DelayedBy}}{{.DelayedBy}} s{{else}}<span class="muted">aucun</span>{{end}}</dd>
+    </dl>
+    {{end}}
+
     {{if not .Report.Own}}<p class="muted">Partagé par {{.Report.OwnerName}}.</p>{{else}}
     <form method="post" action="/reports/{{.Report.ID}}/share">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

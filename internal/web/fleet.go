@@ -444,6 +444,8 @@ func missionName(mission domainfleet.Mission) string {
 		return "Colonisation"
 	case domainfleet.MissionHold:
 		return "Défense alliée"
+	case domainfleet.MissionExpedition:
+		return "Expédition"
 	default:
 		return string(mission)
 	}
@@ -486,6 +488,10 @@ func fleetError(err error) string {
 		return "Cette composition ne convient pas à cette mission."
 	case errors.Is(err, domainfleet.ErrInvalidTarget):
 		return "Destination invalide pour cette mission."
+	case errors.Is(err, domainfleet.ErrNoExpeditionSlot):
+		return "Aucun emplacement d'expédition libre : développez l'astrophysique."
+	case errors.Is(err, domainfleet.ErrExpeditionsDisabled):
+		return "Les expéditions sont désactivées dans cet univers."
 	case errors.Is(err, domainfleet.ErrInvalidHold):
 		return "La fin de garde doit tomber après l'arrivée et dans la fenêtre autorisée."
 	case errors.Is(err, domainfleet.ErrInvalidSpeed):

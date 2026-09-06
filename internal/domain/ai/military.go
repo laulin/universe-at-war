@@ -65,18 +65,7 @@ func ShipRoleOf(definition unit.Definition) ShipRole {
 // measure, and it is meant to be: an artificial player estimates, it does not
 // resolve the fight in advance.
 func Strength(units map[unit.ID]int64, catalogue unit.Catalogue) int64 {
-	var total int64
-	for id, quantity := range units {
-		if quantity <= 0 {
-			continue
-		}
-		definition, known := catalogue.Definition(id)
-		if !known {
-			continue
-		}
-		total += quantity * (definition.Weapon + definition.Shield + definition.Hull())
-	}
-	return total
+	return catalogue.Strength(units)
 }
 
 // ScoreTarget grades what a report is worth to an archetype today.
