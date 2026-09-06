@@ -24,3 +24,16 @@ celui de l'application est refusé, comme un schéma SQLite venu du futur. Les
 champs inconnus restent interdits : ils ne peuvent venir que d'une application
 plus récente. Le contenu du jeu (bâtiments, recherches, unités) est identifié
 par `progression.catalogue_version`.
+
+## Réécriture d'une table référencée
+
+Une contrainte de table ne se supprime pas en place dans SQLite : il faut
+recréer la table, y recopier les lignes, supprimer l'ancienne et renommer la
+nouvelle. Or supprimer une table référencée avec les clés étrangères actives
+efface en cascade les lignes filles.
+
+Une migration qui commence par `-- migration: rebuild referenced table` est donc
+exécutée sur une connexion épinglée, clés étrangères désactivées le temps de la
+réécriture. Elle reste entièrement dans une transaction, et `foreign_key_check`
+est exécuté avant le commit : une réécriture qui laisserait une ligne orpheline
+est refusée. Les clés sont réactivées ensuite.

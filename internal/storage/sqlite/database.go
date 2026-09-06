@@ -198,6 +198,16 @@ type migration struct {
 	sql      string
 }
 
+// rebuildMarker opens a migration that rewrites a table other tables point at.
+// SQLite can only drop such a table with foreign key enforcement off, so the
+// runner turns it off around the migration and checks every key before the
+// commit. The rewrite itself stays inside the transaction.
+const rebuildMarker = "-- migration: rebuild referenced table"
+
+func (m migration) rebuildsReferencedTable() bool {
+	return strings.HasPrefix(m.sql, rebuildMarker)
+}
+
 type appliedMigration struct {
 	name     string
 	checksum string
@@ -277,7 +287,22 @@ func findMigration(migrations []migration, version int) (migration, bool) {
 }
 
 func applyMigration(ctx context.Context, database *sql.DB, migration migration) error {
-	transaction, err := database.BeginTx(ctx, nil)
+	// The pragma only takes effect outside a transaction, so the migration runs
+	// on one pinned connection: disable, rewrite, verify, commit, re-enable.
+	connection, err := database.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("sqlite: pin connection for migration %d: %w", migration.version, err)
+	}
+	defer func() { _ = connection.Close() }()
+
+	if migration.rebuildsReferencedTable() {
+		if _, err := connection.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+			return fmt.Errorf("sqlite: relax foreign keys for migration %d: %w", migration.version, err)
+		}
+		defer func() { _, _ = connection.ExecContext(ctx, "PRAGMA foreign_keys = ON") }()
+	}
+
+	transaction, err := connection.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("sqlite: begin migration %d: %w", migration.version, err)
 	}
@@ -285,6 +310,11 @@ func applyMigration(ctx context.Context, database *sql.DB, migration migration) 
 
 	if _, err := transaction.ExecContext(ctx, migration.sql); err != nil {
 		return fmt.Errorf("sqlite: apply migration %d: %w", migration.version, err)
+	}
+	if migration.rebuildsReferencedTable() {
+		if err := checkForeignKeys(ctx, transaction); err != nil {
+			return fmt.Errorf("sqlite: migration %d broke a foreign key: %w", migration.version, err)
+		}
 	}
 	if _, err := transaction.ExecContext(ctx, `
 		INSERT INTO schema_migrations(version, name, checksum, applied_at)
@@ -296,4 +326,17 @@ func applyMigration(ctx context.Context, database *sql.DB, migration migration) 
 		return fmt.Errorf("sqlite: commit migration %d: %w", migration.version, err)
 	}
 	return nil
+}
+
+// checkForeignKeys refuses to commit a rewrite that left an orphan row behind.
+func checkForeignKeys(ctx context.Context, transaction *sql.Tx) error {
+	rows, err := transaction.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return errors.New("a row no longer points at an existing parent")
+	}
+	return rows.Err()
 }
