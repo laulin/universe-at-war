@@ -203,3 +203,42 @@ func scanSetupDraft(row rowScanner) (appsetup.StoredDraft, error) {
 	}
 	return stored, nil
 }
+
+// Replace writes a whole ruleset into the draft without moving the wizard:
+// loading a profile or importing a document changes what is configured, not
+// where the administrator stands in the questions.
+func (r *SetupRepository) Replace(ctx context.Context, actorID, expectedVersion int64,
+	document []byte, now time.Time) (appsetup.StoredDraft, error) {
+	var stored appsetup.StoredDraft
+	err := withWriteTx(ctx, r.write, "setup repository: replace", func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `
+			UPDATE setup_drafts
+			SET document = ?, version = version + 1, updated_at = ?
+			WHERE id = 1 AND status = 'draft' AND version = ?
+		`, string(document), timestamp(now), expectedVersion)
+		if err != nil {
+			return fmt.Errorf("setup repository: replace draft: %w", err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("setup repository: inspect replace: %w", err)
+		}
+		if affected != 1 {
+			return appsetup.ErrConflict
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO audit_log(actor_account_id, action, target_type, target_id, occurred_at, details)
+			VALUES (?, 'setup_ruleset_replaced', 'setup', '1', ?, json_object())
+		`, actorID, timestamp(now)); err != nil {
+			return fmt.Errorf("setup repository: audit replace: %w", err)
+		}
+		stored, err = scanSetupDraft(tx.QueryRowContext(ctx, `
+			SELECT document, current_step, version FROM setup_drafts WHERE id = 1
+		`))
+		return err
+	})
+	if err != nil {
+		return appsetup.StoredDraft{}, err
+	}
+	return stored, nil
+}

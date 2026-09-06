@@ -69,6 +69,11 @@ type setupService interface {
 	Load(context.Context, appauth.Principal) (appsetup.Draft, error)
 	Save(context.Context, appauth.Principal, int, int64, rules.Ruleset) (appsetup.Draft, error)
 	Activate(context.Context, appauth.Principal, int64, rules.Ruleset) error
+	Profiles(context.Context, appauth.Principal) ([]rules.Profile, error)
+	Apply(context.Context, appauth.Principal, int64, string) (appsetup.Draft, error)
+	Import(context.Context, appauth.Principal, int64, []byte) (appsetup.Draft, error)
+	Export(context.Context, appauth.Principal) ([]byte, error)
+	Differences(context.Context, appauth.Principal) ([]rules.Difference, error)
 }
 
 type registrationService interface {
@@ -182,7 +187,7 @@ type Handler struct {
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
 	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "admin-ai", "admin-ai-detail"}
-	plainPages = []string{"login", "password-change", "empire", "setup", "register"}
+	plainPages = []string{"login", "password-change", "empire", "setup", "register", "profiles"}
 )
 
 // parsePages clones the right base template per page so that every page may
@@ -258,6 +263,10 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /password/change", handler.passwordChangePage)
 	handler.mux.HandleFunc("POST /password/change", handler.passwordChange)
 	handler.mux.HandleFunc("POST /logout", handler.logout)
+	handler.mux.HandleFunc("GET /setup/profiles", handler.profilesPage)
+	handler.mux.HandleFunc("POST /setup/profiles", handler.applyProfile)
+	handler.mux.HandleFunc("POST /setup/import", handler.importProfile)
+	handler.mux.HandleFunc("GET /setup/export", handler.exportProfile)
 	handler.mux.HandleFunc("GET /setup/{step}", handler.setupPage)
 	handler.mux.HandleFunc("POST /setup/{step}", handler.saveSetupStep)
 	handler.mux.HandleFunc("POST /empire", handler.createEmpire)

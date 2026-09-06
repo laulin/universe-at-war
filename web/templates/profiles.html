@@ -1,0 +1,62 @@
+{{define "title"}}Profils de règles{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="profiles-title">
+    <p class="eyebrow">Configuration de l'univers</p>
+    <h2 id="profiles-title">Profils de règles</h2>
+    <p>Un profil remplace toute la configuration en cours. Rien n'est appliqué à
+    l'univers tant que vous ne l'avez pas démarré : vous revenez ensuite aux
+    <a href="/setup/{{if .Step}}{{.Step}}{{else}}1{{end}}">étapes de configuration</a>.</p>
+
+    <h3 id="choose-title">Choisir un profil</h3>
+    <table class="bodies" aria-labelledby="choose-title">
+      <thead><tr><th scope="col">Profil</th><th scope="col">Ce qu'il change</th><th scope="col">Action</th></tr></thead>
+      <tbody>
+      {{range .Profiles}}
+        <tr>
+          <th scope="row">{{.Name}}</th>
+          <td>{{.Description}}</td>
+          <td>
+            <form method="post" action="/setup/profiles">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <input type="hidden" name="version" value="{{$.Version}}">
+              <input type="hidden" name="profile" value="{{.ID}}">
+              <button type="submit">Charger</button>
+            </form>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+
+    <h3 id="diff-title">Écarts avec les règles de référence</h3>
+    {{if .Differences}}
+    <p class="muted">{{len .Differences}} réglages diffèrent de la référence de cette version.</p>
+    <table class="bodies" aria-labelledby="diff-title">
+      <thead><tr><th scope="col">Réglage</th><th scope="col">Référence</th><th scope="col">Configuré</th></tr></thead>
+      <tbody>
+      {{range .Differences}}
+        <tr><th scope="row">{{.Path}}</th><td>{{.Before}}</td><td>{{.After}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">La configuration est identique aux règles de référence.</p>{{end}}
+
+    <h3 id="import-title">Importer une configuration</h3>
+    <form method="post" action="/setup/import" aria-labelledby="import-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="version" value="{{.Version}}">
+      <label for="document">Document de règles</label>
+      <textarea id="document" name="document" rows="6" required></textarea>
+      <button type="submit">Importer</button>
+    </form>
+    <p class="muted">Un document venu d'une version plus récente, incomplet ou
+    invalide est refusé sans rien changer.</p>
+
+    <h3 id="export-title">Exporter</h3>
+    <p><a href="/setup/export">Télécharger la configuration en cours</a></p>
+    <details>
+      <summary>Voir le document</summary>
+      <pre>{{.Document}}</pre>
+    </details>
+  </section>
+{{end}}

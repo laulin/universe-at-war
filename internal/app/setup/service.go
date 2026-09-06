@@ -38,6 +38,7 @@ type StoredDraft struct {
 type Repository interface {
 	LoadOrCreate(context.Context, int64, []byte, time.Time) (StoredDraft, error)
 	Save(context.Context, int64, int, int64, []byte, time.Time) (StoredDraft, error)
+	Replace(context.Context, int64, int64, []byte, time.Time) (StoredDraft, error)
 	Activate(context.Context, int64, int64, []byte, string, time.Time) error
 }
 
@@ -124,4 +125,78 @@ func decodeDraft(stored StoredDraft) (Draft, error) {
 		return Draft{}, err
 	}
 	return Draft{Rules: configured, CurrentStep: stored.CurrentStep, Version: stored.Version}, nil
+}
+
+// ErrInvalidDocument is returned when an imported ruleset cannot be read or
+// would not be accepted by this build.
+var ErrInvalidDocument = errors.New("setup: this document is not a ruleset this build accepts")
+
+// Profiles lists the starting points this build carries.
+func (s Service) Profiles(ctx context.Context, principal appauth.Principal) ([]rules.Profile, error) {
+	if err := s.authorize(principal); err != nil {
+		return nil, err
+	}
+	return rules.Profiles(), nil
+}
+
+// Apply replaces the whole draft with a named profile. It goes through the same
+// validation as any other change, and it never advances the wizard by itself.
+func (s Service) Apply(ctx context.Context, principal appauth.Principal, expectedVersion int64, id string) (Draft, error) {
+	if err := s.authorize(principal); err != nil {
+		return Draft{}, err
+	}
+	profile, err := rules.ProfileByID(id)
+	if err != nil {
+		return Draft{}, err
+	}
+	return s.replace(ctx, principal, expectedVersion, profile.Rules)
+}
+
+// Import reads a ruleset document written elsewhere. A document of a future
+// schema, a corrupt one or one this build would refuse is rejected whole: the
+// draft is never left half changed.
+func (s Service) Import(ctx context.Context, principal appauth.Principal, expectedVersion int64, document []byte) (Draft, error) {
+	if err := s.authorize(principal); err != nil {
+		return Draft{}, err
+	}
+	configured, err := rules.Decode(document)
+	if err != nil {
+		return Draft{}, errors.Join(ErrInvalidDocument, err)
+	}
+	return s.replace(ctx, principal, expectedVersion, configured)
+}
+
+// Export writes the current draft as a document another universe could read.
+func (s Service) Export(ctx context.Context, principal appauth.Principal) ([]byte, error) {
+	draft, err := s.Load(ctx, principal)
+	if err != nil {
+		return nil, err
+	}
+	return rules.Encode(draft.Rules)
+}
+
+// Differences lists what the draft changes against the reference of this build.
+// It is what an administrator reads before starting a universe.
+func (s Service) Differences(ctx context.Context, principal appauth.Principal) ([]rules.Difference, error) {
+	draft, err := s.Load(ctx, principal)
+	if err != nil {
+		return nil, err
+	}
+	return rules.Compare(rules.Default(), draft.Rules)
+}
+
+// replace writes a whole ruleset into the draft, keeping the wizard where it is.
+func (s Service) replace(ctx context.Context, principal appauth.Principal, expectedVersion int64, configured rules.Ruleset) (Draft, error) {
+	if err := catalogue.ValidateRuleset(configured); err != nil {
+		return Draft{}, errors.Join(ErrInvalidDocument, err)
+	}
+	document, err := rules.Encode(configured)
+	if err != nil {
+		return Draft{}, err
+	}
+	stored, err := s.Repository.Replace(ctx, principal.AccountID, expectedVersion, document, s.Clock.Now().UTC())
+	if err != nil {
+		return Draft{}, err
+	}
+	return decodeDraft(stored)
 }
