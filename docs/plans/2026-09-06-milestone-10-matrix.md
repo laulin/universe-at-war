@@ -9,22 +9,22 @@ approximation silencieuse : il n'y en a aucune ici. Les lignes marquées
 
 | Exigence | Où | Preuve |
 | --- | --- | --- |
-| Mission, durée, emplacement et conditions explicites | `internal/domain/fleet`, `docs/rules/expeditions.md` | `TestExpeditionNeedsASlotAndAHold` |
+| Mission, durée, emplacement et conditions explicites | `internal/domain/fleet`, `docs/rules/expeditions.md` | `TestExpeditionsAreBoundedBySlotsAndHold` |
 | Table de résultats configurable et pondérée | `internal/domain/expedition`, `rules.ExpeditionSettings` | `TestOutcomeTableFollowsItsWeights` |
-| Tirage déterministe à seed persistée | `fleets.seed`, `internal/domain/expedition` | `TestTheSameSeedGivesTheSameExpedition` |
-| Application atomique et retour programmé | `internal/storage/sqlite/fleet_missions.go` | `TestExpeditionAppliesItsOutcomeOnce` |
-| Rapport immuable | table `reports`, kind `expedition` | `TestExpeditionWritesOneReport` |
-| Limites empêchant de remplacer le PvP | emplacements d'astrophysique, plafond de soute | `TestExpeditionFindIsCappedByTheHold` |
+| Tirage déterministe à seed persistée | `fleets.seed`, `internal/domain/expedition` | `TestTheSameSeedGivesTheSameExpeditionOutcome` |
+| Application atomique et retour programmé | `internal/storage/sqlite/expedition.go` | `TestExpeditionFliesWaitsAndComesBack` |
+| Rapport immuable | table `reports`, kind `expedition` | `TestExpeditionFliesWaitsAndComesBack` |
+| Limites empêchant de remplacer le PvP | emplacements d'astrophysique, plafond de soute | `TestExpeditionsAreBoundedBySlotsAndHold` |
 
 ## 2. Profils de règles (spec §10-11, brief 2)
 
 | Exigence | Où | Preuve |
 | --- | --- | --- |
-| Profils fournis (classique, lent, accéléré, conflit, coopératif, PvPvE) | `internal/domain/rules/profiles.go` | `TestEveryProfileIsValid` |
-| Charger, sauvegarder, comparer, importer, exporter avec version | `internal/app/setup`, `internal/web/setup*` | `TestProfileImportExportRoundTrip` |
-| Aperçu des différences avant activation | page de configuration | `TestProfileComparisonListsDifferences` |
-| Validateur unique partagé | `catalogue.Validate` (existant) | `TestImportUsesTheSameValidator` |
-| Non-rétroactivité | `ruleset_version` capturée par événement (existant) | `TestScenarioJRulesetChangeIsNotRetroactive` |
+| Profils fournis (classique, lent, accéléré, conflit, coopératif, PvPvE) | `internal/domain/rules/profiles.go` | `TestEveryProfileIsValidAndDistinct` |
+| Charger, sauvegarder, comparer, importer, exporter avec version | `internal/app/setup`, `/setup/profiles` | `TestProfilesLoadCompareImportAndExport` |
+| Aperçu des différences avant activation | `/setup/profiles` | `TestWebProfilePageShowsTheDifferencesBeforeActivation` |
+| Validateur unique partagé | `catalogue.ValidateRuleset` | `TestACorruptOrFutureDocumentChangesNothing` |
+| Non-rétroactivité | `ruleset_version` capturée par événement | `TestScenarioJRulesetChangeKeepsRunningFleetsUnchanged` |
 
 ## 3. Inscriptions (spec §36, brief 3)
 
@@ -40,10 +40,10 @@ approximation silencieuse : il n'y en a aucune ici. Les lignes marquées
 
 | Exigence | Où | Preuve |
 | --- | --- | --- |
-| Tableau de bord (état, DB, backlog, débit, joueurs, erreurs, ruleset) | `/admin` | `TestAdminDashboardShowsTheHealthOfTheUniverse` |
-| Gestion comptes, rôles et statuts | `/admin/accounts` | `TestAdministratorManagesAccountsAndRoles` |
-| Avertissement permanent si l'admin joue | bandeau de la page d'administration | `TestAdministratorPlayingIsWarned` |
-| Modérateur limité aux joueurs et aux sanctions | `internal/app/moderation` | `TestModeratorCannotTouchAdministration` |
+| Tableau de bord (état, DB, backlog, débit, joueurs, erreurs, ruleset) | `/admin` | `TestDashboardShowsTheHealthOfTheUniverse` |
+| Gestion comptes, rôles et statuts | `/admin` | `TestDashboardShowsTheHealthOfTheUniverse` |
+| Avertissement permanent si l'admin joue | bandeau de la page d'administration | `TestWebAdministrationIsReservedAndWarnsAPlayingAdministrator` |
+| Modérateur limité aux joueurs et aux sanctions | `internal/app/moderation` | `TestModeratorCannotReachAdministration` |
 | Ban avec durée, justification, levée et audit | `internal/app/moderation`, table `bans` | `TestScenarioIBanBlocksLoginNotEmpire` |
 | Un ban n'arrête pas l'empire | aucune action sur les files | `TestScenarioIBanBlocksLoginNotEmpire` |
 
@@ -51,12 +51,12 @@ approximation silencieuse : il n'y en a aucune ici. Les lignes marquées
 
 | Exigence | Où | Preuve |
 | --- | --- | --- |
-| Commande `backup` et action admin | `internal/cli`, `/admin` | `TestBackupProducesARestorableCopy` |
-| Nom horodaté, intégrité vérifiée | `internal/storage/sqlite/backup.go` | `TestBackupProducesARestorableCopy` |
+| Commande `backup` et action admin | `internal/cli`, `/admin` | `TestBackupProducesAVerifiedRestorableCopy` |
+| Nom horodaté, intégrité vérifiée | `internal/storage/sqlite/backup.go` | `TestBackupProducesAVerifiedRestorableCopy` |
 | Rétention optionnelle | option `--keep` | `TestBackupRetentionKeepsTheNewest` |
-| `doctor` étendu (écriture, WAL, permissions, ruleset) | `internal/cli` | `TestDoctorChecksWritabilityAndRuleset` |
-| Refus d'une sauvegarde d'un schéma futur | `Database.Migrate` (existant) + `doctor` | `TestDoctorRefusesAFutureSchema` |
-| Procédure de restauration documentée | `docs/operations/release.md` | revue documentaire |
+| `doctor` étendu (écriture, WAL, clés étrangères, ruleset) | `internal/cli`, `Database.Diagnose` | `TestBackupProducesAVerifiedRestorableCopy` |
+| Refus d'une sauvegarde d'un schéma futur | `VerifyBackup`, `doctor` | `TestABackupFromAFutureSchemaIsRefused` |
+| Procédure de restauration documentée | `docs/operations/backups.md` | revue documentaire |
 
 ## 6. UX et accessibilité (spec §52-54, brief 6)
 
@@ -81,7 +81,7 @@ livré à moitié.
 | Exigence | Où | Preuve |
 | --- | --- | --- |
 | Métriques internes, lisibles sur `/admin/metrics` | `internal/observability/metrics.go` | `TestMetricsCountWhatWentThroughAndNothingElse` |
-| Logs corrélés sans secrets | `internal/web/middleware.go` (existant) | `TestRequestLoggerCorrelatesWithoutLeakingSecrets` |
+| Logs et compteurs sans secrets | `internal/web/middleware.go`, `internal/observability` | `TestRequestLoggerCorrelatesWithoutLeakingSecrets`, `TestLogsAndCountersNeverCarryASecret` |
 | Bancs production, événements, combat, galaxie, IA | `tests/*_bench_test.go`, `internal/domain/*` | `docs/operations/performance.md` |
 | Aucune boucle active au repos | `Worker` (existant) | `TestScheduleKeepsTheWorkerAsleepBetweenReflections` |
 | Budgets documentés | `docs/operations/performance.md` | revue documentaire |
@@ -100,4 +100,4 @@ livré à moitié.
 | G ACS | `TestScenarioGGroupedAttackIsOneBattle` |
 | H IA hors ligne | `TestScenarioHAnOfflineArtificialPlayerReactsLegitimately` |
 | I modération | `TestScenarioIBanBlocksLoginNotEmpire` |
-| J ruleset non rétroactif | `TestScenarioJRulesetChangeIsNotRetroactive` |
+| J ruleset non rétroactif | `TestScenarioJRulesetChangeKeepsRunningFleetsUnchanged` |
