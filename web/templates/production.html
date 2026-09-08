@@ -5,7 +5,7 @@
     <div class="section-bar"><h2 id="production-title">{{.Title}}</h2></div>
     <div class="card-grid">
     {{range .Choices}}
-      <article class="card{{if not .CanOrder}} card--locked{{end}}">
+      <article class="card{{if not .Offered}} card--locked{{end}}">
         <div class="card__art">
           <img src="/art/{{$.Family}}/{{.ID}}" alt="" width="160" height="120" loading="lazy">
           {{if .Owned}}<span class="card__badge">{{figure .Owned}}</span>{{end}}
@@ -35,13 +35,15 @@
             {{if .Suffers}}<p class="card__volleys">Subit</p>
             <ul>{{range .Suffers}}<li>{{.Name}} <b>×{{.Shots}}</b></li>{{end}}</ul>{{end}}
           </div>
-          {{if .CanOrder}}
-          <form method="post" action="/planets/{{$.Planet.ID}}/{{$.Action}}/{{.ID}}">
+          {{if .Offered}}
+          <form method="post" action="/planets/{{$.Planet.ID}}/{{$.Action}}/{{.ID}}"{{if .AwaitingResources}} data-cost-metal="{{.CostMetal}}" data-cost-crystal="{{.CostCrystal}}" data-cost-deuterium="{{.CostDeuterium}}"{{end}}{{if .AwaitingResources}} data-ceiling="{{.OrderCeiling}}"{{end}}>
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
-            <label for="quantity-{{.ID}}">Quantité (max {{figure .Maximum}})</label>
-            <input id="quantity-{{.ID}}" name="quantity" type="number" min="1" max="{{.Maximum}}" value="1" required>
-            <button type="submit">Produire</button>
+            <label for="quantity-{{.ID}}">Quantité{{if not .AwaitingResources}} (max {{figure .Maximum}}){{end}}</label>
+            <input id="quantity-{{.ID}}" name="quantity" type="number" min="1"
+                   max="{{if .AwaitingResources}}{{.OrderCeiling}}{{else}}{{.Maximum}}{{end}}"
+                   value="1" required{{if .AwaitingResources}} disabled{{end}}>
+            <button type="submit"{{if .AwaitingResources}} disabled{{end}}>Produire</button>
           </form>
           {{else}}<p class="muted">{{.Reason}}</p>{{end}}
         </div>

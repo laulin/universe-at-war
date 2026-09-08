@@ -23,7 +23,7 @@
       <div class="resource-bar__item">
         <img src="/art/resource/{{.Slug}}" alt="" width="26" height="26">
         <div>
-          <span class="stat-value res-{{.Slug}}{{if .Full}} is-full{{end}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</span>
+          <span class="stat-value res-{{.Slug}}{{if .Full}} is-full{{end}}" data-resource="{{.Slug}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</span>
           <small>{{.Label}}{{if .Unbounded}} · sans limite{{else}} · {{figure .Capacity}}{{end}}{{if .Rate}} · {{signed .Rate}}/h{{end}}</small>
           {{if not .Unbounded}}<meter value="{{.Amount}}" min="0" max="{{.Capacity}}" low="{{.Low}}" high="{{.High}}" optimum="0" aria-label="Remplissage {{.Label}}"></meter>{{end}}
         </div>

@@ -20,18 +20,19 @@ import (
 
 // researchPageChoice is one research prepared for display.
 type researchPageChoice struct {
-	ID             research.ID
-	Name           string
-	Level          int
-	TargetLevel    int
-	CostMetal      int64
-	CostCrystal    int64
-	CostDeuterium  int64
-	Energy         int64
-	Duration       time.Duration
-	CanStart       bool
-	Reason         string
-	IdempotencyKey string
+	ID                research.ID
+	Name              string
+	Level             int
+	TargetLevel       int
+	CostMetal         int64
+	CostCrystal       int64
+	CostDeuterium     int64
+	Energy            int64
+	Duration          time.Duration
+	Offered           bool
+	AwaitingResources bool
+	Reason            string
+	IdempotencyKey    string
 }
 
 type researchPageData struct {
@@ -51,15 +52,19 @@ type unitPageVolley struct {
 
 // unitPageChoice is one unit prepared for display.
 type unitPageChoice struct {
-	ID             unit.ID
-	Name           string
-	Owned          int64
-	CostMetal      int64
-	CostCrystal    int64
-	CostDeuterium  int64
-	Duration       time.Duration
-	Maximum        int64
-	CanOrder       bool
+	ID                unit.ID
+	Name              string
+	Owned             int64
+	CostMetal         int64
+	CostCrystal       int64
+	CostDeuterium     int64
+	Duration          time.Duration
+	Maximum           int64
+	Offered           bool
+	AwaitingResources bool
+	// OrderCeiling is the largest batch the domain accepts, which is what the
+	// page counts down from when it works out what the stock covers.
+	OrderCeiling   int64
 	Reason         string
 	IdempotencyKey string
 	// What the unit is worth in a battle. Speed is zero for whatever has no
@@ -147,7 +152,10 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 			TargetLevel: choice.Plan.TargetLevel, CostMetal: choice.Plan.Cost.Metal,
 			CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
 			Energy: choice.Plan.Energy, Duration: choice.Plan.Duration,
-			CanStart: choice.Available && choice.Affordable,
+			Offered: choice.Available,
+			// Energy never fills on its own, so a research short of it is not
+			// something the page may lift however long it waits.
+			AwaitingResources: choice.Available && !choice.Affordable && !choice.EnergyShort,
 			Reason: choiceReason(choice.Missing, choice.Reason,
 				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength,
 				choice.Available && !choice.Affordable),
@@ -274,8 +282,10 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 			ID: choice.Definition.ID, Name: unitName(choice.Definition.ID), Owned: choice.Owned,
 			CostMetal: choice.UnitCost.Metal, CostCrystal: choice.UnitCost.Crystal,
 			CostDeuterium: choice.UnitCost.Deuterium, Duration: choice.UnitDuration,
-			Maximum:  choice.MaximumAffordable,
-			CanOrder: choice.Available && choice.MaximumAffordable > 0,
+			Maximum:           choice.MaximumAffordable,
+			Offered:           choice.Available,
+			AwaitingResources: choice.Available && choice.MaximumAffordable == 0,
+			OrderCeiling:      unit.MaximumOrderQuantity,
 			Reason: choiceReason(choice.Missing, choice.Reason,
 				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength,
 				choice.Available && choice.MaximumAffordable == 0),

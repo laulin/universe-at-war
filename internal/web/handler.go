@@ -848,15 +848,19 @@ type buildingPageChoice struct {
 	Name string
 	// Level is what the body has built; TargetLevel is what the button orders,
 	// which the queue may already have pushed further ahead.
-	Level          int
-	TargetLevel    int
-	CostMetal      int64
-	CostCrystal    int64
-	CostDeuterium  int64
-	Duration       time.Duration
-	CanStart       bool
-	Reason         string
-	IdempotencyKey string
+	Level         int
+	TargetLevel   int
+	CostMetal     int64
+	CostCrystal   int64
+	CostDeuterium int64
+	Duration      time.Duration
+	// Offered says the card carries a form at all. AwaitingResources says that
+	// form is there but disabled, because the only thing missing is a stock the
+	// planet is already filling: the page lifts it when the figures meet.
+	Offered           bool
+	AwaitingResources bool
+	Reason            string
+	IdempotencyKey    string
 }
 
 type overviewPageData struct {
@@ -918,7 +922,8 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 			ID: choice.Definition.ID, Name: buildingName(choice.Definition.ID), Level: choice.Level,
 			TargetLevel: choice.Plan.TargetLevel,
 			CostMetal:   choice.Plan.Cost.Metal, CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
-			Duration: choice.Plan.Duration, CanStart: choice.Available && choice.Affordable,
+			Duration: choice.Plan.Duration,
+			Offered:  choice.Available, AwaitingResources: choice.Available && !choice.Affordable,
 			Reason: reason, IdempotencyKey: fmt.Sprintf("%s:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
 		})
 	}

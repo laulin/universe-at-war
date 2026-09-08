@@ -40,7 +40,9 @@
   const countdowns = Array.from(document.querySelectorAll("time[data-countdown]"));
   const bars = Array.from(document.querySelectorAll("progress[data-progress]"));
   const counters = Array.from(document.querySelectorAll("[data-stock]"));
-  if (countdowns.length === 0 && bars.length === 0 && counters.length === 0) {
+  // A form the server disabled for want of resources, and the price it waits for.
+  const awaiting = Array.from(document.querySelectorAll("form[data-cost-metal]"));
+  if (countdowns.length === 0 && bars.length === 0 && counters.length === 0 && awaiting.length === 0) {
     return;
   }
 
@@ -86,6 +88,7 @@
     // extrapolating rather than leaving still. It is an estimate and stays one:
     // a debit the page never heard of is only settled by the next load.
     const elapsed = (now - origin) / 1000;
+    const onHand = {};
     for (const counter of counters) {
       const stock = Number(counter.dataset.stock);
       const rate = Number(counter.dataset.rate);
@@ -106,6 +109,46 @@
       const gauge = counter.parentElement && counter.parentElement.querySelector("meter");
       if (gauge) {
         gauge.value = value;
+      }
+      // Only the bar of the body being looked at is what an order spends.
+      if (counter.dataset.resource) {
+        onHand[counter.dataset.resource] = value;
+      }
+    }
+    // A card the server disabled for want of resources is lifted the second the
+    // stock is there, or the bar would say the price is met while the card kept
+    // refusing. The page decides nothing the server will not check again when
+    // the order arrives; it only stops standing in the way.
+    for (const form of awaiting) {
+      let batch = Number(form.dataset.ceiling) || 1;
+      let covered = true;
+      for (const [slug, price] of [
+        ["metal", form.dataset.costMetal],
+        ["crystal", form.dataset.costCrystal],
+        ["deuterium", form.dataset.costDeuterium],
+      ]) {
+        const cost = Number(price);
+        if (!Number.isFinite(cost) || cost <= 0) {
+          continue;
+        }
+        const held = onHand[slug];
+        if (!Number.isFinite(held) || held < cost) {
+          covered = false;
+          break;
+        }
+        batch = Math.min(batch, Math.floor(held / cost));
+      }
+      if (!covered) {
+        continue;
+      }
+      for (const field of form.querySelectorAll("[disabled]")) {
+        field.disabled = false;
+      }
+      // The quantity a batch may reach grows with the stock, so it is kept in
+      // step rather than frozen at whatever it was when the button was lifted.
+      const quantity = form.querySelector('input[type="number"]');
+      if (quantity && form.dataset.ceiling) {
+        quantity.max = String(batch);
       }
     }
     if (passed) {

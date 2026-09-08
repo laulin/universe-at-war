@@ -77,8 +77,11 @@ type Choice struct {
 	Plan       research.Plan
 	Available  bool
 	Affordable bool
-	Missing    []prerequisite.Requirement
-	Reason     string
+	// EnergyShort separates the two ways of not affording a research. A store
+	// fills on its own and a page may wait for it; the energy balance does not.
+	EnergyShort bool
+	Missing     []prerequisite.Requirement
+	Reason      string
 }
 
 // Overview is the research page projection.
@@ -134,8 +137,8 @@ func (s Service) Overview(ctx context.Context, principal appauth.Principal, plan
 		if err == nil {
 			choice.Plan = plan
 			choice.Available = available
-			choice.Affordable = state.Planet.Stock.Covers(plan.Cost) &&
-				availableEnergy(state.Planet) >= plan.Energy
+			choice.EnergyShort = availableEnergy(state.Planet) < plan.Energy
+			choice.Affordable = state.Planet.Stock.Covers(plan.Cost) && !choice.EnergyShort
 		} else if len(choice.Missing) == 0 {
 			choice.Reason = err.Error()
 		}

@@ -5,7 +5,7 @@
     <div class="section-bar"><h2 id="buildings-title">Infrastructure planétaire</h2></div>
     <div class="card-grid">
     {{range .Choices}}
-      <article class="card{{if not .CanStart}} card--locked{{end}}">
+      <article class="card{{if not .Offered}} card--locked{{end}}">
         <div class="card__art">
           <img src="/art/building/{{.ID}}" alt="" width="160" height="120" loading="lazy">
           <span class="card__badge">{{.Level}}</span>
@@ -20,11 +20,11 @@
           </p>
           <p class="muted">{{.Duration}}</p>
           {{end}}
-          {{if .CanStart}}
-          <form method="post" action="/planets/{{$.Planet.ID}}/buildings/{{.ID}}">
+          {{if .Offered}}
+          <form method="post" action="/planets/{{$.Planet.ID}}/buildings/{{.ID}}"{{if .AwaitingResources}} data-cost-metal="{{.CostMetal}}" data-cost-crystal="{{.CostCrystal}}" data-cost-deuterium="{{.CostDeuterium}}"{{end}}>
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
-            <button type="submit">Construire</button>
+            <button type="submit"{{if .AwaitingResources}} disabled{{end}}>Construire</button>
           </form>
           {{else}}<p class="muted">{{.Reason}}</p>{{end}}
         </div>
