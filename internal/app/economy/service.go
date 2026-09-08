@@ -11,6 +11,7 @@ import (
 	"universeatwar/internal/domain/building"
 	domainclock "universeatwar/internal/domain/clock"
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/prerequisite"
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/unit"
@@ -70,7 +71,10 @@ type BuildingChoice struct {
 	Plan       building.Plan
 	Available  bool
 	Affordable bool
-	Reason     string
+	// Missing names the prerequisites the planet has not met, so the caller can
+	// say so in its own words instead of showing a raw error.
+	Missing []prerequisite.Requirement
+	Reason  string
 }
 
 // Repository is the atomic persistence boundary for economic use cases.
@@ -143,14 +147,19 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 		return Planet{}, nil, err
 	}
 	choices := make([]BuildingChoice, 0, len(s.Catalogue.DefinitionsFor(planet.Kind)))
+	requirements := prerequisite.State{
+		Buildings:  planet.Levels.Generic(),
+		Researches: planet.Researches.Generic(),
+	}
 	for _, definition := range s.Catalogue.DefinitionsFor(planet.Kind) {
 		choice := BuildingChoice{Definition: definition, Level: planet.Levels[definition.ID]}
+		choice.Missing = prerequisite.Unmet(definition.Prerequisites, requirements)
 		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Kind, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
 		if planErr == nil {
 			choice.Plan = plan
 			choice.Available = planet.ActiveQueue == nil
 			choice.Affordable = planet.Stock.Covers(plan.Cost)
-		} else {
+		} else if len(choice.Missing) == 0 {
 			choice.Reason = planErr.Error()
 		}
 		choices = append(choices, choice)

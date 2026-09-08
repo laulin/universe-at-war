@@ -886,12 +886,8 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	}
 	views := make([]buildingPageChoice, 0, len(choices))
 	for _, choice := range choices {
-		reason := choice.Reason
-		if planet.ActiveQueue != nil {
-			reason = "Une construction est déjà en cours."
-		} else if choice.Available && !choice.Affordable {
-			reason = "Ressources insuffisantes."
-		}
+		reason := choiceReason(choice.Missing, choice.Reason,
+			planet.ActiveQueue != nil, choice.Available && !choice.Affordable)
 		views = append(views, buildingPageChoice{
 			ID: choice.Definition.ID, Name: buildingName(choice.Definition.ID), Level: choice.Level,
 			CostMetal: choice.Plan.Cost.Metal, CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
