@@ -273,6 +273,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		mux:             http.NewServeMux(),
 	}
 	handler.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
+	handler.mux.HandleFunc("GET /art/{category}/{slug}", handler.art)
 	handler.mux.HandleFunc("GET /healthz", handler.health)
 	handler.mux.HandleFunc("GET /login", handler.loginPage)
 	handler.mux.HandleFunc("GET /register", handler.registerPage)
