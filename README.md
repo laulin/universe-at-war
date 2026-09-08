@@ -93,6 +93,14 @@ qu'au chargement suivant, que la page réclame d'elle-même dès qu'un compte à
 rebours expire. Sans JavaScript, les chiffres restent ceux que le serveur a
 rendus, donc justes à l'instant du chargement.
 
+Les cartes suivent le même mouvement. Une construction à laquelle il ne manque
+que des ressources porte son bouton dès le rendu, désactivé, et la page le lève
+à la seconde où le compte y est ; au chantier elle recalcule aussi la taille du
+lot que le stock couvre. Un prérequis manquant, lui, ne se lève jamais tout
+seul, pas plus qu'un manque d'énergie, qui ne se remplit pas avec le temps. Le
+serveur revérifie tout à la commande : la page ne fait que cesser de barrer la
+route.
+
 Chaque illustration est demandée par un slot stable, `/art/{catégorie}/{slug}`,
 où le slug est l'identifiant du domaine. Le serveur dessine un placeholder
 déterministe tant que le slot est vide, et sert le fichier dès qu'il existe dans
