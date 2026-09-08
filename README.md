@@ -50,6 +50,13 @@ la prévision de leur tour, et n'importe lequel s'annule avec remboursement
 intégral. Achèvement par événement planifié et reprise après redémarrage restent
 les mêmes que pour tout le reste du jeu.
 
+Au chantier et à la défense, une carte déplie ses caractéristiques dès qu'on la
+survole, ou que le clavier s'y pose : arme, bouclier, coque, fret, vitesse et
+consommation, puis les feux rapides dans les deux sens — ce que l'unité
+déchiquette et ce qui la déchiquette. La vitesse affichée est celle que donnent
+les propulsions déjà recherchées, pas celle du catalogue. Une défense n'inflige
+aucun feu rapide : sa carte ne montre donc que ses prédateurs.
+
 La page Flotte liste les vaisseaux stationnés, les emplacements disponibles et
 les missions en vol avec leurs horaires absolus. L'assistant d'envoi calcule
 distance, carburant, capacité, arrivée et retour avant confirmation. Une flotte
