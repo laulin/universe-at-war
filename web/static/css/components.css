@@ -285,11 +285,20 @@ legend { grid-column: 1 / -1; font-size: var(--text-xl); font-weight: 700; margi
 /* One ship of a composition: its picture, its name and its quantity. The
    wrapper also keeps a label and its field in the same cell of the fieldset
    grid, which two loose siblings could not promise. */
-.ship-picker { display: grid; grid-template-columns: 4rem 1fr; align-items: center; gap: 0 var(--space-3); }
+.ship-picker {
+  display: grid;
+  /* The two rows are declared rather than left implicit, or the picture would
+     have no last line to span to and would sit on the name alone. */
+  grid-template-columns: 4rem 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
 .ship-picker img {
   grid-row: 1 / -1; width: 4rem; aspect-ratio: 4 / 3; object-fit: cover;
   border-radius: var(--radius-sm); background: var(--surface-sunken);
 }
+.ship-picker input { width: 6rem; }
 .check input { min-height: auto; width: 1.15rem; height: 1.15rem; }
 
 /* ---------- Tables ---------- */
