@@ -78,6 +78,14 @@ gauche, la barre des ressources du corps courant en haut, la liste des corps de
 l'empire à droite avec leurs stocks et les totaux. Un stock arrivé à sa capacité
 passe en alerte, car il ne produit plus.
 
+Les compteurs ne restent pas figés entre deux chargements : le navigateur
+prolonge chaque stock au taux que la page affiche déjà, de la barre du haut aux
+totaux, et l'alerte de capacité s'allume à la seconde où le plafond est atteint.
+C'est une estimation et rien de plus — un débit venu d'ailleurs n'est réglé
+qu'au chargement suivant, que la page réclame d'elle-même dès qu'un compte à
+rebours expire. Sans JavaScript, les chiffres restent ceux que le serveur a
+rendus, donc justes à l'instant du chargement.
+
 Chaque illustration est demandée par un slot stable, `/art/{catégorie}/{slug}`,
 où le slug est l'identifiant du domaine. Le serveur dessine un placeholder
 déterministe tant que le slot est vide, et sert le fichier dès qu'il existe dans
