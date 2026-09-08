@@ -139,10 +139,10 @@ func (r *ResearchRepository) Start(ctx context.Context, accountID, planetID int6
 		startedAt := now.UTC().Truncate(time.Second)
 		completesAt := startedAt.Add(plan.Duration)
 		result, err := tx.ExecContext(ctx, `
-			INSERT INTO research_queue(player_id, planet_id, research_id, target_level, metal_cost, crystal_cost, deuterium_cost, energy_cost, effective_laboratory, ruleset_version, started_at, completes_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO research_queue(player_id, planet_id, research_id, target_level, metal_cost, crystal_cost, deuterium_cost, energy_cost, effective_laboratory, ruleset_version, position, queued_at, started_at, completes_at, state)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'active')
 		`, playerID, planet.ID, string(id), plan.TargetLevel, plan.Cost.Metal, plan.Cost.Crystal, plan.Cost.Deuterium,
-			plan.Energy, plan.EffectiveLaboratory, rulesetVersion, timestamp(startedAt), timestamp(completesAt))
+			plan.Energy, plan.EffectiveLaboratory, rulesetVersion, timestamp(startedAt), timestamp(startedAt), timestamp(completesAt))
 		if err != nil {
 			if strings.Contains(err.Error(), "research_queue_one_active_idx") || strings.Contains(err.Error(), "UNIQUE") {
 				return appresearch.ErrQueueBusy

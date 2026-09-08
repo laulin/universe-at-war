@@ -128,10 +128,10 @@ func (r *ShipyardRepository) Order(ctx context.Context, accountID, planetID int6
 		completesAt := startedAt.Add(plan.Duration)
 		unitSeconds := int64(plan.UnitDuration / time.Second)
 		result, err := tx.ExecContext(ctx, `
-			INSERT INTO production_orders(planet_id, unit_id, family, quantity, unit_metal_cost, unit_crystal_cost, unit_deuterium_cost, unit_seconds, ruleset_version, started_at, completes_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO production_orders(planet_id, unit_id, family, quantity, unit_metal_cost, unit_crystal_cost, unit_deuterium_cost, unit_seconds, ruleset_version, position, queued_at, started_at, completes_at, state)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'active')
 		`, planet.ID, string(id), string(plan.Family), plan.Quantity, plan.UnitCost.Metal, plan.UnitCost.Crystal,
-			plan.UnitCost.Deuterium, unitSeconds, rulesetVersion, timestamp(startedAt), timestamp(completesAt))
+			plan.UnitCost.Deuterium, unitSeconds, rulesetVersion, timestamp(startedAt), timestamp(startedAt), timestamp(completesAt))
 		if err != nil {
 			if strings.Contains(err.Error(), "production_orders_one_active_idx") || strings.Contains(err.Error(), "UNIQUE") {
 				return appshipyard.ErrQueueBusy

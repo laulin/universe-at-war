@@ -265,9 +265,9 @@ func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, pl
 	startedAt := now.UTC().Truncate(time.Second)
 	completesAt := startedAt.Add(plan.Duration)
 	result, err := tx.ExecContext(ctx, `
-		INSERT INTO building_queue(planet_id, building_id, target_level, metal_cost, crystal_cost, deuterium_cost, ruleset_version, started_at, completes_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, planet.ID, string(id), plan.TargetLevel, plan.Cost.Metal, plan.Cost.Crystal, plan.Cost.Deuterium, rulesetVersion, timestamp(startedAt), timestamp(completesAt))
+		INSERT INTO building_queue(planet_id, building_id, target_level, metal_cost, crystal_cost, deuterium_cost, ruleset_version, position, queued_at, started_at, completes_at, state)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'active')
+	`, planet.ID, string(id), plan.TargetLevel, plan.Cost.Metal, plan.Cost.Crystal, plan.Cost.Deuterium, rulesetVersion, timestamp(startedAt), timestamp(startedAt), timestamp(completesAt))
 	if err != nil {
 		if strings.Contains(err.Error(), "building_queue_one_active_idx") || strings.Contains(err.Error(), "UNIQUE") {
 			return appeconomy.Queue{}, appeconomy.ErrQueueBusy
