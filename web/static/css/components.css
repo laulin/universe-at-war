@@ -2,14 +2,30 @@
 
 /* ---------- Panels ---------- */
 
-.panel, .panel-wide {
+/* Every screen lays its content out in sections. They all get the frame and the
+   header band, whether their own template asked for one or not. */
+.panel, .panel-wide, .game-shell > section {
   background:
     linear-gradient(180deg, var(--surface-raised) 0%, var(--surface-panel) 18%, var(--surface-panel) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel);
 }
-.panel-wide { padding: var(--space-4); margin-bottom: var(--space-4); }
+.panel-wide, .game-shell > section { padding: var(--space-4); margin-bottom: var(--space-4); }
+
+/* A kicker followed by a title reads as one plate flush with the panel edges. */
+.game-shell > section > .eyebrow {
+  margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0;
+  padding: var(--space-2) var(--space-4) 0;
+}
+.game-shell > section > .eyebrow + h2 {
+  margin: 0 calc(var(--space-4) * -1) var(--space-4);
+  padding: 0 var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(90deg, rgba(26, 62, 92, 0.55), transparent 70%);
+  font-size: var(--text-lg);
+}
+.game-shell > section > h3 { color: var(--accent); font-size: var(--text-md); margin-top: var(--space-4); }
 .panel { width: min(100%, 34rem); padding: clamp(var(--space-5), 5vw, var(--space-7)); }
 
 /* The panel head: a symmetric plate with a centred cyan caption, the signature
@@ -51,25 +67,28 @@
   height: clamp(6rem, 13vw, 9rem);
   object-fit: cover;
 }
+/* The plate sits in the flow of the banner rather than floating over it, so a
+   long subtitle can never run under the badge on a narrow screen. */
 .hero__plate {
   position: absolute;
   inset-inline: 0;
   top: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
-  background: linear-gradient(180deg, rgba(4, 11, 20, 0.92), rgba(4, 11, 20, 0));
+  background: linear-gradient(180deg, rgba(4, 11, 20, 0.94), rgba(4, 11, 20, 0.45) 70%, rgba(4, 11, 20, 0));
 }
 .hero__plate h1 { margin: 0; font-size: var(--text-xl); text-shadow: 0 0.1rem 0.4rem rgba(0, 0, 0, 0.9); }
 .hero__plate p { margin: 0; color: var(--accent); font-size: var(--text-sm); }
 .hero__badge {
-  position: absolute;
-  left: var(--space-3);
-  bottom: var(--space-3);
-  width: 3rem;
-  height: 3rem;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   background: rgba(6, 16, 25, 0.85);
-  padding: var(--space-1);
+  padding: 0.15rem;
 }
 
 /* ---------- Cards ---------- */

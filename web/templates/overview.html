@@ -13,9 +13,9 @@
         <tr>
           <th scope="row"><a href="/planets/{{.ID}}">{{.Name}}</a></th>
           <td>{{.Coordinate}}</td>
-          <td>{{.Stock.Metal}}</td>
-          <td>{{.Stock.Crystal}}</td>
-          <td>{{.Stock.Deuterium}}</td>
+          <td class="res-metal">{{figure .Stock.Metal}}</td>
+          <td class="res-crystal">{{figure .Stock.Crystal}}</td>
+          <td class="res-deuterium">{{figure .Stock.Deuterium}}</td>
           <td>{{with .ActiveQueue}}{{.Building}} niveau {{.TargetLevel}} — {{.CompletesAt.Format "15:04:05"}} UTC{{else}}aucune{{end}}</td>
         </tr>
       {{end}}

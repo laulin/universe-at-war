@@ -9,7 +9,7 @@
       <fieldset>
         <legend>Composition</legend>
         {{range .Ships}}
-        <label for="ship-{{.ID}}">{{.Name}} (max {{.Owned}})</label>
+        <label for="ship-{{.ID}}">{{.Name}} (max {{figure .Owned}})</label>
         <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="0">
         {{end}}
       </fieldset>

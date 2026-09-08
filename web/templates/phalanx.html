@@ -7,7 +7,7 @@
       <dt>Niveau</dt><dd>{{.Level}}</dd>
       <dt>Portée</dt><dd>{{.Radius}} systèmes de la galaxie {{.Moon.Coordinate.Galaxy}}</dd>
       <dt>Coût d'un balayage</dt><dd>{{.Cost}} deutérium</dd>
-      <dt>Deutérium disponible</dt><dd>{{.Moon.Stock.Deuterium}}</dd>
+      <dt>Deutérium disponible</dt><dd class="res-deuterium">{{figure .Moon.Stock.Deuterium}}</dd>
     </dl>
     {{if .Level}}
     <form method="post" action="/planets/{{.Moon.ID}}/phalanx">

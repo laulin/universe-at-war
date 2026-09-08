@@ -10,7 +10,7 @@
     <h2 id="stationed-title">Vaisseaux stationnés</h2>
     {{if .Ships}}
     <ul class="stationed">
-      {{range .Ships}}<li>{{.Name}} <strong>{{.Owned}}</strong></li>{{end}}
+      {{range .Ships}}<li>{{.Name}} <strong>{{figure .Owned}}</strong></li>{{end}}
     </ul>
     {{else}}<p class="muted">Aucun vaisseau sur cette planète.</p>{{end}}
   </section>

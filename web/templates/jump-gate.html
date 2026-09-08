@@ -30,7 +30,7 @@
       <fieldset>
         <legend>Vaisseaux</legend>
         {{range .Ships}}
-        <label for="jump-{{.ID}}">{{.Name}} (max {{.Owned}})</label>
+        <label for="jump-{{.ID}}">{{.Name}} (max {{figure .Owned}})</label>
         <input id="jump-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="0">
         {{end}}
       </fieldset>

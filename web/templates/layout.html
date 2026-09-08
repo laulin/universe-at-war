@@ -74,10 +74,12 @@
       <div class="hero">
         <img class="hero__art" src="/art/banner/{{.Section}}" alt="" width="640" height="200">
         <div class="hero__plate">
-          <h1>{{template "title" .}}</h1>
-          {{with .Current}}<p>{{.Name}} · [{{.Coordinate}}]{{if .TotalFields}} · {{.UsedFields}} / {{.TotalFields}} cases{{end}}</p>{{end}}
+          {{with .Current}}<img class="hero__badge" src="/art/body/{{.ArtSlot}}" alt="" width="44" height="44">{{end}}
+          <div>
+            <h1>{{template "title" .}}</h1>
+            {{with .Current}}<p>{{.Kind}} · [{{.Coordinate}}]{{if .TotalFields}} · {{.UsedFields}} / {{.TotalFields}} cases{{end}}</p>{{end}}
+          </div>
         </div>
-        {{with .Current}}<img class="hero__badge" src="/art/body/{{.ArtSlot}}" alt="" width="48" height="48">{{end}}
       </div>
       {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
       {{template "content" .}}

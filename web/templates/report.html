@@ -9,7 +9,7 @@
       <dt>Cible</dt><dd>{{.TargetPlanetName}} — {{.TargetPlayerName}}</dd>
       <dt>Sondes</dt><dd>{{.Probes}}{{if .ProbesLost}} (perdues){{end}}</dd>
       <dt>Niveau de révélation</dt><dd>{{.Level}}</dd>
-      <dt>Ressources</dt><dd>{{if .Resources}}M {{.Resources.Metal}} · C {{.Resources.Crystal}} · D {{.Resources.Deuterium}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
+      <dt>Ressources</dt><dd>{{if .Resources}}<span class="res-metal">M {{figure .Resources.Metal}}</span> · <span class="res-crystal">C {{figure .Resources.Crystal}}</span> · <span class="res-deuterium">D {{figure .Resources.Deuterium}}</span>{{else}}<span class="muted">inconnu</span>{{end}}</dd>
       <dt>Flotte</dt><dd>{{if .Fleet}}{{range $id, $quantity := .Fleet}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
       <dt>Défenses</dt><dd>{{if .Defenses}}{{range $id, $quantity := .Defenses}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
       <dt>Bâtiments</dt><dd>{{if .Buildings}}{{range $id, $level := .Buildings}}{{$id}} {{$level}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
@@ -29,8 +29,8 @@
     {{with .Combat}}
     <dl class="summary">
       <dt>Issue</dt><dd>{{.Outcome}}</dd>
-      <dt>Butin</dt><dd>M {{.Loot.Metal}} · C {{.Loot.Crystal}} · D {{.Loot.Deuterium}}</dd>
-      <dt>Débris</dt><dd>M {{.Debris.Metal}} · C {{.Debris.Crystal}}</dd>
+      <dt>Butin</dt><dd><span class="res-metal">M {{figure .Loot.Metal}}</span> · <span class="res-crystal">C {{figure .Loot.Crystal}}</span> · <span class="res-deuterium">D {{figure .Loot.Deuterium}}</span></dd>
+      <dt>Débris</dt><dd><span class="res-metal">M {{figure .Debris.Metal}}</span> · <span class="res-crystal">C {{figure .Debris.Crystal}}</span></dd>
       <dt>Chance de lune</dt><dd>{{.MoonChance}}</dd>
     </dl>
     <h3>Camps</h3>
@@ -50,8 +50,8 @@
     <dl class="summary">
       <dt>Position</dt><dd>{{.Position}}</dd>
       <dt>Recycleurs</dt><dd>{{.Recyclers}} — capacité {{.Capacity}}</dd>
-      <dt>Collecté</dt><dd>M {{.Collected.Metal}} · C {{.Collected.Crystal}}</dd>
-      <dt>Reste sur place</dt><dd>M {{.Remaining.Metal}} · C {{.Remaining.Crystal}}</dd>
+      <dt>Collecté</dt><dd><span class="res-metal">M {{figure .Collected.Metal}}</span> · <span class="res-crystal">C {{figure .Collected.Crystal}}</span></dd>
+      <dt>Reste sur place</dt><dd><span class="res-metal">M {{figure .Remaining.Metal}}</span> · <span class="res-crystal">C {{figure .Remaining.Crystal}}</span></dd>
     </dl>
     {{end}}
 
@@ -59,7 +59,7 @@
     <dl class="summary">
       <dt>Position</dt><dd>{{.Position}}</dd>
       <dt>Issue</dt><dd>{{.Outcome}} — {{.Story}}</dd>
-      <dt>Trouvaille</dt><dd>{{if .Found.Metal}}M {{.Found.Metal}} · C {{.Found.Crystal}} · D {{.Found.Deuterium}}{{else}}<span class="muted">rien</span>{{end}}</dd>
+      <dt>Trouvaille</dt><dd>{{if .Found.Metal}}<span class="res-metal">M {{figure .Found.Metal}}</span> · <span class="res-crystal">C {{figure .Found.Crystal}}</span> · <span class="res-deuterium">D {{figure .Found.Deuterium}}</span>{{else}}<span class="muted">rien</span>{{end}}</dd>
       <dt>Vaisseaux ramenés</dt><dd>{{if .Gained}}{{range $id, $quantity := .Gained}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">aucun</span>{{end}}</dd>
       <dt>Rencontre</dt><dd>{{if .Ambush}}{{range $id, $quantity := .Ambush}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">aucune</span>{{end}}</dd>
       <dt>Pertes</dt><dd>{{if .Lost}}{{range $id, $quantity := .Lost}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">aucune</span>{{end}}</dd>
