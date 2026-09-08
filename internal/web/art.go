@@ -191,11 +191,17 @@ func drawResearch(seed uint32, _ string) string {
 // drawShip sketches a dart-shaped hull pointing right, with swept wings and a
 // lit engine block behind it.
 func drawShip(seed uint32, _ string) string {
-	hue := 195 + pick(seed, 1, 40)
-	nose := 128 + pick(seed, 2, 20)
-	tail := 26 + pick(seed, 3, 14)
-	span := 9 + pick(seed, 4, 9)
-	sweep := 16 + pick(seed, 5, 16)
+	hue := 172 + pick(seed, 1, 78)
+	nose := 122 + pick(seed, 2, 30)
+	tail := 20 + pick(seed, 3, 22)
+	span := 6 + pick(seed, 4, 16)
+	// A negative sweep gives a forward-swept wing, which keeps a catalogue of a
+	// dozen hulls from reading as one hull twelve times.
+	sweep := 8 + pick(seed, 5, 30)
+	if pick(seed, 9, 4) == 0 {
+		sweep = -sweep
+	}
+	shoulder := 26 + pick(seed, 8, 26)
 	var shapes strings.Builder
 	fmt.Fprintf(&shapes,
 		`<defs><linearGradient id="h" x1="0" y1="0" x2="0" y2="1">`+
@@ -207,18 +213,18 @@ func drawShip(seed uint32, _ string) string {
 		hue, hue, hue, hue, hue, hue)
 	// Wings first, so the fuselage sits on top of them.
 	fmt.Fprintf(&shapes, `<path d="M%d %d L%d %d L%d %d Z" fill="hsl(%d 28%% 30%%)"/>`,
-		nose-42, 60-span, tail+14, 60-span-sweep, tail+4, 60-span, hue)
+		nose-shoulder, 60-span, tail+14, 60-span-sweep, tail+4, 60-span, hue)
 	fmt.Fprintf(&shapes, `<path d="M%d %d L%d %d L%d %d Z" fill="hsl(%d 28%% 30%%)"/>`,
-		nose-42, 60+span, tail+14, 60+span+sweep, tail+4, 60+span, hue)
+		nose-shoulder, 60+span, tail+14, 60+span+sweep, tail+4, 60+span, hue)
 	// Fuselage.
 	fmt.Fprintf(&shapes,
 		`<path d="M%d 60 L%d %d L%d %d L%d %d L%d %d L%d %d L%d %d Z" fill="url(#m)"/>`,
-		nose, nose-34, 60-span, tail+10, 60-span, tail, 60-span/2,
-		tail, 60+span/2, tail+10, 60+span, nose-34, 60+span)
+		nose, nose-shoulder, 60-span, tail+10, 60-span, tail, 60-span/2,
+		tail, 60+span/2, tail+10, 60+span, nose-shoulder, 60+span)
 	// A spine catches the light along the hull.
 	fmt.Fprintf(&shapes, `<path d="M%d 60 L%d 60" stroke="hsl(%d 30%% 88%%)" stroke-width="1.4" opacity=".55"/>`, nose-6, tail+8, hue)
 	// Canopy.
-	fmt.Fprintf(&shapes, `<ellipse cx="%d" cy="60" rx="9" ry="%d" fill="hsl(%d 90%% 68%%)" opacity=".85"/>`, nose-30, span/2+1, hue)
+	fmt.Fprintf(&shapes, `<ellipse cx="%d" cy="60" rx="8" ry="%d" fill="hsl(%d 90%% 68%%)" opacity=".85"/>`, nose-shoulder+4, span/2+2, hue)
 	// Engines.
 	pods := 1 + pick(seed, 6, 3)
 	for pod := 0; pod < pods; pod++ {
