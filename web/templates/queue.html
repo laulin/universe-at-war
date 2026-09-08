@@ -1,0 +1,24 @@
+{{define "buildQueue"}}
+  {{if .Entries}}
+  <section class="queue panel-wide" aria-labelledby="queue-title">
+    <p class="eyebrow">{{.Eyebrow}}</p>
+    <h2 id="queue-title">{{.Title}}</h2>
+    <ol class="queue-list">
+      {{range .Entries}}
+      <li class="queue-entry{{if not .Active}} queue-entry--waiting{{end}}">
+        <p class="queue-entry__title">{{.Name}} <span class="muted">{{.Detail}}</span>{{if .Quantity}} <span class="queue-entry__count">{{.Delivered}} / {{.Quantity}} livrés</span>{{end}}</p>
+        {{if .Active}}
+        <progress class="queue-entry__bar" max="{{.TotalSeconds}}" value="{{.ElapsedSeconds}}"
+                  data-progress data-end="{{.EndsISO}}" data-span="{{.TotalSeconds}}"
+                  aria-label="Progression : {{.Name}} {{.Detail}}">{{.Progress}}</progress>
+        <p class="queue-entry__timing">Fin prévue à {{.EndsAt}} UTC —
+          <time datetime="{{.EndsISO}}" data-countdown data-done="terminée" data-refresh="page" aria-live="off">{{.EndsAt}}</time></p>
+        {{else}}
+        <p class="queue-entry__timing faint">Début ≈ {{.StartsAt}} UTC — fin ≈ {{.EndsAt}} UTC</p>
+        {{end}}
+      </li>
+      {{end}}
+    </ol>
+  </section>
+  {{end}}
+{{end}}

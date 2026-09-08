@@ -47,26 +47,32 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 		t.Fatalf("stock after two hours = %#v", planet.Stock)
 	}
 
-	queue, err := service.StartConstruction(ctx, principal, planet.ID, building.MetalMine, "build-1")
+	queue, err := service.EnqueueBuilding(ctx, principal, planet.ID, building.MetalMine, "build-1")
 	if err != nil {
-		t.Fatalf("StartConstruction() error = %v", err)
+		t.Fatalf("EnqueueBuilding() error = %v", err)
 	}
 	if queue.Cost != (domaineconomy.Resources{Metal: 60, Crystal: 15}) || queue.CompletesAt.Sub(queue.StartedAt) != 108*time.Second {
 		t.Fatalf("queue = %#v", queue)
 	}
-	replayed, err := service.StartConstruction(ctx, principal, planet.ID, building.MetalMine, "build-1")
+	replayed, err := service.EnqueueBuilding(ctx, principal, planet.ID, building.MetalMine, "build-1")
 	if err != nil || replayed.ID != queue.ID {
 		t.Fatalf("idempotent replay = %#v, %v", replayed, err)
 	}
-	if _, err := service.StartConstruction(ctx, principal, planet.ID, building.SolarPlant, "build-2"); !errors.Is(err, appeconomy.ErrQueueBusy) {
-		t.Fatalf("parallel queue error = %v", err)
+	// A second order no longer collides with the first: it waits behind it, and
+	// pays on the spot all the same.
+	behind, err := service.EnqueueBuilding(ctx, principal, planet.ID, building.SolarPlant, "build-2")
+	if err != nil || behind.Position != 1 || behind.State != "queued" {
+		t.Fatalf("second order = %#v, %v", behind, err)
+	}
+	if !behind.StartedAt.IsZero() || !behind.CompletesAt.IsZero() {
+		t.Fatalf("a waiting order was given a schedule: %#v", behind)
 	}
 	planet, err = service.Planet(ctx, principal, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if planet.Stock != (domaineconomy.Resources{Metal: 500, Crystal: 515}) {
-		t.Fatalf("stock after one debit = %#v", planet.Stock)
+	if planet.Stock != (domaineconomy.Resources{Metal: 425, Crystal: 485}) {
+		t.Fatalf("stock after two debits = %#v", planet.Stock)
 	}
 
 	clock.Advance(108 * time.Second)
@@ -90,8 +96,11 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if planet.Levels[building.MetalMine] != 1 || planet.UsedFields != 1 || planet.ActiveQueue != nil {
+	if planet.Levels[building.MetalMine] != 1 || planet.UsedFields != 1 || len(planet.Queue) != 1 {
 		t.Fatalf("completed planet = %#v", planet)
+	}
+	if head := planet.Queue[0]; head.Building != building.SolarPlant || head.State != "active" {
+		t.Fatalf("the solar plant did not take over the queue: %#v", head)
 	}
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM game_event_log WHERE event_type = 'building_completed'", 1)
 }
@@ -111,11 +120,11 @@ func TestDueBuildingsUseStableEventOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstQueue, err := service.StartConstruction(ctx, appauth.Principal{AccountID: 1}, one.ID, building.MetalMine, "first")
+	firstQueue, err := service.EnqueueBuilding(ctx, appauth.Principal{AccountID: 1}, one.ID, building.MetalMine, "first")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondQueue, err := service.StartConstruction(ctx, appauth.Principal{AccountID: 2}, two.ID, building.MetalMine, "second")
+	secondQueue, err := service.EnqueueBuilding(ctx, appauth.Principal{AccountID: 2}, two.ID, building.MetalMine, "second")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +193,7 @@ func TestConcurrentBuildingSpendOnlySucceedsOnce(t *testing.T) {
 		go func(index int, id building.ID) {
 			defer wait.Done()
 			<-start
-			_, startErr := service.StartConstruction(ctx, principal, planet.ID, id, fmt.Sprintf("concurrent-%d", index))
+			_, startErr := service.EnqueueBuilding(ctx, principal, planet.ID, id, fmt.Sprintf("concurrent-%d", index))
 			errorsFound <- startErr
 		}(index, id)
 	}

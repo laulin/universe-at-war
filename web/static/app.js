@@ -1,5 +1,6 @@
-// Decorative countdowns only: the server renders authoritative absolute times
-// and every page stays correct without JavaScript.
+// Decorative countdowns and progress bars only: the server renders
+// authoritative absolute times and a correct bar value, and every page stays
+// correct without JavaScript.
 (() => {
   "use strict";
 
@@ -17,7 +18,8 @@
   const skew = Number.isNaN(parsed) ? 0 : parsed - Date.now();
 
   const countdowns = Array.from(document.querySelectorAll("time[data-countdown]"));
-  if (countdowns.length === 0) {
+  const bars = Array.from(document.querySelectorAll("progress[data-progress]"));
+  if (countdowns.length === 0 && bars.length === 0) {
     return;
   }
 
@@ -47,6 +49,17 @@
       if (remaining <= 0 && node.dataset.refresh === "page") {
         passed = true;
       }
+    }
+    // A bar is filled by its value, never by a style: the policy refuses inline
+    // styles, and the server already rendered the value this loop continues.
+    for (const bar of bars) {
+      const deadline = Date.parse(bar.dataset.end);
+      const span = Number(bar.dataset.span);
+      if (Number.isNaN(deadline) || !Number.isFinite(span) || span <= 0) {
+        continue;
+      }
+      const done = span - (deadline - now) / 1000;
+      bar.value = Math.min(Math.max(done, 0), span);
     }
     if (passed) {
       askForRefresh();

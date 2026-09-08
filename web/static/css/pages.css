@@ -23,8 +23,6 @@
 .building-card label { font-size: var(--text-sm); color: var(--muted); margin-top: var(--space-2); }
 .building-card input[type="number"] { width: 100%; }
 
-.queue { margin-block: var(--space-4); }
-
 .filters { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
 .filters a { font-size: var(--text-sm); }
 

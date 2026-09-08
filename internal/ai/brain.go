@@ -36,7 +36,7 @@ type Thinking interface {
 type Economy interface {
 	Planets(context.Context, appauth.Principal) ([]appeconomy.Planet, error)
 	Buildings(context.Context, appauth.Principal, int64) (appeconomy.Planet, []appeconomy.BuildingChoice, error)
-	StartConstruction(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
+	EnqueueBuilding(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
 }
 
 // Research is the laboratory page of a player.
@@ -150,7 +150,9 @@ func (b *Brain) build(ctx context.Context, principal appauth.Principal, profile 
 	if err != nil {
 		return failure(domainai.Strategic, "build", err)
 	}
-	if planet.ActiveQueue != nil {
+	// An artificial player orders one level at a time and waits for it: queues
+	// are a convenience offered to human players, not a way to spend faster.
+	if len(planet.Queue) > 0 {
 		return skip(domainai.Strategic, "build", "the site is already busy", bodyID)
 	}
 	body := bodyOf(planet, choices)
@@ -163,7 +165,7 @@ func (b *Brain) build(ctx context.Context, principal appauth.Principal, profile 
 		return skip(domainai.Strategic, "build", reason, bodyID)
 	}
 	key := commandKey(profile, "build", chosen)
-	if _, err := b.Economy.StartConstruction(ctx, principal, bodyID, building.ID(chosen), key); err != nil {
+	if _, err := b.Economy.EnqueueBuilding(ctx, principal, bodyID, building.ID(chosen), key); err != nil {
 		return failure(domainai.Strategic, "build "+chosen, err)
 	}
 	return domainai.Decision{
@@ -272,7 +274,7 @@ func bodyOf(planet appeconomy.Planet, choices []appeconomy.BuildingChoice) domai
 	body := domainai.Body{
 		ID: planet.ID, Coordinate: planet.Coordinate,
 		FreeFields: planet.TotalFields - planet.UsedFields,
-		Busy:       planet.ActiveQueue != nil,
+		Busy:       len(planet.Queue) > 0,
 		Stock:      planet.Stock, Capacity: planet.Capacity, Energy: planet.Energy,
 		Levels:  make(map[string]int, len(planet.Levels)),
 		Options: make(map[string]domainai.Option, len(choices)),

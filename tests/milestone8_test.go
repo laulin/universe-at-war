@@ -108,8 +108,8 @@ func TestArtificialPlayerPaysTheSamePriceAsAHuman(t *testing.T) {
 		t.Fatalf("Planet() error = %v", err)
 	}
 	before := settled.Stock.Metal
-	if _, err := universeWorld.Economy.StartConstruction(ctx, human, 1, building.MetalMine, "human-mine"); err != nil {
-		t.Fatalf("StartConstruction() error = %v", err)
+	if _, err := universeWorld.Economy.EnqueueBuilding(ctx, human, 1, building.MetalMine, "human-mine"); err != nil {
+		t.Fatalf("EnqueueBuilding() error = %v", err)
 	}
 	settled, err = universeWorld.Economy.Planet(ctx, human, 1)
 	if err != nil {

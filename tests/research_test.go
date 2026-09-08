@@ -208,10 +208,10 @@ func TestResearchAndLaboratoryUpgradeExcludeEachOther(t *testing.T) {
 	if _, err := universe.Research.Start(ctx, principal, planet.ID, research.EnergyTechnology, "exclusive-1"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	if _, err := universe.Economy.StartConstruction(ctx, principal, planet.ID, "research_lab", "build-lab"); !errors.Is(err, appeconomy.ErrFacilityBusy) {
+	if _, err := universe.Economy.EnqueueBuilding(ctx, principal, planet.ID, "research_lab", "build-lab"); !errors.Is(err, appeconomy.ErrFacilityBusy) {
 		t.Fatalf("laboratory upgrade during research error = %v, want ErrFacilityBusy", err)
 	}
-	if _, err := universe.Economy.StartConstruction(ctx, principal, planet.ID, "metal_mine", "build-mine"); err != nil {
+	if _, err := universe.Economy.EnqueueBuilding(ctx, principal, planet.ID, "metal_mine", "build-mine"); err != nil {
 		t.Fatalf("other construction during research error = %v", err)
 	}
 }

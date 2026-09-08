@@ -211,7 +211,10 @@ func ownedPlanetIDs(ctx context.Context, tx *sql.Tx, accountID int64) ([]int64, 
 	return identifiers, nil
 }
 
-func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, planetID int64, id building.ID, idempotencyKey string, now time.Time, catalogue building.Catalogue) (appeconomy.Queue, error) {
+// EnqueueBuilding appends one construction to a body's queue. The cost is taken
+// here and snapshotted on the row, so an entry that reached the queue is
+// already paid for; only its duration waits until it reaches the head.
+func (r *EconomyRepository) EnqueueBuilding(ctx context.Context, accountID, planetID int64, id building.ID, idempotencyKey string, now time.Time, catalogue building.Catalogue) (appeconomy.Queue, error) {
 	tx, err := r.write.BeginTx(ctx, nil)
 	if err != nil {
 		return appeconomy.Queue{}, fmt.Errorf("economy repository: begin construction: %w", err)
@@ -245,13 +248,16 @@ func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, pl
 	if err != nil {
 		return appeconomy.Queue{}, err
 	}
-	if planet.ActiveQueue != nil {
-		return appeconomy.Queue{}, appeconomy.ErrQueueBusy
+	if len(planet.Queue) >= planet.Rules.Progression.QueueLength {
+		return appeconomy.Queue{}, appeconomy.ErrQueueFull
 	}
 	if err := facilityIsIdle(ctx, tx, planet.ID, id); err != nil {
 		return appeconomy.Queue{}, err
 	}
-	plan, err := catalogue.Plan(id, planet.Kind, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
+	// Every entry still in the queue counts: its level is the one the new order
+	// builds upon, and the field it will consume is already spoken for.
+	projected := projectedLevels(planet)
+	plan, err := catalogue.Plan(id, planet.Kind, projected, planet.Researches.Generic(), planet.UsedFields+len(planet.Queue), planet.TotalFields, planet.Rules)
 	if err != nil {
 		return appeconomy.Queue{}, err
 	}
@@ -262,14 +268,27 @@ func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, pl
 	if err := persistProduction(ctx, tx, planet.ID, state); err != nil {
 		return appeconomy.Queue{}, err
 	}
-	startedAt := now.UTC().Truncate(time.Second)
-	completesAt := startedAt.Add(plan.Duration)
+	queuedAt := now.UTC().Truncate(time.Second)
+	position := 0
+	if last := len(planet.Queue); last > 0 {
+		position = planet.Queue[last-1].Position + 1
+	}
+	head := len(planet.Queue) == 0
+	entryState := "queued"
+	var startedAt, completesAt time.Time
+	var startedValue, completesValue any
+	if head {
+		entryState = "active"
+		startedAt = queuedAt
+		completesAt = startedAt.Add(plan.Duration)
+		startedValue, completesValue = timestamp(startedAt), timestamp(completesAt)
+	}
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO building_queue(planet_id, building_id, target_level, metal_cost, crystal_cost, deuterium_cost, ruleset_version, position, queued_at, started_at, completes_at, state)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'active')
-	`, planet.ID, string(id), plan.TargetLevel, plan.Cost.Metal, plan.Cost.Crystal, plan.Cost.Deuterium, rulesetVersion, timestamp(startedAt), timestamp(startedAt), timestamp(completesAt))
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, planet.ID, string(id), plan.TargetLevel, plan.Cost.Metal, plan.Cost.Crystal, plan.Cost.Deuterium, rulesetVersion, position, timestamp(queuedAt), startedValue, completesValue, entryState)
 	if err != nil {
-		if strings.Contains(err.Error(), "building_queue_one_active_idx") || strings.Contains(err.Error(), "UNIQUE") {
+		if strings.Contains(err.Error(), "building_queue_one_active_idx") || strings.Contains(err.Error(), "building_queue_position_idx") {
 			return appeconomy.Queue{}, appeconomy.ErrQueueBusy
 		}
 		return appeconomy.Queue{}, fmt.Errorf("economy repository: enqueue building: %w", err)
@@ -278,19 +297,22 @@ func (r *EconomyRepository) StartConstruction(ctx context.Context, accountID, pl
 	if err != nil {
 		return appeconomy.Queue{}, fmt.Errorf("economy repository: queue id: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO scheduled_events(event_type, due_at, priority, entity_type, entity_id, ruleset_version, payload, idempotency_key, created_at)
-		VALUES ('building_completed', ?, 50, 'building_queue', ?, ?, json_object('queue_id', ?), ?, ?)
-	`, timestamp(completesAt), strconv.FormatInt(queueID, 10), rulesetVersion, queueID, fmt.Sprintf("building-complete:%d", queueID), timestamp(startedAt)); err != nil {
-		return appeconomy.Queue{}, fmt.Errorf("economy repository: schedule building: %w", err)
+	if head {
+		if err := scheduleBuilding(ctx, tx, queueID, rulesetVersion, startedAt, completesAt); err != nil {
+			return appeconomy.Queue{}, err
+		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_keys(actor_id, operation, key, request_hash, result_type, result_id, created_at) VALUES (?, 'start_building', ?, ?, 'building_queue', ?, ?)`, strconv.FormatInt(accountID, 10), idempotencyKey, requestHash, strconv.FormatInt(queueID, 10), timestamp(startedAt)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_keys(actor_id, operation, key, request_hash, result_type, result_id, created_at) VALUES (?, 'start_building', ?, ?, 'building_queue', ?, ?)`, strconv.FormatInt(accountID, 10), idempotencyKey, requestHash, strconv.FormatInt(queueID, 10), timestamp(queuedAt)); err != nil {
 		return appeconomy.Queue{}, fmt.Errorf("economy repository: record idempotency: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO game_event_log(event_type, actor_type, actor_id, entity_type, entity_id, occurred_at, payload) VALUES ('building_started', 'account', ?, 'planet', ?, ?, json_object('building_id', ?, 'target_level', ?, 'queue_id', ?))`, accountID, planet.ID, timestamp(startedAt), string(id), plan.TargetLevel, queueID); err != nil {
-		return appeconomy.Queue{}, fmt.Errorf("economy repository: log building start: %w", err)
+	journal := "building_queued"
+	if head {
+		journal = "building_started"
 	}
-	queue := appeconomy.Queue{ID: queueID, Building: id, TargetLevel: plan.TargetLevel, Cost: plan.Cost, StartedAt: startedAt, CompletesAt: completesAt, State: "active"}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO game_event_log(event_type, actor_type, actor_id, entity_type, entity_id, occurred_at, payload) VALUES (?, 'account', ?, 'planet', ?, ?, json_object('building_id', ?, 'target_level', ?, 'queue_id', ?, 'position', ?))`, journal, accountID, planet.ID, timestamp(queuedAt), string(id), plan.TargetLevel, queueID, position); err != nil {
+		return appeconomy.Queue{}, fmt.Errorf("economy repository: log building order: %w", err)
+	}
+	queue := appeconomy.Queue{ID: queueID, Building: id, TargetLevel: plan.TargetLevel, Cost: plan.Cost, Position: position, StartedAt: startedAt, CompletesAt: completesAt, State: entryState}
 	if err := tx.Commit(); err != nil {
 		return appeconomy.Queue{}, fmt.Errorf("economy repository: commit construction: %w", err)
 	}
@@ -346,7 +368,67 @@ func completeBuilding(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now
 	if _, err := tx.ExecContext(ctx, `INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload) VALUES ('building_completed', 'planet', ?, ?, json_object('building_id', ?, 'level', ?, 'queue_id', ?))`, planetID, timestamp(now), buildingID, targetLevel, queueID); err != nil {
 		return fmt.Errorf("economy repository: log completion: %w", err)
 	}
+	// The queue must not gain idle time from a late settlement, so the next
+	// entry starts at the instant this one was due.
+	return promoteNextBuilding(ctx, tx, planetID, event.DueAt, catalogue)
+}
+
+// scheduleBuilding books the completion of the entry now at the head.
+func scheduleBuilding(ctx context.Context, tx *sql.Tx, queueID, rulesetVersion int64, startedAt, completesAt time.Time) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO scheduled_events(event_type, due_at, priority, entity_type, entity_id, ruleset_version, payload, idempotency_key, created_at)
+		VALUES ('building_completed', ?, 50, 'building_queue', ?, ?, json_object('queue_id', ?), ?, ?)
+	`, timestamp(completesAt), strconv.FormatInt(queueID, 10), rulesetVersion, queueID, fmt.Sprintf("building-complete:%d", queueID), timestamp(startedAt)); err != nil {
+		return fmt.Errorf("economy repository: schedule building: %w", err)
+	}
 	return nil
+}
+
+// promoteNextBuilding starts whichever entry now waits at the front of the
+// queue. Only here is its duration decided, so a robotics factory finished a
+// moment ago speeds up everything still queued behind it.
+func promoteNextBuilding(ctx context.Context, tx *sql.Tx, planetID int64, now time.Time, catalogue building.Catalogue) error {
+	var entryID int64
+	var cost economy.Resources
+	err := tx.QueryRowContext(ctx, `
+		SELECT id, metal_cost, crystal_cost, deuterium_cost FROM building_queue
+		WHERE planet_id = ? AND state = 'queued' ORDER BY position, id LIMIT 1
+	`, planetID).Scan(&entryID, &cost.Metal, &cost.Crystal, &cost.Deuterium)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("economy repository: read waiting queue: %w", err)
+	}
+	configured, rulesetVersion, err := activeRuleset(ctx, tx)
+	if err != nil {
+		return err
+	}
+	levels, err := loadLevels(ctx, tx, planetID, catalogue)
+	if err != nil {
+		return err
+	}
+	duration, err := catalogue.Duration(cost, levels[building.RoboticsFactory], levels[building.NaniteFactory], configured.Time.BuildingSpeed)
+	if err != nil {
+		return err
+	}
+	startedAt := now.UTC().Truncate(time.Second)
+	completesAt := startedAt.Add(duration)
+	result, err := tx.ExecContext(ctx, `
+		UPDATE building_queue SET state = 'active', started_at = ?, completes_at = ?, ruleset_version = ?
+		WHERE id = ? AND state = 'queued'
+	`, timestamp(startedAt), timestamp(completesAt), rulesetVersion, entryID)
+	if err != nil {
+		return fmt.Errorf("economy repository: promote building: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("economy repository: promote building: %w", err)
+	}
+	if affected != 1 {
+		return errors.New("economy repository: the waiting construction changed during promotion")
+	}
+	return scheduleBuilding(ctx, tx, entryID, rulesetVersion, startedAt, completesAt)
 }
 
 func loadPlanet(ctx context.Context, tx *sql.Tx, accountID, requestedPlanetID int64, now time.Time, catalogue building.Catalogue) (appeconomy.Planet, int64, economy.ProductionState, error) {
@@ -434,10 +516,11 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 	if err := enrichEconomy(&planet); err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
-	planet.ActiveQueue, err = activeQueue(ctx, tx, planet.ID)
+	planet.Queue, err = planetQueue(ctx, tx, planet.ID)
 	if err != nil {
-		return appeconomy.Planet{}, 0, economy.ProductionState{}, fmt.Errorf("economy repository: read active queue: %w", err)
+		return appeconomy.Planet{}, 0, economy.ProductionState{}, fmt.Errorf("economy repository: read construction queue: %w", err)
 	}
+	estimateQueue(planet.Queue, planet.Levels, configured, catalogue, now)
 	return planet, rulesetVersion, state, nil
 }
 
@@ -493,9 +576,11 @@ func loadLevels(ctx context.Context, tx *sql.Tx, planetID int64, catalogue build
 	return levels, nil
 }
 
-// facilityIsIdle refuses to upgrade a facility that is currently working: the
-// laboratory during a research, the shipyard and the nanite factory during a
-// production order.
+// facilityIsIdle refuses to upgrade a facility that another queue is counting
+// on: the laboratory while a research is running or waiting, the shipyard and
+// the nanite factory while a production order is running or waiting. Looking at
+// whole queues rather than at the running entry alone keeps the exclusion true
+// at every instant, without a queue ever having to stall.
 func facilityIsIdle(ctx context.Context, tx *sql.Tx, planetID int64, id building.ID) error {
 	var busy bool
 	switch id {
@@ -504,14 +589,14 @@ func facilityIsIdle(ctx context.Context, tx *sql.Tx, planetID int64, id building
 			SELECT EXISTS(
 				SELECT 1 FROM research_queue q
 				JOIN planets p ON p.owner_player_id = q.player_id
-				WHERE p.id = ? AND q.state = 'active'
+				WHERE p.id = ? AND q.state IN ('active', 'queued')
 			)
 		`, planetID).Scan(&busy); err != nil {
 			return fmt.Errorf("economy repository: inspect research queue: %w", err)
 		}
 	case building.Shipyard, building.NaniteFactory:
 		if err := tx.QueryRowContext(ctx,
-			"SELECT EXISTS(SELECT 1 FROM production_orders WHERE planet_id = ? AND state = 'active')",
+			"SELECT EXISTS(SELECT 1 FROM production_orders WHERE planet_id = ? AND state IN ('active', 'queued'))",
 			planetID).Scan(&busy); err != nil {
 			return fmt.Errorf("economy repository: inspect production orders: %w", err)
 		}
@@ -622,37 +707,96 @@ func persistProduction(ctx context.Context, tx *sql.Tx, planetID int64, state ec
 	return nil
 }
 
-func activeQueue(ctx context.Context, tx *sql.Tx, planetID int64) (*appeconomy.Queue, error) {
-	var queue appeconomy.Queue
-	var buildingID, startedText, completesText string
-	err := tx.QueryRowContext(ctx, `SELECT id, building_id, target_level, metal_cost, crystal_cost, deuterium_cost, started_at, completes_at, state FROM building_queue WHERE planet_id = ? AND state = 'active'`, planetID).Scan(&queue.ID, &buildingID, &queue.TargetLevel, &queue.Cost.Metal, &queue.Cost.Crystal, &queue.Cost.Deuterium, &startedText, &completesText, &queue.State)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
+// planetQueue reads every construction ordered on a body and not yet finished,
+// head first. Only the head carries a schedule.
+func planetQueue(ctx context.Context, tx *sql.Tx, planetID int64) ([]appeconomy.Queue, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, building_id, target_level, metal_cost, crystal_cost, deuterium_cost, position, started_at, completes_at, state
+		FROM building_queue WHERE planet_id = ? AND state IN ('active', 'queued')
+		ORDER BY position, id
+	`, planetID)
 	if err != nil {
 		return nil, err
 	}
-	queue.Building = building.ID(buildingID)
-	queue.StartedAt, err = time.Parse(time.RFC3339Nano, startedText)
-	if err != nil {
-		return nil, err
+	defer rows.Close()
+	var entries []appeconomy.Queue
+	for rows.Next() {
+		var entry appeconomy.Queue
+		var buildingID string
+		var startedText, completesText sql.NullString
+		if err := rows.Scan(&entry.ID, &buildingID, &entry.TargetLevel, &entry.Cost.Metal, &entry.Cost.Crystal, &entry.Cost.Deuterium, &entry.Position, &startedText, &completesText, &entry.State); err != nil {
+			return nil, err
+		}
+		entry.Building = building.ID(buildingID)
+		if startedText.Valid {
+			if entry.StartedAt, err = time.Parse(time.RFC3339Nano, startedText.String); err != nil {
+				return nil, err
+			}
+			if entry.CompletesAt, err = time.Parse(time.RFC3339Nano, completesText.String); err != nil {
+				return nil, err
+			}
+		}
+		entries = append(entries, entry)
 	}
-	queue.CompletesAt, err = time.Parse(time.RFC3339Nano, completesText)
-	return &queue, err
+	return entries, rows.Err()
+}
+
+// projectedLevels applies the whole queue to the built levels, so that a second
+// order for the same building targets the level after the first.
+func projectedLevels(planet appeconomy.Planet) building.Levels {
+	projected := building.Levels{}
+	for id, level := range planet.Levels {
+		projected[id] = level
+	}
+	for _, entry := range planet.Queue {
+		projected[entry.Building] = entry.TargetLevel
+	}
+	return projected
+}
+
+// estimateQueue dates the entries that are still waiting, by walking the queue
+// with the factory levels each of them will find when its turn comes. These
+// dates are a forecast shown to the player and are never persisted.
+func estimateQueue(entries []appeconomy.Queue, levels building.Levels, configured rules.Ruleset, catalogue building.Catalogue, now time.Time) {
+	cursor := now
+	projected := building.Levels{}
+	for id, level := range levels {
+		projected[id] = level
+	}
+	for index, entry := range entries {
+		if !entry.Waiting() {
+			if entry.CompletesAt.After(cursor) {
+				cursor = entry.CompletesAt
+			}
+			projected[entry.Building] = entry.TargetLevel
+			continue
+		}
+		duration, err := catalogue.Duration(entry.Cost, projected[building.RoboticsFactory], projected[building.NaniteFactory], configured.Time.BuildingSpeed)
+		if err != nil {
+			return
+		}
+		entries[index].EstimatedStartAt = cursor
+		cursor = cursor.Add(duration)
+		entries[index].EstimatedCompletesAt = cursor
+		projected[entry.Building] = entry.TargetLevel
+	}
 }
 
 func loadQueue(ctx context.Context, tx *sql.Tx, queueID, accountID int64) (appeconomy.Queue, error) {
 	var queue appeconomy.Queue
-	var buildingID, startedText, completesText string
-	err := tx.QueryRowContext(ctx, `SELECT q.id, q.building_id, q.target_level, q.metal_cost, q.crystal_cost, q.deuterium_cost, q.started_at, q.completes_at, q.state FROM building_queue q JOIN planets p ON p.id = q.planet_id JOIN players pl ON pl.id = p.owner_player_id WHERE q.id = ? AND pl.account_id = ?`, queueID, accountID).Scan(&queue.ID, &buildingID, &queue.TargetLevel, &queue.Cost.Metal, &queue.Cost.Crystal, &queue.Cost.Deuterium, &startedText, &completesText, &queue.State)
+	var buildingID string
+	var startedText, completesText sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT q.id, q.building_id, q.target_level, q.metal_cost, q.crystal_cost, q.deuterium_cost, q.position, q.started_at, q.completes_at, q.state FROM building_queue q JOIN planets p ON p.id = q.planet_id JOIN players pl ON pl.id = p.owner_player_id WHERE q.id = ? AND pl.account_id = ?`, queueID, accountID).Scan(&queue.ID, &buildingID, &queue.TargetLevel, &queue.Cost.Metal, &queue.Cost.Crystal, &queue.Cost.Deuterium, &queue.Position, &startedText, &completesText, &queue.State)
 	if err != nil {
 		return appeconomy.Queue{}, err
 	}
 	queue.Building = building.ID(buildingID)
-	queue.StartedAt, err = time.Parse(time.RFC3339Nano, startedText)
-	if err != nil {
+	if !startedText.Valid {
+		return queue, nil
+	}
+	if queue.StartedAt, err = time.Parse(time.RFC3339Nano, startedText.String); err != nil {
 		return appeconomy.Queue{}, err
 	}
-	queue.CompletesAt, err = time.Parse(time.RFC3339Nano, completesText)
+	queue.CompletesAt, err = time.Parse(time.RFC3339Nano, completesText.String)
 	return queue, err
 }

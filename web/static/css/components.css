@@ -186,7 +186,62 @@ meter::-moz-meter-bar { background: var(--accent-dim); }
 meter:-moz-meter-sub-optimum::-moz-meter-bar { background: var(--warn); }
 meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--full); }
 
-progress { width: 100%; accent-color: var(--accent); }
+/* A build in progress is a task, not a gauge, so it wears <progress>. The
+   filling is the value attribute; the policy would refuse an inline width. */
+progress {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-sunken);
+  accent-color: var(--accent);
+}
+progress::-webkit-progress-bar { background: var(--surface-sunken); border-radius: var(--radius-sm); }
+progress::-webkit-progress-value {
+  border-radius: var(--radius-sm);
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.14) 0 0.5rem, transparent 0.5rem 1rem),
+    linear-gradient(90deg, var(--accent-dim), var(--accent));
+  background-size: 2rem 100%, 100% 100%;
+  animation: queue-crawl 1.4s linear infinite;
+}
+progress::-moz-progress-bar {
+  border-radius: var(--radius-sm);
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.14) 0 0.5rem, transparent 0.5rem 1rem),
+    linear-gradient(90deg, var(--accent-dim), var(--accent));
+  background-size: 2rem 100%, 100% 100%;
+  animation: queue-crawl 1.4s linear infinite;
+}
+/* The stripes crawl so that a long build still looks alive. A visitor who asked
+   for calm keeps a still bar: the reduced-motion rule in base.css stops this. */
+@keyframes queue-crawl {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 2rem 0, 0 0; }
+}
+
+/* ---------- Build queues ---------- */
+
+.queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.queue-entry {
+  padding: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* An order still waiting its turn states so at a glance. */
+.queue-entry--waiting { border-left-color: var(--border-strong); background: transparent; }
+.queue-entry__title { margin: 0; font-size: var(--text-md); font-weight: 700; }
+.queue-entry__count { color: var(--accent); font-weight: 400; font-size: var(--text-sm); }
+.queue-entry__timing { margin: 0; font-size: var(--text-sm); }
+.queue { margin-block: var(--space-4); }
 
 /* ---------- Controls ---------- */
 

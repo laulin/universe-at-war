@@ -244,7 +244,7 @@ func TestShipyardUpgradeAndProductionExcludeEachOther(t *testing.T) {
 	if _, err := universe.Shipyard.Order(ctx, principal, planet.ID, unit.RocketLauncher, 1, "busy"); err != nil {
 		t.Fatalf("Order() error = %v", err)
 	}
-	if _, err := universe.Economy.StartConstruction(ctx, principal, planet.ID, "shipyard", "upgrade"); !errors.Is(err, appeconomy.ErrFacilityBusy) {
+	if _, err := universe.Economy.EnqueueBuilding(ctx, principal, planet.ID, "shipyard", "upgrade"); !errors.Is(err, appeconomy.ErrFacilityBusy) {
 		t.Fatalf("shipyard upgrade during production error = %v, want ErrFacilityBusy", err)
 	}
 }

@@ -24,22 +24,34 @@ var (
 	ErrNoEmpire       = errors.New("economy: account has no empire")
 	ErrPlanetNotFound = errors.New("economy: planet does not belong to this account")
 	ErrUniverseFull   = errors.New("economy: universe has no free position")
-	ErrQueueBusy      = errors.New("economy: a construction is already active")
+	ErrQueueBusy      = errors.New("economy: the construction queue changed under this order")
+	ErrQueueFull      = errors.New("economy: the construction queue is full")
 	ErrFacilityBusy   = errors.New("economy: the facility is in use by another activity")
 	ErrInvalidName    = errors.New("economy: player name must contain 3 to 32 characters")
 	ErrInvalidRequest = errors.New("economy: invalid construction request")
 )
 
-// Queue is the active or completed construction projection.
+// Queue is one entry of a body's construction queue. The entry at position
+// zero is the one being built and carries a real schedule; the entries behind
+// it only carry an estimate, because their duration is decided when their turn
+// comes.
 type Queue struct {
 	ID          int64
 	Building    building.ID
 	TargetLevel int
 	Cost        economy.Resources
+	Position    int
 	StartedAt   time.Time
 	CompletesAt time.Time
-	State       string
+	// EstimatedStartAt and EstimatedCompletesAt are only filled for an entry
+	// that is still waiting, and are never persisted.
+	EstimatedStartAt     time.Time
+	EstimatedCompletesAt time.Time
+	State                string
 }
+
+// Waiting reports an entry that has not started yet.
+func (q Queue) Waiting() bool { return q.State == "queued" }
 
 // Planet is the complete economic projection returned after lazy settlement.
 type Planet struct {
@@ -60,8 +72,10 @@ type Planet struct {
 	Levels             building.Levels
 	Researches         research.Levels
 	Units              unit.Inventory
-	ActiveQueue        *Queue
-	Rules              rules.Ruleset
+	// Queue holds every construction ordered on this body and not yet finished,
+	// head first.
+	Queue []Queue
+	Rules rules.Ruleset
 }
 
 // BuildingChoice is one catalogue entry enriched for a planet.
@@ -82,7 +96,7 @@ type Repository interface {
 	CreateEmpire(context.Context, int64, string, time.Time) (Planet, error)
 	Planet(context.Context, int64, int64, time.Time, building.Catalogue) (Planet, error)
 	Planets(context.Context, int64, time.Time, building.Catalogue) ([]Planet, error)
-	StartConstruction(context.Context, int64, int64, building.ID, string, time.Time, building.Catalogue) (Queue, error)
+	EnqueueBuilding(context.Context, int64, int64, building.ID, string, time.Time, building.Catalogue) (Queue, error)
 }
 
 // Completer settles the scheduled events that are already due, so an
@@ -157,7 +171,7 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Kind, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
 		if planErr == nil {
 			choice.Plan = plan
-			choice.Available = planet.ActiveQueue == nil
+			choice.Available = len(planet.Queue) < planet.Rules.Progression.QueueLength
 			choice.Affordable = planet.Stock.Covers(plan.Cost)
 		} else if len(choice.Missing) == 0 {
 			choice.Reason = planErr.Error()
@@ -167,14 +181,17 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 	return planet, choices, nil
 }
 
-func (s Service) StartConstruction(ctx context.Context, principal appauth.Principal, planetID int64, id building.ID, idempotencyKey string) (Queue, error) {
+// EnqueueBuilding adds one construction at the end of the body's queue. Its
+// cost is taken immediately, so an order that reached the queue can never stall
+// for want of resources.
+func (s Service) EnqueueBuilding(ctx context.Context, principal appauth.Principal, planetID int64, id building.ID, idempotencyKey string) (Queue, error) {
 	if err := s.validatePrincipal(principal); err != nil {
 		return Queue{}, err
 	}
 	if planetID <= 0 || strings.TrimSpace(idempotencyKey) == "" || len(idempotencyKey) > 128 {
 		return Queue{}, ErrInvalidRequest
 	}
-	queue, err := s.Repository.StartConstruction(ctx, principal.AccountID, planetID, id, idempotencyKey, s.Clock.Now().UTC(), s.Catalogue)
+	queue, err := s.Repository.EnqueueBuilding(ctx, principal.AccountID, planetID, id, idempotencyKey, s.Clock.Now().UTC(), s.Catalogue)
 	if err == nil && s.Wake != nil {
 		s.Wake()
 	}

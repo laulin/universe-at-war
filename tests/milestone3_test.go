@@ -32,8 +32,8 @@ func TestMilestoneThreeProgressionFromEmptyEmpireToFleetAndDefense(t *testing.T)
 	setResources(t, ctx, database, planet.ID, 100000, 100000, 100000)
 
 	// The laboratory is built through the ordinary construction use case.
-	if _, err := universe.Economy.StartConstruction(ctx, principal, planet.ID, building.ResearchLab, "lab"); err != nil {
-		t.Fatalf("StartConstruction(research_lab) error = %v", err)
+	if _, err := universe.Economy.EnqueueBuilding(ctx, principal, planet.ID, building.ResearchLab, "lab"); err != nil {
+		t.Fatalf("EnqueueBuilding(research_lab) error = %v", err)
 	}
 	advanceUntilIdle(t, ctx, universe, clock)
 	assertSingleValue(t, database, "SELECT level FROM planet_buildings WHERE planet_id = 1 AND building_id = 'research_lab'", 1)
@@ -51,8 +51,8 @@ func TestMilestoneThreeProgressionFromEmptyEmpireToFleetAndDefense(t *testing.T)
 
 	// The shipyard requires the robotics factory, which the same queue builds.
 	for _, id := range []building.ID{building.RoboticsFactory, building.RoboticsFactory, building.Shipyard} {
-		if _, err := universe.Economy.StartConstruction(ctx, principal, planet.ID, id, string(id)+time.Now().String()); err != nil {
-			t.Fatalf("StartConstruction(%s) error = %v", id, err)
+		if _, err := universe.Economy.EnqueueBuilding(ctx, principal, planet.ID, id, string(id)+time.Now().String()); err != nil {
+			t.Fatalf("EnqueueBuilding(%s) error = %v", id, err)
 		}
 		advanceUntilIdle(t, ctx, universe, clock)
 	}
@@ -105,8 +105,8 @@ func TestEventsDueAtTheSameInstantFollowTheDocumentedPriority(t *testing.T) {
 	if _, err := universe.Research.Start(ctx, principal, planet.ID, research.EnergyTechnology, "energy"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	if _, err := universe.Economy.StartConstruction(ctx, principal, planet.ID, building.MetalMine, "mine"); err != nil {
-		t.Fatalf("StartConstruction() error = %v", err)
+	if _, err := universe.Economy.EnqueueBuilding(ctx, principal, planet.ID, building.MetalMine, "mine"); err != nil {
+		t.Fatalf("EnqueueBuilding() error = %v", err)
 	}
 	if _, err := database.Write().ExecContext(ctx,
 		"UPDATE scheduled_events SET due_at = '2042-09-10T12:00:00Z' WHERE state = 'pending'"); err != nil {

@@ -30,8 +30,8 @@ func TestScenarioIBanBlocksLoginNotEmpire(t *testing.T) {
 		t.Fatalf("CreateEmpire() error = %v", err)
 	}
 	setResources(t, ctx, database, home.ID, 5000, 5000, 5000)
-	if _, err := universeWorld.Economy.StartConstruction(ctx, player, home.ID, "metal_mine", "mine"); err != nil {
-		t.Fatalf("StartConstruction() error = %v", err)
+	if _, err := universeWorld.Economy.EnqueueBuilding(ctx, player, home.ID, "metal_mine", "mine"); err != nil {
+		t.Fatalf("EnqueueBuilding() error = %v", err)
 	}
 	before, err := universeWorld.Economy.Planet(ctx, player, home.ID)
 	if err != nil {

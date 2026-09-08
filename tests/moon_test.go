@@ -94,11 +94,11 @@ func TestAMoonProducesNothingAndOnlyAcceptsLunarBuildings(t *testing.T) {
 			t.Fatalf("the moon offers %s", choice.Definition.ID)
 		}
 	}
-	if _, err := universeWorld.Economy.StartConstruction(ctx, bob, moonID, building.MetalMine, "mine-on-moon"); err == nil {
+	if _, err := universeWorld.Economy.EnqueueBuilding(ctx, bob, moonID, building.MetalMine, "mine-on-moon"); err == nil {
 		t.Fatal("a mine was accepted on a moon")
 	}
-	if _, err := universeWorld.Economy.StartConstruction(ctx, bob, moonID, building.LunarBase, "base"); err != nil {
-		t.Fatalf("StartConstruction(lunar base) error = %v", err)
+	if _, err := universeWorld.Economy.EnqueueBuilding(ctx, bob, moonID, building.LunarBase, "base"); err != nil {
+		t.Fatalf("EnqueueBuilding(lunar base) error = %v", err)
 	}
 	clock.Advance(200 * time.Hour)
 	if _, err := universeWorld.Events.CompleteDue(ctx, 50); err != nil {

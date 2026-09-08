@@ -126,7 +126,7 @@ func accessibleUniverse(t *testing.T) (http.Handler, *http.Cookie, *http.Cookie)
 	setResources(t, ctx, database, home.ID, 50000, 50000, 50000)
 	setUnits(t, ctx, database, home.ID, "small_cargo", 4)
 	setResearch(t, ctx, database, 1, "combustion_drive", 2)
-	if _, err := universeWorld.Economy.StartConstruction(ctx, appauth.Principal{AccountID: 1},
+	if _, err := universeWorld.Economy.EnqueueBuilding(ctx, appauth.Principal{AccountID: 1},
 		home.ID, "metal_mine", "mine"); err != nil {
 		t.Fatal(err)
 	}

@@ -128,7 +128,10 @@ type ProgressionSettings struct {
 	LaboratoryBonus        float64 `json:"laboratory_bonus"`
 	ResearchNetworkEnabled bool    `json:"research_network_enabled"`
 	MaximumColonies        int     `json:"maximum_colonies"`
-	CatalogueVersion       string  `json:"catalogue_version"`
+	// QueueLength caps how many orders one build queue may hold at once,
+	// counting the one being built.
+	QueueLength      int    `json:"queue_length"`
+	CatalogueVersion string `json:"catalogue_version"`
 }
 
 type TeamSettings struct {
@@ -243,7 +246,7 @@ func Default() Ruleset {
 		Progression: ProgressionSettings{
 			BuildingCostMultiplier: 1, ResearchCostMultiplier: 1, ShipCostMultiplier: 1,
 			DefenseCostMultiplier: 1, LaboratoryBonus: 1, ResearchNetworkEnabled: true,
-			MaximumColonies: 9, CatalogueVersion: DefaultCatalogueVersion,
+			MaximumColonies: 9, QueueLength: 10, CatalogueVersion: DefaultCatalogueVersion,
 		},
 		Team: TeamSettings{
 			AlliancesEnabled: true, MaximumAllianceSize: 20, ACSEnabled: true,
@@ -368,6 +371,9 @@ func (r Ruleset) Validate() error {
 	}
 	if r.Progression.MaximumColonies <= 0 {
 		return errors.New("rules: maximum colonies must be positive")
+	}
+	if r.Progression.QueueLength <= 0 {
+		return errors.New("rules: queue length must be positive")
 	}
 	if strings.TrimSpace(r.Progression.CatalogueVersion) == "" {
 		return errors.New("rules: catalogue version is required")

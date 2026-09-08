@@ -1,12 +1,6 @@
 {{define "title"}}{{.Planet.Name}}{{end}}
 {{define "content"}}
-  {{with .Planet.ActiveQueue}}
-  <section class="queue panel-wide">
-    <p class="eyebrow">Construction en cours</p>
-    <h2>{{.Building}} niveau {{.TargetLevel}}</h2>
-    <p>Achèvement prévu à {{.CompletesAt.Format "15:04:05"}} UTC.</p>
-  </section>
-  {{end}}
+  {{template "buildQueue" .Queue}}
   <section class="panel-wide" aria-labelledby="buildings-title">
     <div class="section-bar"><h2 id="buildings-title">Infrastructure planétaire</h2></div>
     <div class="card-grid">

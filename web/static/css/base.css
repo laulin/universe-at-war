@@ -30,7 +30,7 @@ a { color: var(--accent); }
 a:hover { color: var(--accent-strong); }
 
 /* Figures never dance when a countdown ticks. */
-strong, td, th, time, output, meter, .figure, .stat-value { font-variant-numeric: tabular-nums; }
+strong, td, th, time, output, meter, progress, .figure, .stat-value { font-variant-numeric: tabular-nums; }
 
 .muted { color: var(--muted); font-weight: 400; }
 .faint { color: var(--faint); }

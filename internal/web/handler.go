@@ -90,7 +90,7 @@ type economyService interface {
 	CreateEmpire(context.Context, appauth.Principal, string) (appeconomy.Planet, error)
 	Planets(context.Context, appauth.Principal) ([]appeconomy.Planet, error)
 	Buildings(context.Context, appauth.Principal, int64) (appeconomy.Planet, []appeconomy.BuildingChoice, error)
-	StartConstruction(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
+	EnqueueBuilding(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
 }
 
 type researchService interface {
@@ -211,7 +211,13 @@ var (
 func parsePages() (map[string]*template.Template, error) {
 	pages := map[string]*template.Template{}
 	for base, names := range map[string][]string{"layout": gamePages, "shell": plainPages} {
-		root, err := template.New(base+".html").Funcs(templateFuncs).ParseFS(webassets.Files, "templates/"+base+".html")
+		// queue.html rides along with the shell so that every build screen shares
+		// one queue panel instead of three drifting copies.
+		sources := []string{"templates/" + base + ".html"}
+		if base == "layout" {
+			sources = append(sources, "templates/queue.html")
+		}
+		root, err := template.New(base+".html").Funcs(templateFuncs).ParseFS(webassets.Files, sources...)
 		if err != nil {
 			return nil, err
 		}
@@ -814,7 +820,7 @@ func (h *Handler) startBuilding(response http.ResponseWriter, request *http.Requ
 	if !ok {
 		return
 	}
-	_, err := h.economy.StartConstruction(request.Context(), principal, planetID, building.ID(request.PathValue("building")), request.PostFormValue("idempotency_key"))
+	_, err := h.economy.EnqueueBuilding(request.Context(), principal, planetID, building.ID(request.PathValue("building")), request.PostFormValue("idempotency_key"))
 	if errors.Is(err, appeconomy.ErrPlanetNotFound) || errors.Is(err, appeconomy.ErrNoEmpire) {
 		http.NotFound(response, request)
 		return
@@ -846,7 +852,21 @@ type buildingPageChoice struct {
 
 type overviewPageData struct {
 	pageShell
-	Planets []appeconomy.Planet
+	Planets []overviewBodyView
+}
+
+// overviewBodyView is one row of the empire table. Construction summarises the
+// body's queue: its head plus how many orders wait behind.
+type overviewBodyView struct {
+	appeconomy.Planet
+	Construction *overviewConstructionView
+}
+
+type overviewConstructionView struct {
+	Name    string
+	Detail  string
+	EndsAt  string
+	Waiting int
 }
 
 func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Request, status int, principal appauth.Principal, planets []appeconomy.Planet) {
@@ -854,13 +874,25 @@ func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Req
 	if !ok {
 		return
 	}
+	rows := make([]overviewBodyView, 0, len(planets))
+	for _, planet := range planets {
+		row := overviewBodyView{Planet: planet}
+		if head := planet.Queue; len(head) > 0 {
+			row.Construction = &overviewConstructionView{
+				Name: buildingName(head[0].Building), Detail: fmt.Sprintf("niveau %d", head[0].TargetLevel),
+				EndsAt: head[0].CompletesAt.Format(clockLayout), Waiting: len(head) - 1,
+			}
+		}
+		rows = append(rows, row)
+	}
 	shell := h.gameShell(request.Context(), token, principal, "overview", planets, h.rememberedBody(request))
-	h.render(response, status, "overview", overviewPageData{pageShell: shell, Planets: planets})
+	h.render(response, status, "overview", overviewPageData{pageShell: shell, Planets: rows})
 }
 
 type economyPageData struct {
 	pageShell
 	Planet  appeconomy.Planet
+	Queue   queuePanel
 	Choices []buildingPageChoice
 }
 
@@ -872,7 +904,7 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	views := make([]buildingPageChoice, 0, len(choices))
 	for _, choice := range choices {
 		reason := choiceReason(choice.Missing, choice.Reason,
-			planet.ActiveQueue != nil, choice.Available && !choice.Affordable)
+			len(planet.Queue) >= planet.Rules.Progression.QueueLength, choice.Available && !choice.Affordable)
 		views = append(views, buildingPageChoice{
 			ID: choice.Definition.ID, Name: buildingName(choice.Definition.ID), Level: choice.Level,
 			CostMetal: choice.Plan.Cost.Metal, CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
@@ -882,13 +914,18 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	}
 	shell := h.gameShell(request.Context(), token, principal, "planet", planets, planet.ID)
 	shell.Error = message
-	h.render(response, status, "economy", economyPageData{pageShell: shell, Planet: planet, Choices: views})
+	h.render(response, status, "economy", economyPageData{
+		pageShell: shell, Planet: planet,
+		Queue: buildingQueuePanel(planet, shell.Now), Choices: views,
+	})
 }
 
 func buildingError(err error) string {
 	switch {
+	case errors.Is(err, appeconomy.ErrQueueFull):
+		return "La file de construction est pleine."
 	case errors.Is(err, appeconomy.ErrQueueBusy):
-		return "Une construction est déjà en cours."
+		return "La file de construction vient de changer : réessayez."
 	case errors.Is(err, appeconomy.ErrInvalidRequest):
 		return "La demande de construction est invalide."
 	default:
