@@ -211,6 +211,11 @@
 .card__body p { margin: 0; font-size: var(--text-sm); }
 .card__body form { margin: 0; gap: var(--space-2); }
 .card__body .cost { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-sm); }
+/* Every card of a row is as tall as the tallest, so what closes a card is held
+   against its floor. Without this a title that wraps onto a second line pushes
+   its button a line lower than its neighbours'. Declared after the rules that
+   zero these margins, which carry the same weight and would otherwise win. */
+.card__body > :last-child { margin-top: auto; }
 /* Pictures are blocks by default, which would push every figure onto its own
    line. A cost icon sits on the baseline instead. */
 .cost img, .section-bar img { display: inline-block; vertical-align: -0.15em; }
