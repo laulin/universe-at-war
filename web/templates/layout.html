@@ -9,17 +9,46 @@
   <link rel="stylesheet" href="/static/css/chrome.css">
   <link rel="stylesheet" href="/static/css/components.css">
   <link rel="stylesheet" href="/static/css/pages.css">
+  <link rel="icon" href="/art/resource/crystal" type="image/svg+xml">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Aller au contenu</a>
-  <header class="game-header">
+  <div class="app">
     <a class="brand" href="/">Universe At War</a>
+
+    <header class="resource-bar">
+      {{with .Current}}
+      {{range .Resources}}
+      <div class="resource-bar__item">
+        <img src="/art/resource/{{.Slug}}" alt="" width="26" height="26">
+        <div>
+          <span class="stat-value res-{{.Slug}}{{if .Full}} is-full{{end}}">{{figure .Amount}}</span>
+          <small>{{.Label}}{{if .Unbounded}} · sans limite{{else}} · {{figure .Capacity}}{{end}}{{if .Rate}} · {{signed .Rate}}/h{{end}}</small>
+          {{if not .Unbounded}}<meter value="{{.Amount}}" min="0" max="{{.Capacity}}" low="{{.Low}}" high="{{.High}}" optimum="0" aria-label="Remplissage {{.Label}}"></meter>{{end}}
+        </div>
+      </div>
+      {{end}}
+      <div class="resource-bar__item">
+        <img src="/art/resource/energy" alt="" width="26" height="26">
+        <div>
+          <span class="stat-value res-energy{{if lt .EnergyAvailable 0}} is-full{{end}}">{{figure .EnergyAvailable}}</span>
+          <small>Énergie · {{figure .EnergyProduced}} produite</small>
+        </div>
+      </div>
+      {{end}}
+      <div class="session">
+        {{if .Username}}<span class="muted">{{.Username}}</span>{{end}}
+        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Déconnexion</button></form>
+      </div>
+    </header>
+
     {{if .Bodies}}
     <nav aria-label="Navigation principale">
       <a href="/"{{if eq .Section "overview"}} aria-current="page"{{end}}>Empire</a>
       {{with .Current}}
-      <a href="/planets/{{.ID}}"{{if eq $.Section "planet"}} aria-current="page"{{end}}>Planète</a>
+      <p class="nav-group">{{.Name}}</p>
+      <a href="/planets/{{.ID}}"{{if eq $.Section "planet"}} aria-current="page"{{end}}>Ressources</a>
       <a href="/planets/{{.ID}}/research"{{if eq $.Section "research"}} aria-current="page"{{end}}>Recherche</a>
       <a href="/planets/{{.ID}}/shipyard"{{if eq $.Section "shipyard"}} aria-current="page"{{end}}>Chantier</a>
       <a href="/planets/{{.ID}}/defense"{{if eq $.Section "defense"}} aria-current="page"{{end}}>Défense</a>
@@ -29,37 +58,53 @@
       <a href="/planets/{{.ID}}/jump"{{if eq $.Section "jump"}} aria-current="page"{{end}}>Porte de saut</a>
       {{end}}
       {{end}}
+      <hr>
       <a href="/galaxy/1/1"{{if eq .Section "galaxy"}} aria-current="page"{{end}}>Galaxie</a>
       <a href="/reports"{{if eq .Section "reports"}} aria-current="page"{{end}}>Rapports{{if .Alerts}} <span class="hostile">⚠ {{.Alerts}}</span>{{end}}</a>
       <a href="/alliance"{{if eq .Section "alliance"}} aria-current="page"{{end}}>Alliance</a>
       {{if .Administrator}}<a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>{{end}}
-      {{with .Current}}
-      {{end}}
     </nav>
-    <form class="body-picker" method="get" action="/planets/switch">
-      <label for="body-picker">Corps actif</label>
-      <select id="body-picker" name="planet">
-        {{range .Bodies}}<option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.Kind}} {{.Name}} [{{.Coordinate}}]</option>{{end}}
-      </select>
-      <button type="submit">Aller</button>
-    </form>
-    {{end}}
-    {{if and .Administrator (not .Bodies)}}
+    {{else if .Administrator}}
     <nav aria-label="Navigation administrateur">
       <a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>
     </nav>
     {{end}}
-    <div class="session">
-      {{if .Username}}<span class="muted">{{.Username}}</span>{{end}}
-      <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Déconnexion</button></form>
-    </div>
-  </header>
-  <main class="game-shell" id="main-content" tabindex="-1">
-    {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
-    {{template "content" .}}
-  </main>
-  <footer class="game-footer">
-    Heure serveur <time datetime="{{.Now.Format "2006-01-02T15:04:05Z07:00"}}" data-server-time>{{.Now.Format "15:04:05"}} UTC</time>
-  </footer>
+
+    <main class="game-shell" id="main-content" tabindex="-1">
+      {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+      {{template "content" .}}
+    </main>
+
+    {{if .Bodies}}
+    <aside class="body-column" aria-label="Corps célestes">
+      <p class="eyebrow">{{.Totals.Bodies}} corps</p>
+      <ul>
+        {{range .Bodies}}
+        <li>
+          <a href="/planets/{{.ID}}"{{if .Current}} aria-current="true"{{end}}>
+            <img src="/art/body/{{.ArtSlot}}" alt="{{.Kind}}" width="38" height="38">
+            <span class="body-name">{{.Name}}</span>
+            <span class="body-coord">[{{.Coordinate}}]</span>
+            <span class="body-stock">
+              {{range .Resources}}<span class="res-{{.Slug}}{{if .Full}} is-full{{end}}"><b>{{.Initial}}</b> {{figure .Amount}}</span>{{end}}
+            </span>
+          </a>
+        </li>
+        {{end}}
+      </ul>
+      <div class="totals">
+        <p class="eyebrow">Totaux</p>
+        <dl>
+          {{range .Totals.Resources}}<dt class="res-{{.Slug}}">{{.Label}}</dt><dd class="res-{{.Slug}}">{{figure .Amount}}</dd>{{end}}
+        </dl>
+      </div>
+    </aside>
+    {{end}}
+
+    <footer class="game-footer">
+      <span>Heure serveur <time datetime="{{.Now.Format "2006-01-02T15:04:05Z07:00"}}" data-server-time>{{.Now.Format "15:04:05"}} UTC</time></span>
+      <span class="faint">Universe At War</span>
+    </footer>
+  </div>
 </body>
 </html>{{end}}

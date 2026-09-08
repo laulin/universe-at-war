@@ -85,7 +85,7 @@ func (h *Handler) renderArtificials(response http.ResponseWriter, request *http.
 		return
 	}
 	data := artificialPageData{
-		pageShell:  h.gameShell(request.Context(), token, principal, "admin", planets, 0),
+		pageShell:  h.gameShell(request.Context(), token, principal, "admin", planets, h.rememberedBody(request)),
 		Players:    players,
 		Archetypes: domainai.Archetypes(),
 	}
@@ -202,7 +202,7 @@ func (h *Handler) artificialDetailPage(response http.ResponseWriter, request *ht
 		return
 	}
 	h.render(response, http.StatusOK, "admin-ai-detail", artificialDetailPageData{
-		pageShell: h.gameShell(request.Context(), token, principal, "admin", planets, 0),
+		pageShell: h.gameShell(request.Context(), token, principal, "admin", planets, h.rememberedBody(request)),
 		Player:    player,
 	})
 }

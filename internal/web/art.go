@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 
 	webassets "universeatwar/web"
@@ -263,8 +264,19 @@ func drawTurret(seed uint32, _ string) string {
 // bodyPalette gives a moon its grey and a planet a seeded, plausible hue.
 func drawBody(seed uint32, slug string) string {
 	hue, saturation := 20+pick(seed, 1, 320), 45
-	if strings.Contains(slug, "moon") || strings.Contains(slug, "lune") {
+	switch {
+	case strings.HasPrefix(slug, "moon"):
 		hue, saturation = 215, 8
+	case strings.HasPrefix(slug, "planet-"):
+		// The inner orbits burn and the outer ones freeze, so the column reads
+		// as a system rather than as a bag of colours.
+		if position, err := strconv.Atoi(slug[len("planet-"):]); err == nil && position > 0 {
+			if position > 15 {
+				position = 15
+			}
+			hue = 24 + (position-1)*13
+			saturation = 52 - position
+		}
 	}
 	var shapes strings.Builder
 	fmt.Fprintf(&shapes,

@@ -107,7 +107,7 @@ func (h *Handler) renderAlliance(response http.ResponseWriter, request *http.Req
 		return
 	}
 	data := alliancePageData{
-		pageShell: h.gameShell(ctx, token, principal, "alliance", planets, 0),
+		pageShell: h.gameShell(ctx, token, principal, "alliance", planets, h.rememberedBody(request)),
 	}
 	data.Error = message
 	profile, err := h.alliance.Profile(ctx, principal)
@@ -322,7 +322,7 @@ func (h *Handler) renderOperations(response http.ResponseWriter, request *http.R
 		return
 	}
 	data := operationsPageData{
-		pageShell: h.gameShell(ctx, token, principal, "alliance", planets, 0),
+		pageShell: h.gameShell(ctx, token, principal, "alliance", planets, h.rememberedBody(request)),
 		Groups:    groups, Form: form, Preview: preview,
 	}
 	data.Error = message

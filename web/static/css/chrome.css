@@ -47,18 +47,20 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel);
 }
-.resource-bar__item { display: grid; grid-template-columns: auto 1fr; gap: 0 var(--space-2); align-items: center; min-width: 8rem; }
-.resource-bar__item img { grid-row: span 2; width: 1.6rem; height: 1.6rem; }
+.resource-bar__item { display: flex; align-items: center; gap: var(--space-2); min-width: 9rem; }
+.resource-bar__item img { width: 1.7rem; height: 1.7rem; flex: none; }
+.resource-bar__item > div { display: grid; gap: 0.1rem; min-width: 0; }
 .resource-bar__item .stat-value { font-size: var(--text-lg); font-weight: 700; line-height: 1.1; }
-.resource-bar__item small { color: var(--muted); font-size: var(--text-xs); }
-.resource-bar__item meter { grid-column: 2; }
+.resource-bar__item small { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
 .resource-bar .session { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
 .resource-bar .session form { margin: 0; }
 .resource-bar .session button { min-height: 2rem; padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
 
 /* ---------- Navigation column ---------- */
 
-.nav-column {
+/* The navigation is addressed as a child rather than by a class: its opening tag
+   is a layout invariant the tests pin down, attributes included. */
+.app > nav {
   grid-area: nav;
   position: sticky;
   top: var(--space-3);
@@ -71,7 +73,7 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel);
 }
-.nav-column a {
+.app > nav a {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -86,20 +88,20 @@
   text-decoration: none;
   text-transform: uppercase;
 }
-.nav-column a:hover {
+.app > nav a:hover {
   color: var(--text-strong);
   background: linear-gradient(90deg, rgba(31, 74, 108, 0.75), transparent);
   border-color: var(--border);
 }
 /* The active section is lit from the left edge. */
-.nav-column a[aria-current="page"] {
+.app > nav a[aria-current="page"] {
   color: var(--accent-strong);
   background: linear-gradient(90deg, rgba(38, 96, 138, 0.9), rgba(12, 26, 42, 0.4));
   border-color: var(--border-strong);
   box-shadow: -0.15rem 0 0 var(--accent) inset;
 }
-.nav-column hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-2) var(--space-1); }
-.nav-column .nav-group { color: var(--faint); font-size: var(--text-xs); letter-spacing: 0.14em; text-transform: uppercase; padding: var(--space-2) var(--space-3) 0; }
+.app > nav hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-2) var(--space-1); }
+.app > nav .nav-group { color: var(--faint); font-size: var(--text-xs); letter-spacing: 0.14em; text-transform: uppercase; padding: var(--space-2) var(--space-3) 0; }
 
 /* ---------- Main column ---------- */
 
@@ -131,11 +133,12 @@
 }
 .body-column a:hover { border-color: var(--border); background: rgba(31, 74, 108, 0.35); }
 .body-column a[aria-current="true"] { border-color: var(--border-strong); background: rgba(38, 96, 138, 0.4); }
-.body-column img { grid-row: span 2; width: 2.4rem; height: 2.4rem; border-radius: 50%; }
+.body-column img { grid-row: 1 / -1; align-self: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; }
 .body-column .body-name { font-weight: 700; color: var(--accent); }
 .body-column a[aria-current="true"] .body-name { color: var(--accent-strong); }
 .body-column .body-coord { color: var(--muted); font-size: var(--text-xs); }
-.body-column .body-stock { grid-column: 2; display: grid; gap: 0; font-size: var(--text-xs); line-height: 1.5; }
+.body-column .body-stock { grid-column: 2; display: grid; gap: 0; font-size: var(--text-xs); line-height: 1.45; }
+.body-column .body-stock b { color: var(--muted); font-weight: 400; }
 .body-column .totals { margin: var(--space-3) var(--space-1) var(--space-1); padding-top: var(--space-2); border-top: 1px solid var(--border); }
 .body-column .totals dl { display: grid; grid-template-columns: auto 1fr; gap: 0 var(--space-2); margin: 0; font-size: var(--text-xs); }
 .body-column .totals dd { margin: 0; text-align: right; font-weight: 700; }
@@ -168,10 +171,10 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "brand" "topbar" "nav" "main" "bodies" "foot";
   }
-  .nav-column, .body-column { position: static; }
-  .nav-column { flex-direction: row; flex-wrap: wrap; }
-  .nav-column a { text-transform: none; }
-  .nav-column hr, .nav-column .nav-group { display: none; }
+  .app > nav, .body-column { position: static; }
+  .app > nav { flex-direction: row; flex-wrap: wrap; }
+  .app > nav a { text-transform: none; }
+  .app > nav hr, .app > nav .nav-group { display: none; }
   .body-column > ul { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
 }
 

@@ -29,6 +29,7 @@ import (
 	appsetup "universeatwar/internal/app/setup"
 	appshipyard "universeatwar/internal/app/shipyard"
 	"universeatwar/internal/domain/building"
+	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
@@ -42,7 +43,10 @@ import (
 const (
 	sessionCookieName = "uaw_session"
 	csrfCookieName    = "uaw_csrf"
-	maxFormBytes      = 64 << 10
+	// bodyCookieName remembers the body the player last looked at, so a screen
+	// that has no planet of its own still shows the right resources.
+	bodyCookieName = "uaw_body"
+	maxFormBytes   = 64 << 10
 )
 
 type authenticationService interface {
@@ -207,7 +211,7 @@ var (
 func parsePages() (map[string]*template.Template, error) {
 	pages := map[string]*template.Template{}
 	for base, names := range map[string][]string{"layout": gamePages, "shell": plainPages} {
-		root, err := template.ParseFS(webassets.Files, "templates/"+base+".html")
+		root, err := template.New(base+".html").Funcs(templateFuncs).ParseFS(webassets.Files, "templates/"+base+".html")
 		if err != nil {
 			return nil, err
 		}
@@ -785,6 +789,7 @@ func (h *Handler) planetParameter(response http.ResponseWriter, request *http.Re
 		http.NotFound(response, request)
 		return 0, false
 	}
+	h.rememberBody(response, planetID)
 	return planetID, true
 }
 
@@ -864,7 +869,7 @@ func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Req
 	if !ok {
 		return
 	}
-	shell := h.gameShell(request.Context(), token, principal, "overview", planets, 0)
+	shell := h.gameShell(request.Context(), token, principal, "overview", planets, h.rememberedBody(request))
 	h.render(response, status, "overview", overviewPageData{pageShell: shell, Planets: planets})
 }
 
@@ -1013,12 +1018,15 @@ type pageShell struct {
 	Current   *bodyLink
 	Now       time.Time
 	Alerts    int
+	// Totals sum what the account owns, for the head of the bodies column.
+	Totals empireTotals
 	// Administrator opens the administration pages in the navigation. It never
 	// grants anything by itself: every route checks the role again.
 	Administrator bool
 }
 
-// bodyLink is one entry of the celestial body selector.
+// bodyLink is one entry of the celestial body column: identity plus the settled
+// economy of the body, which every screen shows in the shell.
 type bodyLink struct {
 	ID         int64
 	Name       string
@@ -1026,6 +1034,47 @@ type bodyLink struct {
 	Kind       string
 	IsMoon     bool
 	Current    bool
+	// ArtSlot names the illustration of the body.
+	ArtSlot string
+	// Resources are metal, crystal and deuterium, in that order, so the column
+	// and the bar always read the same way.
+	Resources       []shellResource
+	EnergyProduced  int64
+	EnergyConsumed  int64
+	EnergyAvailable int64
+	UsedFields      int
+	TotalFields     int
+}
+
+// shellResource is one figure of the resource bar, computed here rather than in
+// the view: a template has no arithmetic.
+type shellResource struct {
+	// Slug names both the illustration slot and the colour class.
+	Slug string
+	// Label names the resource, Initial abbreviates it for the cramped bodies
+	// column where three figures share one line each.
+	Label    string
+	Initial  string
+	Amount   int64
+	Capacity int64
+	Rate     int64
+	// Low and High are where the gauge turns amber then red. A template cannot
+	// compute a percentage, so it is computed here.
+	Low  int64
+	High int64
+	// Full says the store reached its ceiling and stopped earning, which the
+	// interface has to shout about.
+	Full bool
+	// Unbounded says the body stores without limit, which is what a moon does.
+	// The view then shows no capacity instead of a meaningless huge number.
+	Unbounded bool
+}
+
+// empireTotals sum what the account owns. Capacity is never summed: a moon
+// stores without limit, so the total would mean nothing.
+type empireTotals struct {
+	Resources []shellResource
+	Bodies    int
 }
 
 type pageData struct {
@@ -1050,22 +1099,91 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 			shell.Alerts = alerts
 		}
 	}
+	var metal, crystal, deuterium int64
 	for _, planet := range planets {
+		moon := planet.Kind == building.OnMoon
 		link := bodyLink{
 			ID: planet.ID, Name: planet.Name, Coordinate: planet.Coordinate.String(),
-			Kind: bodyKindName(planet.Kind), IsMoon: planet.Kind == building.OnMoon, Current: planet.ID == currentID,
+			Kind: bodyKindName(planet.Kind), IsMoon: moon, Current: planet.ID == currentID,
+			ArtSlot:         bodyArtSlot(planet.Coordinate.Position, moon),
+			Resources:       bodyResources(planet.Stock, planet.Capacity, planet.Rates, moon),
+			EnergyProduced:  planet.Energy.Produced,
+			EnergyConsumed:  planet.Energy.Consumed,
+			EnergyAvailable: planet.Energy.Produced - planet.Energy.Consumed,
+			UsedFields:      planet.UsedFields,
+			TotalFields:     planet.TotalFields,
 		}
+		metal += planet.Stock.Metal
+		crystal += planet.Stock.Crystal
+		deuterium += planet.Stock.Deuterium
 		shell.Bodies = append(shell.Bodies, link)
 		if link.Current {
 			current := link
 			shell.Current = &current
 		}
 	}
+	shell.Totals = empireTotals{
+		Bodies: len(shell.Bodies),
+		Resources: bodyResources(
+			domaineconomy.Resources{Metal: metal, Crystal: crystal, Deuterium: deuterium},
+			domaineconomy.Resources{}, domaineconomy.Rates{}, true),
+	}
 	if shell.Current == nil && len(shell.Bodies) > 0 {
 		current := shell.Bodies[0]
 		shell.Current = &current
 	}
 	return shell
+}
+
+// bodyResources lays the three storable resources out in a fixed order, so the
+// bar, the bodies column and the totals never disagree on it.
+func bodyResources(stock, capacity domaineconomy.Resources, rates domaineconomy.Rates, unbounded bool) []shellResource {
+	return []shellResource{
+		storable("metal", "Métal", "M", stock.Metal, capacity.Metal, rates.Metal, unbounded),
+		storable("crystal", "Cristal", "C", stock.Crystal, capacity.Crystal, rates.Crystal, unbounded),
+		storable("deuterium", "Deutérium", "D", stock.Deuterium, capacity.Deuterium, rates.Deuterium, unbounded),
+	}
+}
+
+func storable(slug, label, initial string, amount, capacity, rate int64, unbounded bool) shellResource {
+	return shellResource{
+		Slug: slug, Label: label, Initial: initial, Amount: amount, Capacity: capacity, Rate: rate,
+		Low: capacity / 100 * 70, High: capacity / 100 * 90,
+		Full: !unbounded && amount >= capacity, Unbounded: unbounded,
+	}
+}
+
+// bodyArtSlot names the illustration of a body. A planet is drawn from its
+// orbital position, the way the reference game does it: the inner orbits burn
+// and the outer ones freeze.
+func bodyArtSlot(position int, moon bool) string {
+	if moon {
+		return "moon"
+	}
+	return "planet-" + strconv.Itoa(position)
+}
+
+// rememberBody notes which body the player is looking at, so the shell of a page
+// that has no planet of its own still shows the right resources.
+func (h *Handler) rememberBody(response http.ResponseWriter, planetID int64) {
+	http.SetCookie(response, &http.Cookie{
+		Name: bodyCookieName, Value: strconv.FormatInt(planetID, 10), Path: "/",
+		HttpOnly: true, Secure: h.secureCookies, SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// rememberedBody reads that note back. An unknown identifier is harmless: the
+// shell only ever matches it against the bodies of the account.
+func (h *Handler) rememberedBody(request *http.Request) int64 {
+	cookie, err := request.Cookie(bodyCookieName)
+	if err != nil {
+		return 0
+	}
+	planetID, err := strconv.ParseInt(cookie.Value, 10, 64)
+	if err != nil || planetID <= 0 {
+		return 0
+	}
+	return planetID
 }
 
 func rateLimitKey(request *http.Request, username string) string {

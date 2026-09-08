@@ -9,6 +9,7 @@ import (
 
 	appadmin "universeatwar/internal/app/administration"
 	appauth "universeatwar/internal/app/authentication"
+	appeconomy "universeatwar/internal/app/economy"
 	appmoderation "universeatwar/internal/app/moderation"
 )
 
@@ -63,6 +64,20 @@ func (h *Handler) dashboardPage(response http.ResponseWriter, request *http.Requ
 	h.renderDashboard(response, request, http.StatusOK, principal, "", "")
 }
 
+// administrationBodies loads the bodies of the reader so that the administration
+// screens keep the same shell as the rest of the game. A moderator may own
+// nothing at all, which is not an error.
+func (h *Handler) administrationBodies(request *http.Request, principal appauth.Principal) []appeconomy.Planet {
+	if h.economy == nil {
+		return nil
+	}
+	planets, err := h.economy.Planets(request.Context(), principal)
+	if err != nil {
+		return nil
+	}
+	return planets
+}
+
 func (h *Handler) renderDashboard(response http.ResponseWriter, request *http.Request, status int,
 	principal appauth.Principal, message, code string) {
 	ctx := request.Context()
@@ -81,7 +96,7 @@ func (h *Handler) renderDashboard(response http.ResponseWriter, request *http.Re
 		return
 	}
 	data := dashboardPageData{
-		pageShell: h.gameShell(ctx, token, principal, "admin", nil, 0),
+		pageShell: h.gameShell(ctx, token, principal, "admin", h.administrationBodies(request, principal), h.rememberedBody(request)),
 		Health:    health, Accounts: accounts, Code: code,
 	}
 	data.Error = message
@@ -219,7 +234,8 @@ func (h *Handler) renderModeration(response http.ResponseWriter, request *http.R
 		return
 	}
 	data := moderationPageData{
-		pageShell: h.gameShell(request.Context(), token, principal, "admin", nil, 0),
+		pageShell: h.gameShell(request.Context(), token, principal, "admin",
+			h.administrationBodies(request, principal), h.rememberedBody(request)),
 		Bans:      bans,
 		Moderator: !principal.HasRole(appauth.RoleAdmin),
 	}

@@ -133,7 +133,7 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 		}
 		rows = append(rows, display)
 	}
-	shell := h.gameShell(request.Context(), token, principal, "galaxy", planets, 0)
+	shell := h.gameShell(request.Context(), token, principal, "galaxy", planets, h.rememberedBody(request))
 	shell.Error = message
 	data := galaxyPageData{
 		pageShell: shell, Galaxy: view.Galaxy, System: view.System, Rows: rows,
@@ -235,7 +235,7 @@ func (h *Handler) reportsPage(response http.ResponseWriter, request *http.Reques
 	for _, summary := range summaries {
 		views = append(views, summaryView(summary))
 	}
-	shell := h.gameShell(request.Context(), token, principal, "reports", planets, 0)
+	shell := h.gameShell(request.Context(), token, principal, "reports", planets, h.rememberedBody(request))
 	next := 0
 	if len(summaries) == appreports.PageSize {
 		next = page + 1
@@ -279,7 +279,7 @@ func (h *Handler) reportPage(response http.ResponseWriter, request *http.Request
 		return
 	}
 	data := reportPageData{
-		pageShell: h.gameShell(request.Context(), token, principal, "reports", planets, 0),
+		pageShell: h.gameShell(request.Context(), token, principal, "reports", planets, h.rememberedBody(request)),
 		Report:    summaryView(detail.Summary),
 	}
 	switch payload := detail.Payload.(type) {
