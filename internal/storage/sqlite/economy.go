@@ -390,8 +390,11 @@ func droppedFromQueue(queue []appeconomy.Queue, entryID int64) ([]appeconomy.Que
 	return dropped, refund, head
 }
 
-// cancelQueueEntry closes one queue row and the event it may have booked. Both
-// updates are guarded, so a row that already left the queue changes nothing.
+// cancelQueueEntry closes one queue row, the event it may have booked and the
+// idempotency key it took. The updates are guarded, so a row that already left
+// the queue changes nothing. Freeing the key matters: without it, ordering the
+// same thing again would look like a replay of the order just dropped, and the
+// button would silently do nothing.
 func cancelQueueEntry(ctx context.Context, tx *sql.Tx, table string, entryID int64, eventKey string, now time.Time) error {
 	result, err := tx.ExecContext(ctx,
 		"UPDATE "+table+" SET state = 'cancelled' WHERE id = ? AND state IN ('active', 'queued')", entryID)
@@ -409,6 +412,12 @@ func cancelQueueEntry(ctx context.Context, tx *sql.Tx, table string, entryID int
 		"UPDATE scheduled_events SET state = 'cancelled', processed_at = ? WHERE idempotency_key = ? AND state = 'pending'",
 		timestamp(now), eventKey); err != nil {
 		return fmt.Errorf("economy repository: cancel queue event: %w", err)
+	}
+	// The result type of an order is the name of the table holding it.
+	if _, err := tx.ExecContext(ctx,
+		"DELETE FROM idempotency_keys WHERE result_type = ? AND result_id = ?",
+		table, strconv.FormatInt(entryID, 10)); err != nil {
+		return fmt.Errorf("economy repository: release idempotency key: %w", err)
 	}
 	return nil
 }

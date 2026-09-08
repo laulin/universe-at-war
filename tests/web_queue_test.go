@@ -260,3 +260,46 @@ func formValue(t *testing.T, page, action, field string) string {
 	rest := form[from+len(marker):]
 	return html.UnescapeString(rest[:strings.Index(rest, `"`)])
 }
+
+// Cancelling an order frees the idempotency key it took. Otherwise ordering the
+// same thing again looks like a replay of the order that was just dropped, and
+// the button silently does nothing.
+func TestOrderingAgainAfterACancellationIsANewOrder(t *testing.T) {
+	handler, _, _, session, csrf := queuedWeb(t)
+
+	build := func() {
+		t.Helper()
+		page := getPage(t, handler, "/planets/1", session, csrf)
+		key := formValue(t, page, `action="/planets/1/buildings/metal_mine"`, "idempotency_key")
+		request := postFormRequest("/planets/1/buildings/metal_mine",
+			url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {key}})
+		request.AddCookie(session)
+		request.AddCookie(csrf)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusSeeOther {
+			t.Fatalf("order = %d %q", recorder.Code, recorder.Body.String())
+		}
+	}
+
+	build()
+	page := getPage(t, handler, "/planets/1", session, csrf)
+	entry := formValue(t, page, `action="/planets/1/queue/building/`, "csrf_token")
+	if entry == "" {
+		t.Fatalf("no cancel form on the queue panel: %q", page)
+	}
+	cancel := postFormRequest("/planets/1/queue/building/1/cancel", url.Values{"csrf_token": {"csrf-token"}})
+	cancel.AddCookie(session)
+	cancel.AddCookie(csrf)
+	dropped := httptest.NewRecorder()
+	handler.ServeHTTP(dropped, cancel)
+	if dropped.Code != http.StatusSeeOther {
+		t.Fatalf("cancel = %d %q", dropped.Code, dropped.Body.String())
+	}
+
+	build()
+	after := getPage(t, handler, "/planets/1", session, csrf)
+	if got := strings.Count(after, `<li class="queue-entry`); got != 1 {
+		t.Fatalf("ordering again after a cancellation left %d entries, want 1: %q", got, after)
+	}
+}
