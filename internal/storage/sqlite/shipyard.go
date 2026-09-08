@@ -296,6 +296,59 @@ func completeProduction(ctx context.Context, tx *sql.Tx, event ScheduledEvent, n
 	return promoteNextProduction(ctx, tx, planetID, unit.Family(family), event.DueAt, catalogues)
 }
 
+// CancelOrder drops one batch and refunds the units the yard still owed. The
+// ones already delivered stay with the planet, and the batch behind takes over.
+func (r *ShipyardRepository) CancelOrder(ctx context.Context, accountID, planetID, orderID int64, now time.Time) (appeconomy.Cancellation, error) {
+	var cancellation appeconomy.Cancellation
+	err := withWriteTx(ctx, r.write, "shipyard repository: cancel order", func(tx *sql.Tx) error {
+		planet, _, production, err := loadPlanet(ctx, tx, accountID, planetID, now, r.catalogues.Buildings)
+		if err != nil {
+			return err
+		}
+		order, err := loadProductionOrder(ctx, tx, "id = ? AND planet_id = ?", orderID, planet.ID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return appshipyard.ErrQueueEntryNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if order.State != "active" && order.State != "queued" {
+			return appshipyard.ErrQueueEntryNotFound
+		}
+		if err := cancelQueueEntry(ctx, tx, "production_orders", order.ID, fmt.Sprintf("production-complete:%d", order.ID), now); err != nil {
+			return err
+		}
+		owed := order.Quantity - order.Delivered
+		refund := economyTimes(order.UnitCost, owed)
+		var lost domaineconomy.Resources
+		production.Stock, lost = production.Stock.Refund(refund, planet.Capacity)
+		if err := persistProduction(ctx, tx, planet.ID, production); err != nil {
+			return err
+		}
+		if order.State == "active" {
+			if err := promoteNextProduction(ctx, tx, planet.ID, order.Family, now, r.catalogues); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO game_event_log(event_type, actor_type, actor_id, entity_type, entity_id, occurred_at, payload)
+			VALUES ('production_cancelled', 'account', ?, 'planet', ?, ?, json_object('order_id', ?, 'unit_id', ?, 'refunded_units', ?))
+		`, accountID, planet.ID, timestamp(now), order.ID, string(order.Unit), owed); err != nil {
+			return fmt.Errorf("shipyard repository: log cancellation: %w", err)
+		}
+		cancellation = appeconomy.Cancellation{
+			Cancelled: 1,
+			Refunded:  domaineconomy.Resources{Metal: refund.Metal - lost.Metal, Crystal: refund.Crystal - lost.Crystal, Deuterium: refund.Deuterium - lost.Deuterium},
+			Lost:      lost,
+		}
+		return nil
+	})
+	if err != nil {
+		return appeconomy.Cancellation{}, err
+	}
+	return cancellation, nil
+}
+
 // scheduleProduction books the completion of the batch now at the head.
 func scheduleProduction(ctx context.Context, tx *sql.Tx, orderID, rulesetVersion int64, startedAt, completesAt time.Time) error {
 	if _, err := tx.ExecContext(ctx, `
@@ -516,8 +569,8 @@ func scanProductionOrder(row productionScanner) (appshipyard.Order, error) {
 	return order, nil
 }
 
-func loadProductionOrder(ctx context.Context, tx *sql.Tx, condition string, argument any) (*appshipyard.Order, error) {
-	row := tx.QueryRowContext(ctx, "SELECT "+productionColumns+" FROM production_orders WHERE "+condition, argument)
+func loadProductionOrder(ctx context.Context, tx *sql.Tx, condition string, arguments ...any) (*appshipyard.Order, error) {
+	row := tx.QueryRowContext(ctx, "SELECT "+productionColumns+" FROM production_orders WHERE "+condition, arguments...)
 	order, err := scanProductionOrder(row)
 	if err != nil {
 		return nil, err

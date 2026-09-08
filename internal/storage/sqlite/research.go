@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	appeconomy "universeatwar/internal/app/economy"
 	appresearch "universeatwar/internal/app/research"
 	"universeatwar/internal/domain/catalogue"
 	"universeatwar/internal/domain/economy"
@@ -208,6 +209,86 @@ func (r *ResearchRepository) EnqueueResearch(ctx context.Context, accountID, pla
 		return appresearch.Queue{}, err
 	}
 	return queue, nil
+}
+
+// CancelResearch drops one order and every level of the same technology queued
+// above it, refunding all of them to the planet that paid for each.
+func (r *ResearchRepository) CancelResearch(ctx context.Context, accountID, planetID, entryID int64, now time.Time) (appeconomy.Cancellation, error) {
+	var cancellation appeconomy.Cancellation
+	err := withWriteTx(ctx, r.write, "research repository: cancel research", func(tx *sql.Tx) error {
+		planet, _, production, err := loadPlanet(ctx, tx, accountID, planetID, now, r.catalogues.Buildings)
+		if err != nil {
+			return err
+		}
+		playerID, err := playerOfPlanet(ctx, tx, planet.ID)
+		if err != nil {
+			return err
+		}
+		entries, err := playerResearchQueue(ctx, tx, playerID)
+		if err != nil {
+			return err
+		}
+		dropped, refund, headWasDropped := droppedFromResearchQueue(entries, entryID)
+		if len(dropped) == 0 {
+			return appresearch.ErrQueueEntryNotFound
+		}
+		for _, entry := range dropped {
+			if err := cancelQueueEntry(ctx, tx, "research_queue", entry.ID, fmt.Sprintf("research-complete:%d", entry.ID), now); err != nil {
+				return err
+			}
+		}
+		// A research is paid by the planet it was launched from, so that is the
+		// planet the refund goes back to.
+		var lost economy.Resources
+		production.Stock, lost = production.Stock.Refund(refund, planet.Capacity)
+		if err := persistProduction(ctx, tx, planet.ID, production); err != nil {
+			return err
+		}
+		if headWasDropped {
+			if err := promoteNextResearch(ctx, tx, playerID, now, r.catalogues); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO game_event_log(event_type, actor_type, actor_id, entity_type, entity_id, occurred_at, payload)
+			VALUES ('research_cancelled', 'account', ?, 'player', ?, ?, json_object('queue_id', ?, 'cancelled', ?))
+		`, accountID, playerID, timestamp(now), entryID, len(dropped)); err != nil {
+			return fmt.Errorf("research repository: log cancellation: %w", err)
+		}
+		cancellation = appeconomy.Cancellation{
+			Cancelled: len(dropped),
+			Refunded:  economy.Resources{Metal: refund.Metal - lost.Metal, Crystal: refund.Crystal - lost.Crystal, Deuterium: refund.Deuterium - lost.Deuterium},
+			Lost:      lost,
+		}
+		return nil
+	})
+	if err != nil {
+		return appeconomy.Cancellation{}, err
+	}
+	return cancellation, nil
+}
+
+// droppedFromResearchQueue picks the order the player named plus every later
+// order for the same technology, and adds up what they cost.
+func droppedFromResearchQueue(queue []appresearch.Queue, entryID int64) ([]appresearch.Queue, economy.Resources, bool) {
+	var dropped []appresearch.Queue
+	var refund economy.Resources
+	var target research.ID
+	found, head := false, false
+	for index, entry := range queue {
+		switch {
+		case entry.ID == entryID:
+			found, target, head = true, entry.Research, index == 0
+		case !found || entry.Research != target:
+			continue
+		}
+		dropped = append(dropped, entry)
+		refund = economy.Resources{
+			Metal: refund.Metal + entry.Cost.Metal, Crystal: refund.Crystal + entry.Cost.Crystal,
+			Deuterium: refund.Deuterium + entry.Cost.Deuterium,
+		}
+	}
+	return dropped, refund, head
 }
 
 // completeResearch raises the finished level exactly once, then hands the

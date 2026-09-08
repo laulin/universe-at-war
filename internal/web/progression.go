@@ -139,9 +139,10 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 	}
 	shell := h.gameShell(request.Context(), token, principal, "research", planets, planetID)
 	shell.Error = message
+	shell.Notice = cancellationNotice(request)
 	h.render(response, status, "research", researchPageData{
 		pageShell: shell, Planet: overview.Planet, Levels: overview.Levels,
-		Queue:      researchQueuePanel(overview.Queue, shell.Now),
+		Queue:      researchQueuePanel(overview.Queue, overview.Planet, token, shell.Now),
 		Laboratory: overview.Laboratories.Local, Choices: choices,
 	})
 }
@@ -252,9 +253,10 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 	}
 	shell := h.gameShell(request.Context(), token, principal, section, planets, planetID)
 	shell.Error = message
+	shell.Notice = cancellationNotice(request)
 	h.render(response, status, "production", productionPageData{
 		pageShell: shell, Planet: overview.Planet, Family: string(family), Title: title,
-		Action: familyPath(family), Queue: productionQueuePanel(overview.Queue, shell.Now),
+		Action: familyPath(family), Queue: productionQueuePanel(overview.Queue, overview.Planet, token, shell.Now),
 		Choices: choices,
 	})
 }

@@ -24,6 +24,8 @@ var (
 	ErrInvalidQuantity = errors.New("shipyard: quantity must be positive and within the order limit")
 	ErrInvalidRequest  = errors.New("shipyard: invalid production request")
 	ErrWrongFamily     = errors.New("shipyard: unit does not belong to this page")
+
+	ErrQueueEntryNotFound = errors.New("shipyard: no such batch in the queue")
 )
 
 // Order is one entry of a production queue: a batch of one model. The entry at
@@ -94,6 +96,7 @@ type Overview struct {
 type Repository interface {
 	State(context.Context, int64, int64, time.Time) (State, error)
 	Order(context.Context, int64, int64, unit.ID, int64, string, time.Time) (Order, error)
+	CancelOrder(context.Context, int64, int64, int64, time.Time) (appeconomy.Cancellation, error)
 }
 
 // Service runs the production use cases of one planet.
@@ -193,6 +196,27 @@ func (s Service) OrderFamily(ctx context.Context, principal appauth.Principal, p
 		return Order{}, ErrWrongFamily
 	}
 	return s.Order(ctx, principal, planetID, id, quantity, idempotencyKey)
+}
+
+// CancelOrder drops one batch and refunds the units the yard still owed. The
+// ones already delivered are the player's to keep.
+func (s Service) CancelOrder(ctx context.Context, principal appauth.Principal, planetID, orderID int64) (appeconomy.Cancellation, error) {
+	if err := s.validate(principal); err != nil {
+		return appeconomy.Cancellation{}, err
+	}
+	if planetID <= 0 || orderID <= 0 {
+		return appeconomy.Cancellation{}, ErrInvalidRequest
+	}
+	if s.Completer != nil {
+		if _, err := s.Completer.CompleteDue(ctx, 100); err != nil {
+			return appeconomy.Cancellation{}, err
+		}
+	}
+	cancellation, err := s.Repository.CancelOrder(ctx, principal.AccountID, planetID, orderID, s.Clock.Now().UTC())
+	if err == nil && s.Wake != nil {
+		s.Wake()
+	}
+	return cancellation, err
 }
 
 // affordable is how many units the current stock could pay for.

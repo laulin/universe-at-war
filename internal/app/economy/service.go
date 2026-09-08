@@ -29,6 +29,9 @@ var (
 	ErrFacilityBusy   = errors.New("economy: the facility is in use by another activity")
 	ErrInvalidName    = errors.New("economy: player name must contain 3 to 32 characters")
 	ErrInvalidRequest = errors.New("economy: invalid construction request")
+	// ErrQueueEntryNotFound covers an order that never existed, belongs to
+	// somebody else, or has already left the queue.
+	ErrQueueEntryNotFound = errors.New("economy: no such construction in the queue")
 )
 
 // Queue is one entry of a body's construction queue. The entry at position
@@ -78,6 +81,15 @@ type Planet struct {
 	Rules rules.Ruleset
 }
 
+// Cancellation is what dropping orders from a queue gave back. Lost is the part
+// the stores were too full to hold, which the player is told about rather than
+// letting it vanish quietly.
+type Cancellation struct {
+	Cancelled int
+	Refunded  economy.Resources
+	Lost      economy.Resources
+}
+
 // BuildingChoice is one catalogue entry enriched for a planet.
 type BuildingChoice struct {
 	Definition building.Definition
@@ -97,6 +109,7 @@ type Repository interface {
 	Planet(context.Context, int64, int64, time.Time, building.Catalogue) (Planet, error)
 	Planets(context.Context, int64, time.Time, building.Catalogue) ([]Planet, error)
 	EnqueueBuilding(context.Context, int64, int64, building.ID, string, time.Time, building.Catalogue) (Queue, error)
+	CancelBuilding(context.Context, int64, int64, int64, time.Time, building.Catalogue) (Cancellation, error)
 }
 
 // Completer settles the scheduled events that are already due, so an
@@ -196,6 +209,26 @@ func (s Service) EnqueueBuilding(ctx context.Context, principal appauth.Principa
 		s.Wake()
 	}
 	return queue, err
+}
+
+// CancelBuilding drops one order and every level of the same building queued
+// above it, refunding all of them. The player has already lost the time; taking
+// the resources too would only make a queue a trap.
+func (s Service) CancelBuilding(ctx context.Context, principal appauth.Principal, planetID, entryID int64) (Cancellation, error) {
+	if err := s.validatePrincipal(principal); err != nil {
+		return Cancellation{}, err
+	}
+	if planetID <= 0 || entryID <= 0 {
+		return Cancellation{}, ErrInvalidRequest
+	}
+	if err := s.settleDueEvents(ctx); err != nil {
+		return Cancellation{}, err
+	}
+	cancellation, err := s.Repository.CancelBuilding(ctx, principal.AccountID, planetID, entryID, s.Clock.Now().UTC(), s.Catalogue)
+	if err == nil && s.Wake != nil {
+		s.Wake()
+	}
+	return cancellation, err
 }
 
 func (s Service) validatePrincipal(principal appauth.Principal) error {

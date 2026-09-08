@@ -241,6 +241,9 @@ progress::-moz-progress-bar {
 .queue-entry__title { margin: 0; font-size: var(--text-md); font-weight: 700; }
 .queue-entry__count { color: var(--accent); font-weight: 400; font-size: var(--text-sm); }
 .queue-entry__timing { margin: 0; font-size: var(--text-sm); }
+.queue-entry__cancel { display: flex; align-items: center; gap: var(--space-3); margin: 0; flex-wrap: wrap; }
+.queue-entry__cancel button { min-height: 1.9rem; padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+.warn { color: var(--warn); font-size: var(--text-xs); }
 .queue { margin-block: var(--space-4); }
 
 /* ---------- Controls ---------- */

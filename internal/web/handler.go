@@ -91,17 +91,20 @@ type economyService interface {
 	Planets(context.Context, appauth.Principal) ([]appeconomy.Planet, error)
 	Buildings(context.Context, appauth.Principal, int64) (appeconomy.Planet, []appeconomy.BuildingChoice, error)
 	EnqueueBuilding(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
+	CancelBuilding(context.Context, appauth.Principal, int64, int64) (appeconomy.Cancellation, error)
 }
 
 type researchService interface {
 	Overview(context.Context, appauth.Principal, int64) (appresearch.Overview, error)
 	EnqueueResearch(context.Context, appauth.Principal, int64, research.ID, string) (appresearch.Queue, error)
+	CancelResearch(context.Context, appauth.Principal, int64, int64) (appeconomy.Cancellation, error)
 }
 
 type shipyardService interface {
 	Ships(context.Context, appauth.Principal, int64) (appshipyard.Overview, error)
 	Defenses(context.Context, appauth.Principal, int64) (appshipyard.Overview, error)
 	OrderFamily(context.Context, appauth.Principal, int64, unit.ID, unit.Family, int64, string) (appshipyard.Order, error)
+	CancelOrder(context.Context, appauth.Principal, int64, int64) (appeconomy.Cancellation, error)
 }
 
 type fleetService interface {
@@ -351,6 +354,9 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /admin/ai/{player}/retire", handler.retireArtificial)
 	handler.mux.HandleFunc("POST /admin/ai/{player}/alliance", handler.enlistArtificial)
 	handler.mux.HandleFunc("POST /planets/{planet}/defense/{unit}", handler.orderDefenses)
+	handler.mux.HandleFunc("POST /planets/{planet}/queue/building/{entry}/cancel", handler.cancelBuilding)
+	handler.mux.HandleFunc("POST /planets/{planet}/queue/research/{entry}/cancel", handler.cancelResearch)
+	handler.mux.HandleFunc("POST /planets/{planet}/queue/unit/{entry}/cancel", handler.cancelUnits)
 	handler.mux.HandleFunc("GET /{$}", handler.home)
 	handler.metrics = dependencies.Metrics
 	handler.mux.HandleFunc("GET /admin/metrics", handler.metricsPage)
@@ -914,9 +920,10 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	}
 	shell := h.gameShell(request.Context(), token, principal, "planet", planets, planet.ID)
 	shell.Error = message
+	shell.Notice = cancellationNotice(request)
 	h.render(response, status, "economy", economyPageData{
 		pageShell: shell, Planet: planet,
-		Queue: buildingQueuePanel(planet, shell.Now), Choices: views,
+		Queue: buildingQueuePanel(planet, token, shell.Now), Choices: views,
 	})
 }
 
@@ -1036,6 +1043,9 @@ type pageShell struct {
 	Current   *bodyLink
 	Now       time.Time
 	Alerts    int
+	// Notice reports a mutation that went through, next to Error which reports
+	// one that did not.
+	Notice string
 	// Totals sum what the account owns, for the head of the bodies column.
 	Totals empireTotals
 	// Administrator opens the administration pages in the navigation. It never

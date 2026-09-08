@@ -82,6 +82,7 @@
         </div>
       </div>
       {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice" role="status">{{.Notice}}</div>{{end}}
       {{template "content" .}}
     </main>
 

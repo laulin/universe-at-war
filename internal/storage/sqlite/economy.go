@@ -319,6 +319,101 @@ func (r *EconomyRepository) EnqueueBuilding(ctx context.Context, accountID, plan
 	return queue, nil
 }
 
+// CancelBuilding drops one order and every level of the same building queued
+// above it, because those levels would otherwise build on a level nobody is
+// going to reach. Everything dropped is refunded, up to what the stores hold.
+func (r *EconomyRepository) CancelBuilding(ctx context.Context, accountID, planetID, entryID int64, now time.Time, catalogue building.Catalogue) (appeconomy.Cancellation, error) {
+	var cancellation appeconomy.Cancellation
+	err := withWriteTx(ctx, r.write, "economy repository: cancel construction", func(tx *sql.Tx) error {
+		planet, _, state, err := loadPlanet(ctx, tx, accountID, planetID, now, catalogue)
+		if err != nil {
+			return err
+		}
+		dropped, refund, headWasDropped := droppedFromQueue(planet.Queue, entryID)
+		if len(dropped) == 0 {
+			return appeconomy.ErrQueueEntryNotFound
+		}
+		for _, entry := range dropped {
+			if err := cancelQueueEntry(ctx, tx, "building_queue", entry.ID, fmt.Sprintf("building-complete:%d", entry.ID), now); err != nil {
+				return err
+			}
+		}
+		var lost economy.Resources
+		state.Stock, lost = state.Stock.Refund(refund, planet.Capacity)
+		if err := persistProduction(ctx, tx, planet.ID, state); err != nil {
+			return err
+		}
+		if headWasDropped {
+			if err := promoteNextBuilding(ctx, tx, planet.ID, now, catalogue); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO game_event_log(event_type, actor_type, actor_id, entity_type, entity_id, occurred_at, payload)
+			VALUES ('building_cancelled', 'account', ?, 'planet', ?, ?, json_object('queue_id', ?, 'cancelled', ?))
+		`, accountID, planet.ID, timestamp(now), entryID, len(dropped)); err != nil {
+			return fmt.Errorf("economy repository: log cancellation: %w", err)
+		}
+		cancellation = appeconomy.Cancellation{
+			Cancelled: len(dropped),
+			Refunded:  economy.Resources{Metal: refund.Metal - lost.Metal, Crystal: refund.Crystal - lost.Crystal, Deuterium: refund.Deuterium - lost.Deuterium},
+			Lost:      lost,
+		}
+		return nil
+	})
+	if err != nil {
+		return appeconomy.Cancellation{}, err
+	}
+	return cancellation, nil
+}
+
+// droppedFromQueue picks the order the player named plus every later order for
+// the same building, and adds up what they cost.
+func droppedFromQueue(queue []appeconomy.Queue, entryID int64) ([]appeconomy.Queue, economy.Resources, bool) {
+	var dropped []appeconomy.Queue
+	var refund economy.Resources
+	var target building.ID
+	found := false
+	head := false
+	for index, entry := range queue {
+		switch {
+		case entry.ID == entryID:
+			found, target, head = true, entry.Building, index == 0
+		case !found || entry.Building != target:
+			continue
+		}
+		dropped = append(dropped, entry)
+		refund = economy.Resources{
+			Metal: refund.Metal + entry.Cost.Metal, Crystal: refund.Crystal + entry.Cost.Crystal,
+			Deuterium: refund.Deuterium + entry.Cost.Deuterium,
+		}
+	}
+	return dropped, refund, head
+}
+
+// cancelQueueEntry closes one queue row and the event it may have booked. Both
+// updates are guarded, so a row that already left the queue changes nothing.
+func cancelQueueEntry(ctx context.Context, tx *sql.Tx, table string, entryID int64, eventKey string, now time.Time) error {
+	result, err := tx.ExecContext(ctx,
+		"UPDATE "+table+" SET state = 'cancelled' WHERE id = ? AND state IN ('active', 'queued')", entryID)
+	if err != nil {
+		return fmt.Errorf("economy repository: cancel queue entry: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("economy repository: cancel queue entry: %w", err)
+	}
+	if affected != 1 {
+		return errors.New("economy repository: the order changed during cancellation")
+	}
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE scheduled_events SET state = 'cancelled', processed_at = ? WHERE idempotency_key = ? AND state = 'pending'",
+		timestamp(now), eventKey); err != nil {
+		return fmt.Errorf("economy repository: cancel queue event: %w", err)
+	}
+	return nil
+}
+
 // completeBuilding raises the finished level exactly once. A queue that is no
 // longer active makes the event a successful no-op so that a redelivery after a
 // crash cannot increment twice.

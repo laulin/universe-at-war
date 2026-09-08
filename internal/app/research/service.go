@@ -23,6 +23,7 @@ var (
 	ErrLaboratoryBusy     = errors.New("research: the laboratory is being upgraded")
 	ErrInsufficientEnergy = errors.New("research: available energy is too low")
 	ErrInvalidRequest     = errors.New("research: invalid research request")
+	ErrQueueEntryNotFound = errors.New("research: no such research in the queue")
 )
 
 // Queue is one entry of a player's research queue. The entry at position zero
@@ -77,6 +78,7 @@ type Overview struct {
 type Repository interface {
 	State(context.Context, int64, int64, time.Time) (State, error)
 	EnqueueResearch(context.Context, int64, int64, research.ID, string, time.Time) (Queue, error)
+	CancelResearch(context.Context, int64, int64, int64, time.Time) (appeconomy.Cancellation, error)
 }
 
 // Service runs the research use cases of one player.
@@ -140,6 +142,27 @@ func (s Service) EnqueueResearch(ctx context.Context, principal appauth.Principa
 		s.Wake()
 	}
 	return queue, err
+}
+
+// CancelResearch drops one order and every level of the same technology queued
+// above it, refunding all of them to the planet that paid.
+func (s Service) CancelResearch(ctx context.Context, principal appauth.Principal, planetID, entryID int64) (appeconomy.Cancellation, error) {
+	if err := s.validate(principal); err != nil {
+		return appeconomy.Cancellation{}, err
+	}
+	if planetID <= 0 || entryID <= 0 {
+		return appeconomy.Cancellation{}, ErrInvalidRequest
+	}
+	if s.Completer != nil {
+		if _, err := s.Completer.CompleteDue(ctx, 100); err != nil {
+			return appeconomy.Cancellation{}, err
+		}
+	}
+	cancellation, err := s.Repository.CancelResearch(ctx, principal.AccountID, planetID, entryID, s.Clock.Now().UTC())
+	if err == nil && s.Wake != nil {
+		s.Wake()
+	}
+	return cancellation, err
 }
 
 // availableEnergy is the surplus a planet can lend to a research.

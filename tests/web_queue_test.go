@@ -2,7 +2,10 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -105,5 +108,62 @@ func TestTheEmpireOverviewSummarisesEachQueue(t *testing.T) {
 	page := getPage(t, handler, "/", session, csrf)
 	if !strings.Contains(page, "Mine de métal niveau 1") || !strings.Contains(page, "+2 en file") {
 		t.Fatalf("the overview does not summarise the queue: %q", page)
+	}
+}
+
+// A queue entry carries its own cancel button, and cancelling says what came
+// back before sending the player on.
+func TestCancellingFromTheQueuePanelRefundsAndReportsIt(t *testing.T) {
+	ctx := context.Background()
+	handler, universeWorld, principal, session, csrf := queuedWeb(t)
+	planet, err := universeWorld.Economy.Planet(ctx, principal, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range 2 {
+		if _, err := universeWorld.Economy.EnqueueBuilding(ctx, principal, planet.ID, building.MetalMine, string(rune('a'+index))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	queued, err := universeWorld.Economy.Planet(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiting := queued.Queue[1]
+
+	page := getPage(t, handler, "/planets/1", session, csrf)
+	target := fmt.Sprintf("/planets/1/queue/building/%d/cancel", waiting.ID)
+	if !strings.Contains(page, target) || !strings.Contains(page, ">Annuler<") {
+		t.Fatalf("the queue panel offers no cancellation: %q", page)
+	}
+
+	request := postFormRequest(target, url.Values{"csrf_token": {"csrf-token"}})
+	request.AddCookie(session)
+	request.AddCookie(csrf)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("POST cancel = %d %q", recorder.Code, recorder.Body.String())
+	}
+	location := recorder.Header().Get("Location")
+	if !strings.HasPrefix(location, "/planets/1?cancelled=1") {
+		t.Fatalf("cancellation redirected to %q", location)
+	}
+
+	after := getPage(t, handler, location, session, csrf)
+	if !strings.Contains(after, "1 ordre annulé et remboursé.") {
+		t.Fatalf("the page does not report the cancellation: %q", after)
+	}
+	if got := strings.Count(after, `<li class="queue-entry`); got != 1 {
+		t.Fatalf("queue holds %d entries after the cancellation, want 1", got)
+	}
+	// Cancelling the same order twice never doubles a refund.
+	replay := postFormRequest(target, url.Values{"csrf_token": {"csrf-token"}})
+	replay.AddCookie(session)
+	replay.AddCookie(csrf)
+	refused := httptest.NewRecorder()
+	handler.ServeHTTP(refused, replay)
+	if refused.Code != http.StatusBadRequest || !strings.Contains(refused.Body.String(), "n&#39;est plus dans la file") {
+		t.Fatalf("second cancellation = %d %q", refused.Code, refused.Body.String())
 	}
 }

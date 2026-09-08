@@ -25,6 +25,32 @@ func (r Resources) Covers(cost Resources) bool {
 		r.Metal >= cost.Metal && r.Crystal >= cost.Crystal && r.Deuterium >= cost.Deuterium
 }
 
+// Refund gives a cost back without ever passing the storage capacity. It
+// returns the new stock and what the full stores could not hold, so the caller
+// can tell the player exactly what the refund cost them.
+func (r Resources) Refund(amount, capacity Resources) (Resources, Resources) {
+	metal, lostMetal := refundOne(r.Metal, amount.Metal, capacity.Metal)
+	crystal, lostCrystal := refundOne(r.Crystal, amount.Crystal, capacity.Crystal)
+	deuterium, lostDeuterium := refundOne(r.Deuterium, amount.Deuterium, capacity.Deuterium)
+	return Resources{Metal: metal, Crystal: crystal, Deuterium: deuterium},
+		Resources{Metal: lostMetal, Crystal: lostCrystal, Deuterium: lostDeuterium}
+}
+
+// refundOne never adds beyond the capacity, which is also how it stays clear of
+// any overflow.
+func refundOne(stock, amount, capacity int64) (int64, int64) {
+	if amount <= 0 {
+		return stock, 0
+	}
+	if stock >= capacity {
+		return stock, amount
+	}
+	if room := capacity - stock; amount > room {
+		return capacity, amount - room
+	}
+	return stock + amount, 0
+}
+
 // Debit subtracts a cost without ever returning a negative balance.
 func (r Resources) Debit(cost Resources) (Resources, error) {
 	if !r.Covers(cost) {

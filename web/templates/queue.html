@@ -16,6 +16,12 @@
         {{else}}
         <p class="queue-entry__timing faint">Début ≈ {{.StartsAt}} UTC — fin ≈ {{.EndsAt}} UTC</p>
         {{end}}
+        <form class="queue-entry__cancel" method="post" action="{{.CancelPath}}">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          {{if .Family}}<input type="hidden" name="family" value="{{.Family}}">{{end}}
+          <button type="submit">Annuler</button>
+          {{if .Overflow}}<span class="warn">Entrepôts pleins : une partie du remboursement serait perdue.</span>{{end}}
+        </form>
       </li>
       {{end}}
     </ol>
