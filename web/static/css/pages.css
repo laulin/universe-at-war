@@ -1,0 +1,38 @@
+/* What belongs to one screen only, plus the grids the pages still use while
+   they migrate onto the card component. */
+
+.resource-grid, .building-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.resource-grid article, .building-card {
+  padding: var(--space-3);
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface-panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+}
+.resource-grid h2 { margin: 0; font-size: var(--text-sm); color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.resource-grid p { margin: var(--space-1) 0 0; font-size: var(--text-xs); color: var(--muted); }
+.resource-grid strong { color: var(--accent); font-size: var(--text-xl); }
+.building-card h3 { display: flex; justify-content: space-between; gap: var(--space-4); font-size: var(--text-md); }
+.building-card h3 span { color: var(--muted); font-weight: 400; }
+.building-card form { margin-top: var(--space-3); }
+.building-card label { font-size: var(--text-sm); color: var(--muted); margin-top: var(--space-2); }
+.building-card input[type="number"] { width: 100%; }
+
+.queue { margin-block: var(--space-4); }
+
+.filters { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.filters a { font-size: var(--text-sm); }
+
+.galaxy-navigation { display: flex; gap: var(--space-5); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+
+.confirm { margin-top: var(--space-5); }
+
+/* The header planet switcher survives on the narrow layouts that hide the
+   bodies column. */
+.body-picker { display: flex; align-items: end; gap: var(--space-2); margin: 0; }
+.body-picker label { font-size: var(--text-sm); color: var(--muted); }

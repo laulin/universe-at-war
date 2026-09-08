@@ -1,0 +1,78 @@
+/* Design tokens. Every colour, space and size of the interface starts here, so a
+   change of skin never means a hunt through the component sheets. */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, from the void behind everything to the raised panel edge. */
+  --surface-void: #050a12;
+  --surface-deep: #07101d;
+  --surface-panel: #0c1a2a;
+  --surface-raised: #12283c;
+  --surface-sunken: #061019;
+  --surface-header: #0a1725;
+
+  /* Bevels. These two lines are what turns a flat rectangle into a metal plate. */
+  --edge-light: rgba(174, 224, 255, 0.14);
+  --edge-dark: rgba(0, 0, 0, 0.55);
+  --border: #1d3a52;
+  --border-strong: #2f5a7d;
+
+  /* Accent. */
+  --accent: #78d9ff;
+  --accent-strong: #b6ecff;
+  --accent-dim: #3f8db4;
+  --accent-glow: rgba(120, 217, 255, 0.28);
+
+  /* Text. */
+  --text: #dce9f7;
+  --text-strong: #ffffff;
+  --muted: #8ba3ba;
+  --faint: #5c748c;
+
+  /* Semantic state. */
+  --ok: #6fd08c;
+  --warn: #f0b45e;
+  --danger: #ff6b81;
+  --danger-dim: #3a1520;
+  /* A stock that reached its ceiling stops earning. It has to shout. */
+  --full: #ff7a45;
+
+  /* Resources keep the same hue everywhere: bar, planet column, cost line. */
+  --metal: #b9c4cf;
+  --crystal: #6fc9f5;
+  --deuterium: #4fd6b8;
+  --energy: #f3c969;
+
+  /* Spacing scale. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.45rem;
+  --radius-lg: 0.7rem;
+
+  /* Type scale. */
+  --text-xs: 0.72rem;
+  --text-sm: 0.82rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.15rem;
+  --text-xl: 1.45rem;
+  --text-2xl: 1.9rem;
+
+  --font-ui: system-ui, "Segoe UI", Roboto, sans-serif;
+
+  /* The three columns of the command shell. */
+  --nav-width: 12.5rem;
+  --bodies-width: 17rem;
+  --shell-max: 96rem;
+
+  --shadow-panel: 0 1px 0 var(--edge-light) inset, 0 -1px 0 var(--edge-dark) inset,
+    0 0.5rem 1.5rem rgba(0, 0, 0, 0.45);
+  --shadow-raised: 0 0 0 1px var(--border), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.5);
+}
