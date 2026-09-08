@@ -22,6 +22,8 @@ migrations/                schéma SQLite embarqué
 rules/                     catalogues et profils de règles embarqués
 web/templates/             templates HTML embarqués
 web/static/                CSS, JavaScript et images embarqués
+images/                    masters d'illustration, hors binaire
+scripts/                   outils de développement
 docs/                      architecture, ADR et règles documentées
 tests/                     scénarios d'acceptation inter-modules
 ```

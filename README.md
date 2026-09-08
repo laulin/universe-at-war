@@ -15,7 +15,9 @@ l'interface SSR. La spécification complète se trouve dans
 ## Prérequis de développement
 
 - Go 1.27.x ou plus récent ;
-- aucune installation SQLite ou CGO.
+- aucune installation SQLite ou CGO ;
+- ImageMagick et libwebp uniquement pour regénérer les illustrations
+  (`make art`) : ni la compilation ni les tests n'en ont besoin.
 
 ## Commandes disponibles
 
@@ -82,6 +84,13 @@ déterministe tant que le slot est vide, et sert le fichier dès qu'il existe da
 `web/static/art/{catégorie}/`. Ajouter du vrai artwork ne demande donc aucune
 modification de gabarit ni de feuille de style : voir
 [`docs/adr/0002-illustration-slots.md`](docs/adr/0002-illustration-slots.md).
+
+Les vaisseaux sont désormais illustrés pour de bon, du chantier spatial aux
+écrans de flotte. Les images d'origine vivent dans [`images/`](images/), hors
+du binaire, et `make art` en tire les fichiers embarqués : voir
+[`docs/adr/0003-masters-et-derives-d-illustration.md`](docs/adr/0003-masters-et-derives-d-illustration.md).
+Les autres catégories gardent leur placeholder tant que leurs illustrations
+n'existent pas.
 
 Les joueurs font équipe sans jamais mettre leurs ressources en commun. Une
 alliance a des rangs, des invitations qui expirent, une diplomatie déclarative

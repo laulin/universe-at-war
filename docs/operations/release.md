@@ -1,7 +1,8 @@
 # Mettre Universe At War en service
 
 Un seul fichier, aucun service externe, aucune dépendance à installer. Le
-binaire embarque les migrations, les templates, le CSS et le JavaScript.
+binaire embarque les migrations, les templates, le CSS, le JavaScript et les
+illustrations.
 
 ## Construire
 

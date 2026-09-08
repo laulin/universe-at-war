@@ -32,3 +32,6 @@ ni template ni feuille de style ne bouge. Un écran n'a jamais d'image manquante
 Le binaire ne grossit qu'au rythme des illustrations réellement produites. En
 contrepartie, tant qu'un slot n'est pas rempli, son placeholder reste
 géométrique et ne remplace pas un travail d'illustration.
+
+Voir [`0003-masters-et-derives-d-illustration.md`](0003-masters-et-derives-d-illustration.md)
+pour la façon dont un master devient le fichier embarqué.
