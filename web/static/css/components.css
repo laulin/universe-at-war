@@ -131,16 +131,20 @@
 
 .card__stats {
   position: absolute;
-  /* Laid over the card rather than beside it: a panel that grew sideways would
-     be cut off by the window on the last column of the grid. Downwards is the
-     free direction, so it covers its card and spills over the row below rather
-     than scrolling. The cap is above the longest table in the catalogue, the
-     death star's eighteen entries, and is there for a catalogue that grows. */
-  inset: 0 0 auto 0;
-  min-height: 100%;
+  /* Below the card, never over it: laid on top, the panel covered the very
+     button the player came to press. Sideways, the last column of the grid
+     would run into the window, so downwards is the only free direction. The
+     cap is above the longest table in the catalogue, the death star's eighteen
+     entries, and is there for a catalogue that grows. */
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
   max-height: 32rem;
   z-index: 2;
   overflow-y: auto;
+  /* A panel that is only ever read must not take the pointer, or it would
+     swallow the click meant for the card it hangs over. */
+  pointer-events: none;
   padding: var(--space-3);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -152,6 +156,9 @@
 }
 .card:hover .card__stats,
 .card:focus-within .card__stats { visibility: visible; opacity: 1; }
+/* The card being read floats above its neighbours, or the card declared after
+   it would be painted over the panel hanging beneath. */
+.card:hover, .card:focus-within { z-index: 3; }
 
 .card__stats dl { display: grid; grid-template-columns: 1fr auto; gap: 0 var(--space-3); margin: 0; }
 .card__stats dt { color: var(--muted); }
