@@ -1,29 +1,39 @@
 {{define "title"}}{{.Planet.Name}}{{end}}
 {{define "content"}}
-  <section class="resource-grid" aria-label="Ressources">
-    <article><h2>Métal</h2><strong>{{.Planet.Stock.Metal}}</strong><p>+{{.Planet.Rates.Metal}}/h · capacité {{.Planet.Capacity.Metal}}</p></article>
-    <article><h2>Cristal</h2><strong>{{.Planet.Stock.Crystal}}</strong><p>+{{.Planet.Rates.Crystal}}/h · capacité {{.Planet.Capacity.Crystal}}</p></article>
-    <article><h2>Deutérium</h2><strong>{{.Planet.Stock.Deuterium}}</strong><p>+{{.Planet.Rates.Deuterium}}/h · capacité {{.Planet.Capacity.Deuterium}}</p></article>
-    <article><h2>Énergie</h2><strong>{{.Planet.Energy.Produced}} / {{.Planet.Energy.Consumed}}</strong><p>{{.Planet.UsedFields}} / {{.Planet.TotalFields}} cases utilisées</p></article>
-  </section>
   {{with .Planet.ActiveQueue}}
-  <section class="queue panel-wide"><p class="eyebrow">Construction en cours</p><h2>{{.Building}} niveau {{.TargetLevel}}</h2><p>Achèvement prévu à {{.CompletesAt.Format "15:04:05"}} UTC.</p></section>
+  <section class="queue panel-wide">
+    <p class="eyebrow">Construction en cours</p>
+    <h2>{{.Building}} niveau {{.TargetLevel}}</h2>
+    <p>Achèvement prévu à {{.CompletesAt.Format "15:04:05"}} UTC.</p>
+  </section>
   {{end}}
-  <section aria-labelledby="buildings-title">
-    <p class="eyebrow">Infrastructure planétaire</p>
-    <h2 id="buildings-title">Bâtiments</h2>
-    <div class="building-grid">
+  <section class="panel-wide" aria-labelledby="buildings-title">
+    <div class="section-bar"><h2 id="buildings-title">Infrastructure planétaire</h2></div>
+    <div class="card-grid">
     {{range .Choices}}
-      <article class="building-card">
-        <h3>{{.Name}} <span>niv. {{.Level}}</span></h3>
-        {{if .Duration}}<p>M {{.CostMetal}} · C {{.CostCrystal}} · D {{.CostDeuterium}}</p><p>Durée : {{.Duration}}</p>{{end}}
-        {{if .CanStart}}
-        <form method="post" action="/planets/{{$.Planet.ID}}/buildings/{{.ID}}">
-          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-          <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
-          <button type="submit">Construire</button>
-        </form>
-        {{else}}<p class="muted">{{.Reason}}</p>{{end}}
+      <article class="card{{if not .CanStart}} card--locked{{end}}">
+        <div class="card__art">
+          <img src="/art/building/{{.ID}}" alt="" width="160" height="120" loading="lazy">
+          <span class="card__badge">{{.Level}}</span>
+        </div>
+        <div class="card__body">
+          <h3 class="card__title">{{.Name}}</h3>
+          {{if .Duration}}
+          <p class="cost">
+            {{if .CostMetal}}<span class="res-metal"><img src="/art/resource/metal" alt="Métal" width="13" height="13"> {{figure .CostMetal}}</span>{{end}}
+            {{if .CostCrystal}}<span class="res-crystal"><img src="/art/resource/crystal" alt="Cristal" width="13" height="13"> {{figure .CostCrystal}}</span>{{end}}
+            {{if .CostDeuterium}}<span class="res-deuterium"><img src="/art/resource/deuterium" alt="Deutérium" width="13" height="13"> {{figure .CostDeuterium}}</span>{{end}}
+          </p>
+          <p class="muted">{{.Duration}}</p>
+          {{end}}
+          {{if .CanStart}}
+          <form method="post" action="/planets/{{$.Planet.ID}}/buildings/{{.ID}}">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+            <button type="submit">Construire</button>
+          </form>
+          {{else}}<p class="muted">{{.Reason}}</p>{{end}}
+        </div>
       </article>
     {{end}}
     </div>

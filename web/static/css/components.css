@@ -46,9 +46,9 @@
   box-shadow: var(--shadow-panel);
   background: var(--surface-sunken);
 }
-.hero img {
+.hero__art {
   width: 100%;
-  height: clamp(8rem, 22vw, 15rem);
+  height: clamp(6rem, 13vw, 9rem);
   object-fit: cover;
 }
 .hero__plate {
@@ -128,6 +128,10 @@
 .card__body p { margin: 0; font-size: var(--text-sm); }
 .card__body form { margin: 0; gap: var(--space-2); }
 .card__body .cost { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-sm); }
+/* Pictures are blocks by default, which would push every figure onto its own
+   line. A cost icon sits on the baseline instead. */
+.cost img, .section-bar img { display: inline-block; vertical-align: -0.15em; }
+.cost span { white-space: nowrap; }
 
 /* ---------- Resource figures ---------- */
 

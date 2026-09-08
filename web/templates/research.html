@@ -1,11 +1,5 @@
 {{define "title"}}Recherche{{end}}
 {{define "content"}}
-  <section class="resource-grid" aria-label="Ressources">
-    <article><h2>Métal</h2><strong>{{.Planet.Stock.Metal}}</strong></article>
-    <article><h2>Cristal</h2><strong>{{.Planet.Stock.Crystal}}</strong></article>
-    <article><h2>Deutérium</h2><strong>{{.Planet.Stock.Deuterium}}</strong></article>
-    <article><h2>Énergie</h2><strong>{{.Planet.Energy.Produced}} / {{.Planet.Energy.Consumed}}</strong><p>Laboratoire niveau {{.Laboratory}}</p></article>
-  </section>
   {{with .Active}}
   <section class="queue panel-wide" aria-labelledby="running-title">
     <p class="eyebrow">Recherche en cours</p>
@@ -14,24 +8,37 @@
       <time datetime="{{$.CompletesAt}}" data-countdown data-done="terminée" data-refresh="page" aria-live="off">{{.CompletesAt.Format "15:04:05"}}</time></p>
   </section>
   {{end}}
-  <section aria-labelledby="research-title">
-    <p class="eyebrow">Progression technologique</p>
-    <h2 id="research-title">Recherches</h2>
-    <div class="building-grid">
+  <section class="panel-wide" aria-labelledby="research-title">
+    <div class="section-bar">
+      <h2 id="research-title">Progression technologique</h2>
+      <p>Laboratoire niveau {{.Laboratory}}</p>
+    </div>
+    <div class="card-grid">
     {{range .Choices}}
-      <article class="building-card">
-        <h3>{{.Name}} <span>niv. {{.Level}}</span></h3>
-        {{if .Duration}}
-        <p>M {{.CostMetal}} · C {{.CostCrystal}} · D {{.CostDeuterium}}{{if .Energy}} · énergie {{.Energy}}{{end}}</p>
-        <p>Durée : {{.Duration}}</p>
-        {{end}}
-        {{if .CanStart}}
-        <form method="post" action="/planets/{{$.Planet.ID}}/research/{{.ID}}">
-          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-          <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
-          <button type="submit">Rechercher</button>
-        </form>
-        {{else}}<p class="muted">{{.Reason}}</p>{{end}}
+      <article class="card{{if not .CanStart}} card--locked{{end}}">
+        <div class="card__art">
+          <img src="/art/research/{{.ID}}" alt="" width="160" height="120" loading="lazy">
+          <span class="card__badge">{{.Level}}</span>
+        </div>
+        <div class="card__body">
+          <h3 class="card__title">{{.Name}}</h3>
+          {{if .Duration}}
+          <p class="cost">
+            {{if .CostMetal}}<span class="res-metal"><img src="/art/resource/metal" alt="Métal" width="13" height="13"> {{figure .CostMetal}}</span>{{end}}
+            {{if .CostCrystal}}<span class="res-crystal"><img src="/art/resource/crystal" alt="Cristal" width="13" height="13"> {{figure .CostCrystal}}</span>{{end}}
+            {{if .CostDeuterium}}<span class="res-deuterium"><img src="/art/resource/deuterium" alt="Deutérium" width="13" height="13"> {{figure .CostDeuterium}}</span>{{end}}
+            {{if .Energy}}<span class="res-energy"><img src="/art/resource/energy" alt="Énergie" width="13" height="13"> {{figure .Energy}}</span>{{end}}
+          </p>
+          <p class="muted">{{.Duration}}</p>
+          {{end}}
+          {{if .CanStart}}
+          <form method="post" action="/planets/{{$.Planet.ID}}/research/{{.ID}}">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+            <button type="submit">Rechercher</button>
+          </form>
+          {{else}}<p class="muted">{{.Reason}}</p>{{end}}
+        </div>
       </article>
     {{end}}
     </div>
