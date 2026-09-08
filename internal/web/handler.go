@@ -1125,6 +1125,9 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 			domaineconomy.Resources{}, domaineconomy.Rates{}, true),
 	}
 	if shell.Current == nil && len(shell.Bodies) > 0 {
+		// The fallback body has to be marked in the list too, or the bodies
+		// column would highlight nothing at all.
+		shell.Bodies[0].Current = true
 		current := shell.Bodies[0]
 		shell.Current = &current
 	}

@@ -2,8 +2,10 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -84,4 +86,60 @@ func playableHandler(t *testing.T) (http.Handler, *http.Cookie, *http.Cookie) {
 		t.Fatal(err)
 	}
 	return handler, &http.Cookie{Name: "uaw_session", Value: "session"}, &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
+}
+
+// The shell is three columns the player never loses: the navigation, the
+// resources of the body being looked at, and the bodies of the account.
+func TestGameShellKeepsItsThreeRegions(t *testing.T) {
+	handler, session, csrfCookie := playableHandler(t)
+
+	for _, target := range []string{"/", "/planets/1"} {
+		body := getPage(t, handler, target, session, csrfCookie)
+		for _, region := range []string{
+			`class="resource-bar"`, `class="body-column"`, `class="game-shell"`,
+			`<meter`, `/art/resource/metal`, `/art/body/planet-`,
+		} {
+			if !strings.Contains(body, region) {
+				t.Fatalf("%s has no %s: %q", target, region, body)
+			}
+		}
+		// Filling is an attribute because the policy refuses inline styles.
+		if strings.Contains(body, "style=") {
+			t.Fatalf("%s carries an inline style the policy would block: %q", target, body)
+		}
+	}
+}
+
+// A screen with no planet of its own follows the body the player last visited,
+// rather than falling back on the first one of the account.
+func TestShellFollowsTheBodyThePlayerLastVisited(t *testing.T) {
+	handler, _, _, bodies, session, csrfCookie := expansionHandler(t)
+
+	first := getPage(t, handler, "/", session, csrfCookie)
+	if !strings.Contains(first, fmt.Sprintf(`href="/planets/%d" aria-current="true"`, bodies.AliceHome)) {
+		t.Fatalf("without a remembered body the shell does not fall back on the first one: %q", first)
+	}
+	remembered := getPage(t, handler, "/", session, csrfCookie, &http.Cookie{Name: "uaw_body", Value: strconv.FormatInt(bodies.Moon, 10)})
+	if !strings.Contains(remembered, fmt.Sprintf(`href="/planets/%d" aria-current="true"`, bodies.Moon)) {
+		t.Fatalf("the shell ignored the remembered body: %q", remembered)
+	}
+	if strings.Contains(remembered, fmt.Sprintf(`href="/planets/%d" aria-current="true"`, bodies.AliceHome)) {
+		t.Fatalf("the shell marks two bodies as current: %q", remembered)
+	}
+}
+
+// Visiting a body is what remembers it.
+func TestVisitingABodyRemembersIt(t *testing.T) {
+	handler, _, _, bodies, session, csrfCookie := expansionHandler(t)
+	request := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/planets/%d", bodies.Moon), nil)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == "uaw_body" && cookie.Value == strconv.FormatInt(bodies.Moon, 10) {
+			return
+		}
+	}
+	t.Fatalf("visiting a body did not remember it: %v", recorder.Result().Cookies())
 }
