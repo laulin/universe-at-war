@@ -23,7 +23,7 @@
       <div class="resource-bar__item">
         <img src="/art/resource/{{.Slug}}" alt="" width="26" height="26">
         <div>
-          <span class="stat-value res-{{.Slug}}{{if .Full}} is-full{{end}}">{{figure .Amount}}</span>
+          <span class="stat-value res-{{.Slug}}{{if .Full}} is-full{{end}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</span>
           <small>{{.Label}}{{if .Unbounded}} · sans limite{{else}} · {{figure .Capacity}}{{end}}{{if .Rate}} · {{signed .Rate}}/h{{end}}</small>
           {{if not .Unbounded}}<meter value="{{.Amount}}" min="0" max="{{.Capacity}}" low="{{.Low}}" high="{{.High}}" optimum="0" aria-label="Remplissage {{.Label}}"></meter>{{end}}
         </div>
@@ -97,7 +97,7 @@
             <span class="body-name">{{.Name}}</span>
             <span class="body-coord">[{{.Coordinate}}]</span>
             <span class="body-stock">
-              {{range .Resources}}<span class="res-{{.Slug}}{{if .Full}} is-full{{end}}"><b>{{.Initial}}</b> {{figure .Amount}}</span>{{end}}
+              {{range .Resources}}<span class="res-{{.Slug}}"><b>{{.Initial}}</b> <span class="{{if .Full}}is-full{{end}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</span></span>{{end}}
             </span>
           </a>
         </li>
@@ -106,7 +106,7 @@
       <div class="totals">
         <p class="eyebrow">Totaux</p>
         <dl>
-          {{range .Totals.Resources}}<dt class="res-{{.Slug}}">{{.Label}}</dt><dd class="res-{{.Slug}}">{{figure .Amount}}</dd>{{end}}
+          {{range .Totals.Resources}}<dt class="res-{{.Slug}}">{{.Label}}</dt><dd class="res-{{.Slug}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</dd>{{end}}
         </dl>
       </div>
     </aside>

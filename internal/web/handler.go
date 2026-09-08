@@ -1132,6 +1132,9 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 		}
 	}
 	var metal, crystal, deuterium int64
+	// The bar and the totals sit on the same screen, so the empire has to earn
+	// what its bodies earn or the two would climb apart.
+	var earned domaineconomy.Rates
 	for _, planet := range planets {
 		moon := planet.Kind == building.OnMoon
 		link := bodyLink{
@@ -1148,6 +1151,9 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 		metal += planet.Stock.Metal
 		crystal += planet.Stock.Crystal
 		deuterium += planet.Stock.Deuterium
+		earned.Metal += planet.Rates.Metal
+		earned.Crystal += planet.Rates.Crystal
+		earned.Deuterium += planet.Rates.Deuterium
 		shell.Bodies = append(shell.Bodies, link)
 		if link.Current {
 			current := link
@@ -1158,7 +1164,7 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 		Bodies: len(shell.Bodies),
 		Resources: bodyResources(
 			domaineconomy.Resources{Metal: metal, Crystal: crystal, Deuterium: deuterium},
-			domaineconomy.Resources{}, domaineconomy.Rates{}, true),
+			domaineconomy.Resources{}, earned, true),
 	}
 	if shell.Current == nil && len(shell.Bodies) > 0 {
 		// The fallback body has to be marked in the list too, or the bodies
