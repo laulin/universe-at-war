@@ -30,8 +30,11 @@
       <fieldset>
         <legend>Vaisseaux</legend>
         {{range .Ships}}
-        <label for="jump-{{.ID}}">{{.Name}} (max {{figure .Owned}})</label>
-        <input id="jump-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="0">
+        <div class="ship-picker">
+          <img src="/art/ship/{{.ID}}" alt="" width="64" height="48" loading="lazy">
+          <label for="jump-{{.ID}}">{{.Name}} (max {{figure .Owned}})</label>
+          <input id="jump-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="0">
+        </div>
         {{end}}
       </fieldset>
       <button type="submit"{{if not .Ready}} disabled{{end}}>Sauter</button>
