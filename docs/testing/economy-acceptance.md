@@ -16,8 +16,9 @@ migrations et une horloge factice. Ils couvrent :
   moment ;
 - refus d'un ordre au-delà du plafond de file, sans aucune dépense ;
 - réservation d'une case par ordre encore en file ;
-- annulation avec remboursement intégral, cascade sur les niveaux empilés et
-  écrêtage à la capacité des entrepôts ;
+- annulation avec remboursement intégral, cascade sur les niveaux empilés et sur
+  les ordres dont le prérequis disparaît, écrêtage à la capacité des entrepôts,
+  et libération de la clé d'idempotence ;
 - achèvement exactement une fois et redélivrance simulée après crash ;
 - ordre par identifiant de deux événements au même instant ;
 - parcours HTTP création d'empire → vue planète → lancement d'une mine ;

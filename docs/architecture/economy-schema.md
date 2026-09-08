@@ -51,10 +51,16 @@ temps mort. Une livraison répétée voit la file terminale et n'applique aucun
 effet supplémentaire.
 
 Annuler une ligne la ferme en `'cancelled'`, annule son événement encore
-`'pending'`, rembourse le coût capturé — écrêté à la capacité des entrepôts, le
-surplus étant signalé au joueur — et promeut la suivante si la tête est partie.
-Les niveaux d'un même bâtiment formant une chaîne, annuler un niveau annule
-aussi ceux qui étaient empilés au-dessus, tous remboursés.
+`'pending'`, libère la clé d'idempotence qu'elle occupait, rembourse le coût
+capturé — écrêté à la capacité des entrepôts, le surplus étant signalé au
+joueur — et promeut la suivante si la tête est partie.
+
+L'annulation emporte aussi tout ce qui ne tient plus debout sans l'ordre
+supprimé. La règle est celle que l'achèvement applique déjà : un ordre monte
+exactement d'un niveau et ses prérequis sont satisfaits au moment où il démarre.
+On rejoue la file sur cette base ; ce qui n'y survit pas est annulé et remboursé.
+Annuler une mine de niveau 2 emporte donc son niveau 3, et annuler une usine de
+robots en file emporte le chantier spatial qui comptait dessus.
 
 ## Boucle d'événements
 

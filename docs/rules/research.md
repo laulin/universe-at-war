@@ -15,9 +15,11 @@ immédiatement** sur cette planète et ajoute l'ordre à la fin de la file. La d
 n'est décidée qu'au moment où l'ordre prend la tête, avec les laboratoires du
 joueur à cet instant. Le niveau ne change qu'à l'achèvement.
 
-Un ordre s'annule à tout moment et rembourse intégralement la planète qui a payé,
-écrêté à la capacité de ses entrepôts. Annuler un niveau annule aussi les niveaux
-de la même technologie empilés au-dessus.
+Un ordre s'annule à tout moment et rembourse intégralement **la planète depuis
+laquelle il a été lancé**, écrêté à la capacité de ses entrepôts — annuler depuis
+une autre planète ne déplace donc aucune ressource. L'annulation emporte les
+niveaux suivants de la même technologie et les recherches dont l'ordre supprimé
+fournissait le prérequis.
 
 Le laboratoire ne s'améliore pas tant qu'une recherche est active ou en attente,
 et réciproquement une recherche ne démarre pas tant que le laboratoire est

@@ -26,15 +26,19 @@
    capacité du silo, tout ce que les files doivent encore compris.
 10. Les vaisseaux et les défenses avancent dans deux files indépendantes ; un
     lot annulé rembourse les unités que le chantier devait encore, celles déjà
-    livrées restant acquises.
-11. Les satellites solaires livrés augmentent l'énergie de la planète.
-12. Une commande en cours conserve ses coûts et son échéance après changement de
+    livrées restant acquises. Recommander un lot identique après le premier est
+    une nouvelle commande, jamais un rejeu.
+11. Une recherche annulée rembourse la planète qui l'a lancée, quelle que soit la
+    page depuis laquelle le joueur annule, et emporte les recherches dont elle
+    fournissait le prérequis.
+12. Les satellites solaires livrés augmentent l'énergie de la planète.
+13. Une commande en cours conserve ses coûts et son échéance après changement de
     ruleset ; une nouvelle commande utilise les nouvelles règles.
-13. Trois événements dus au même instant sont traités dans l'ordre documenté :
+14. Trois événements dus au même instant sont traités dans l'ordre documenté :
     bâtiment, recherche, production.
-14. Un empire qui n'a jamais rien recherché ni produit reste jouable : toutes les
+15. Un empire qui n'a jamais rien recherché ni produit reste jouable : toutes les
     pages répondent avec un état vide.
-15. Une progression complète mène d'un empire nu au laboratoire, à une
+16. Une progression complète mène d'un empire nu au laboratoire, à une
     technologie, au chantier spatial, puis à des vaisseaux et des défenses.
 
 ## Contrôles

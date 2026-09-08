@@ -42,10 +42,18 @@ instant : un laboratoire ou un chantier terminé entre-temps accélère réellem
 ce qui attendait derrière. Le coût, lui, reste celui figé à la commande.
 
 Annuler ferme la ligne en `'cancelled'`, annule son événement encore `'pending'`,
-rembourse — écrêté à la capacité des entrepôts — et promeut la suivante. Une
-recherche annulée entraîne les niveaux de la même technologie empilés au-dessus.
-Un lot ne rembourse que les unités que le chantier devait encore : celles déjà
-livrées restent acquises.
+libère sa clé d'idempotence, rembourse — écrêté à la capacité des entrepôts — et
+promeut la suivante. Comme pour les bâtiments, l'annulation emporte tout ce qui
+ne tient plus debout sans l'ordre supprimé : niveaux suivants de la même
+technologie, et recherches dont il fournissait le prérequis.
+
+La file de recherche appartient à l'empire mais chaque ordre a été payé par la
+planète depuis laquelle il a été lancé : le remboursement retourne à ce payeur,
+pas à la planète dont le joueur consulte la page. Sans cela, l'annulation serait
+un transport interplanétaire gratuit.
+
+Un lot d'unités ne rembourse que les unités que le chantier devait encore :
+celles déjà livrées restent acquises.
 
 Régler une planète livre au passage les unités terminées. L'ordre est celui de
 la fiche : les ressources de l'intervalle écoulé sont produites avec l'ancien

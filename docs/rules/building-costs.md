@@ -19,10 +19,11 @@ prend la tête de la file : une usine de robots terminée entre-temps accélère
 réellement tout ce qui attendait derrière elle.
 
 Un ordre s'annule à tout moment, en cours comme en attente, et rembourse
-intégralement. Les niveaux d'un même bâtiment formant une chaîne, annuler un
-niveau annule aussi ceux qui étaient empilés au-dessus. Un remboursement ne
-dépasse jamais la capacité des entrepôts : ce qui ne rentre pas est perdu, et le
-joueur en est averti avant comme après.
+intégralement. L'annulation emporte tout ce qui ne tiendrait plus debout sans
+lui : les niveaux suivants du même bâtiment, et les constructions dont il
+fournissait le prérequis. Un remboursement ne dépasse jamais la capacité des
+entrepôts : ce qui ne rentre pas est perdu, et le joueur en est averti avant
+comme après.
 
 Le catalogue initial contient les mines de métal/cristal/deutérium, la centrale
 solaire, les trois stockages, l'usine de robots, l'usine de nanites, le chantier
@@ -98,6 +99,8 @@ atomiques. Une reprise après crash ne peut donc incrémenter qu'une fois.
 - un ordre en attente n'a ni horaire ni événement planifié ;
 - une annulation rembourse exactement ce qui a été débité, écrêté aux entrepôts,
   et n'est jamais appliquée deux fois ;
+- après une annulation, la file ne contient plus que des ordres que
+  l'achèvement accepterait encore ;
 - aucune seconde consommation de case lors d'une reprise d'événement ;
 - coût ou durée non représentable rejeté, jamais saturé silencieusement.
 
