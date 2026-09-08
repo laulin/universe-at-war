@@ -293,7 +293,6 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /setup/{step}", handler.setupPage)
 	handler.mux.HandleFunc("POST /setup/{step}", handler.saveSetupStep)
 	handler.mux.HandleFunc("POST /empire", handler.createEmpire)
-	handler.mux.HandleFunc("GET /planets/switch", handler.switchBody)
 	handler.mux.HandleFunc("GET /planets/{planet}", handler.planetPage)
 	handler.mux.HandleFunc("POST /planets/{planet}/buildings/{building}", handler.startBuilding)
 	handler.mux.HandleFunc("GET /planets/{planet}/research", handler.researchPage)
@@ -767,20 +766,6 @@ func (h *Handler) planetView(ctx context.Context, principal appauth.Principal, p
 		return nil, appeconomy.Planet{}, nil, err
 	}
 	return planets, planet, choices, nil
-}
-
-// switchBody redirects the body selector to the chosen planet so the selector
-// works without JavaScript.
-func (h *Handler) switchBody(response http.ResponseWriter, request *http.Request) {
-	if _, _, ok := h.requirePrincipal(response, request); !ok {
-		return
-	}
-	planetID, err := strconv.ParseInt(request.URL.Query().Get("planet"), 10, 64)
-	if err != nil || planetID <= 0 {
-		http.Redirect(response, request, "/", http.StatusSeeOther)
-		return
-	}
-	http.Redirect(response, request, fmt.Sprintf("/planets/%d", planetID), http.StatusSeeOther)
 }
 
 func (h *Handler) planetParameter(response http.ResponseWriter, request *http.Request) (int64, bool) {

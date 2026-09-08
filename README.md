@@ -66,6 +66,18 @@ planète mère affiche les productions, stockages, énergie et cases, ainsi que 
 catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
 worker reprend automatiquement les événements après un redémarrage.
 
+L'interface est un centre de commandement en trois colonnes : la navigation à
+gauche, la barre des ressources du corps courant en haut, la liste des corps de
+l'empire à droite avec leurs stocks et les totaux. Un stock arrivé à sa capacité
+passe en alerte, car il ne produit plus.
+
+Chaque illustration est demandée par un slot stable, `/art/{catégorie}/{slug}`,
+où le slug est l'identifiant du domaine. Le serveur dessine un placeholder
+déterministe tant que le slot est vide, et sert le fichier dès qu'il existe dans
+`web/static/art/{catégorie}/`. Ajouter du vrai artwork ne demande donc aucune
+modification de gabarit ni de feuille de style : voir
+[`docs/adr/0002-illustration-slots.md`](docs/adr/0002-illustration-slots.md).
+
 Les joueurs font équipe sans jamais mettre leurs ressources en commun. Une
 alliance a des rangs, des invitations qui expirent, une diplomatie déclarative
 et un historique. Un rapport ne parvient à l'alliance que si son propriétaire le

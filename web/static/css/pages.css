@@ -31,8 +31,3 @@
 .galaxy-navigation { display: flex; gap: var(--space-5); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
 
 .confirm { margin-top: var(--space-5); }
-
-/* The header planet switcher survives on the narrow layouts that hide the
-   bodies column. */
-.body-picker { display: flex; align-items: end; gap: var(--space-2); margin: 0; }
-.body-picker label { font-size: var(--text-sm); color: var(--muted); }
