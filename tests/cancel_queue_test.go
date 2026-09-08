@@ -236,3 +236,105 @@ func TestCancellingABatchRefundsOnlyTheUnitsStillOwed(t *testing.T) {
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM production_orders WHERE state = 'cancelled'", 1)
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM scheduled_events WHERE event_type = 'production_completed' AND state = 'pending'", 0)
 }
+
+// A research is paid by the planet it was launched from. Cancelling it from
+// another body must not move the resources there: that would be a free
+// interplanetary transfer.
+func TestCancellingAResearchRefundsThePlanetThatPaid(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, _, principal, home := researchingEmpire(t, ctx)
+	colony := insertColony(t, ctx, database, 1, "Colonie", 1, 1, 4)
+
+	entry, err := universeWorld.Research.EnqueueResearch(ctx, principal, home.ID, research.EnergyTechnology, "energy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := universeWorld.Economy.Planet(ctx, principal, colony)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paid, err := universeWorld.Economy.Planet(ctx, principal, home.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancelled from the colony's page, which never paid a thing.
+	if _, err := universeWorld.Research.CancelResearch(ctx, principal, colony, entry.ID); err != nil {
+		t.Fatalf("CancelResearch() error = %v", err)
+	}
+	afterColony, err := universeWorld.Economy.Planet(ctx, principal, colony)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterColony.Stock != before.Stock {
+		t.Fatalf("the colony was credited a research it never paid for: %#v then %#v", before.Stock, afterColony.Stock)
+	}
+	afterHome, err := universeWorld.Economy.Planet(ctx, principal, home.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterHome.Stock != paid.Stock.Plus(entry.Cost) {
+		t.Fatalf("the paying planet got back %#v, want %#v", afterHome.Stock, paid.Stock.Plus(entry.Cost))
+	}
+}
+
+// Cancelling an order the queue was counting on drops what depended on it.
+// Otherwise a shipyard would finish on a robotics factory nobody ever built.
+func TestCancellingAPrerequisiteDropsWhatDependedOnIt(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, clock, principal, planet := queuedEmpire(t, ctx)
+	setBuilding(t, ctx, database, planet.ID, "robotics_factory", 1)
+
+	robotics, err := universeWorld.Economy.EnqueueBuilding(ctx, principal, planet.ID, building.RoboticsFactory, "robotics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universeWorld.Economy.EnqueueBuilding(ctx, principal, planet.ID, building.Shipyard, "shipyard"); err != nil {
+		t.Fatalf("the shipyard could not queue behind its prerequisite: %v", err)
+	}
+
+	cancellation, err := universeWorld.Economy.CancelBuilding(ctx, principal, planet.ID, robotics.ID)
+	if err != nil {
+		t.Fatalf("CancelBuilding() error = %v", err)
+	}
+	if cancellation.Cancelled != 2 {
+		t.Fatalf("cancelling the prerequisite dropped %d orders, want 2", cancellation.Cancelled)
+	}
+	advanceUntilIdle(t, ctx, universeWorld, clock)
+	after, err := universeWorld.Economy.Planet(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Levels[building.Shipyard] != 0 {
+		t.Fatalf("a shipyard was built on a robotics factory that was cancelled: %#v", after.Levels)
+	}
+}
+
+func TestCancellingAPrerequisiteResearchDropsWhatDependedOnIt(t *testing.T) {
+	ctx := context.Background()
+	_, universeWorld, clock, principal, planet := researchingEmpire(t, ctx)
+
+	energy, err := universeWorld.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, "energy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universeWorld.Research.EnqueueResearch(ctx, principal, planet.ID, research.CombustionDrive, "combustion"); err != nil {
+		t.Fatalf("the drive could not queue behind its prerequisite: %v", err)
+	}
+
+	cancellation, err := universeWorld.Research.CancelResearch(ctx, principal, planet.ID, energy.ID)
+	if err != nil {
+		t.Fatalf("CancelResearch() error = %v", err)
+	}
+	if cancellation.Cancelled != 2 {
+		t.Fatalf("cancelling the prerequisite dropped %d orders, want 2", cancellation.Cancelled)
+	}
+	advanceUntilIdle(t, ctx, universeWorld, clock)
+	after, err := universeWorld.Research.Overview(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Levels[research.CombustionDrive] != 0 {
+		t.Fatalf("a drive was researched on an energy technology that was cancelled: %#v", after.Levels)
+	}
+}

@@ -230,13 +230,14 @@ func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profil
 	if err != nil {
 		return failure(domainai.Tactical, "produce", err)
 	}
-	// One batch at a time, as before.
-	if len(ships.Queue) > 0 {
-		return skip(domainai.Tactical, "produce", "the yard is already busy", bodyID)
-	}
 	defenses, err := b.Shipyard.Defenses(ctx, principal, bodyID)
 	if err != nil {
 		return failure(domainai.Tactical, "produce", err)
+	}
+	// One batch at a time across the whole yard, as before the two families
+	// were given a queue each.
+	if len(ships.Queue) > 0 || len(defenses.Queue) > 0 {
+		return skip(domainai.Tactical, "produce", "the yard is already busy", bodyID)
 	}
 	options := map[string]domainai.Option{}
 	families := map[string]unit.Family{}

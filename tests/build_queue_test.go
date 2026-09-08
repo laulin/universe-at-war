@@ -7,10 +7,12 @@ import (
 	"testing"
 	"time"
 
+	appai "universeatwar/internal/app/ai"
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	appresearch "universeatwar/internal/app/research"
 	appclock "universeatwar/internal/clock"
+	domainai "universeatwar/internal/domain/ai"
 	"universeatwar/internal/domain/building"
 	domaineconomy "universeatwar/internal/domain/economy"
 	"universeatwar/internal/domain/research"
@@ -417,4 +419,32 @@ func TestAQueuedBatchCountsTowardsTheUnitLimits(t *testing.T) {
 	if _, err := universeWorld.Shipyard.OrderFamily(ctx, principal, planet.ID, unit.SmallShieldDome, unit.Defense, 1, "dome-2"); !errors.Is(err, unit.ErrQuantityLimit) {
 		t.Fatalf("second shield dome error = %v, want ErrQuantityLimit", err)
 	}
+}
+
+// An artificial player orders one batch at a time across the whole yard, as it
+// did before ships and defences were given a queue each. A busy defence queue
+// must hold its hand just as a busy ship queue does.
+func TestAnArtificialPlayerWaitsForTheWholeYard(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+	if _, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Tortue", Archetype: domainai.Turtle,
+		Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	artificial := appauth.Principal{AccountID: 2}
+	setBuilding(t, ctx, database, 2, "shipyard", 2)
+	setBuilding(t, ctx, database, 2, "robotics_factory", 2)
+	setResources(t, ctx, database, 2, 200000, 200000, 200000)
+
+	// A defence batch already running, and nothing in the ship queue.
+	if _, err := universeWorld.Shipyard.OrderFamily(ctx, artificial, 2, unit.RocketLauncher, unit.Defense, 3, "launchers"); err != nil {
+		t.Fatalf("OrderFamily() error = %v", err)
+	}
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM production_orders WHERE planet_id = 2", 1)
+
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM production_orders WHERE planet_id = 2", 1)
 }

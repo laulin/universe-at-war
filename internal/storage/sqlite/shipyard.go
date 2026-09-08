@@ -64,12 +64,17 @@ func (r *ShipyardRepository) State(ctx context.Context, accountID, planetID int6
 		}
 		estimateProductionQueue(ships, planet, r.catalogues.Units, now)
 		estimateProductionQueue(defenses, planet, r.catalogues.Units, now)
+		ordered, err := orderedUnits(ctx, tx, planet.ID)
+		if err != nil {
+			return err
+		}
 		state = appshipyard.State{
 			Planet:    planet,
 			Inventory: planet.Units,
 			SiloUsed:  siloSlotsUsed(planet.Units, append(append([]appshipyard.Order{}, ships...), defenses...), r.catalogues.Units),
 			Ships:     ships,
 			Defenses:  defenses,
+			Ordered:   ordered,
 		}
 		return nil
 	})
@@ -501,6 +506,28 @@ func pendingUnits(ctx context.Context, tx *sql.Tx, planetID int64) (unit.Invento
 		pending[unit.ID(id)] = owed
 	}
 	return pending, rows.Err()
+}
+
+// orderedUnits counts every unit of each model the planet has ever ordered,
+// finished and cancelled included. It only grows, so a page can build an
+// idempotency key from it that no live order already holds.
+func orderedUnits(ctx context.Context, tx *sql.Tx, planetID int64) (unit.Inventory, error) {
+	rows, err := tx.QueryContext(ctx,
+		"SELECT unit_id, SUM(quantity) FROM production_orders WHERE planet_id = ? GROUP BY unit_id", planetID)
+	if err != nil {
+		return nil, fmt.Errorf("shipyard repository: read ordered units: %w", err)
+	}
+	defer rows.Close()
+	ordered := unit.Inventory{}
+	for rows.Next() {
+		var id string
+		var total int64
+		if err := rows.Scan(&id, &total); err != nil {
+			return nil, fmt.Errorf("shipyard repository: scan ordered units: %w", err)
+		}
+		ordered[unit.ID(id)] = total
+	}
+	return ordered, rows.Err()
 }
 
 // estimateProductionQueue dates the batches still waiting, at the pace the yard

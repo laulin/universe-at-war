@@ -239,9 +239,11 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 			Reason: choiceReason(choice.Missing, choice.Reason,
 				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength,
 				choice.Available && choice.MaximumAffordable == 0),
-			// The queue length joins the key so that a second identical batch is
-			// a new order rather than a replay of the first.
-			IdempotencyKey: fmt.Sprintf("%s:unit:%s:%d", token, choice.Definition.ID, len(overview.Queue)),
+			// What the planet has ever ordered joins the key so that a second
+			// identical batch is a new order rather than a replay of the first.
+			// It only grows, unlike the length of the queue, which would come
+			// back round to a value a live order still holds.
+			IdempotencyKey: fmt.Sprintf("%s:unit:%s:%d", token, choice.Definition.ID, overview.Ordered[choice.Definition.ID]),
 		}
 		choices = append(choices, view)
 	}

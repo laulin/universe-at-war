@@ -15,6 +15,7 @@ import (
 	appeconomy "universeatwar/internal/app/economy"
 	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/prerequisite"
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/unit"
@@ -328,7 +329,7 @@ func (r *EconomyRepository) CancelBuilding(ctx context.Context, accountID, plane
 		if err != nil {
 			return err
 		}
-		dropped, refund, headWasDropped := droppedFromQueue(planet.Queue, entryID)
+		dropped, refund, headWasDropped := droppedFromQueue(planet, entryID, catalogue)
 		if len(dropped) == 0 {
 			return appeconomy.ErrQueueEntryNotFound
 		}
@@ -354,9 +355,7 @@ func (r *EconomyRepository) CancelBuilding(ctx context.Context, accountID, plane
 			return fmt.Errorf("economy repository: log cancellation: %w", err)
 		}
 		cancellation = appeconomy.Cancellation{
-			Cancelled: len(dropped),
-			Refunded:  economy.Resources{Metal: refund.Metal - lost.Metal, Crystal: refund.Crystal - lost.Crystal, Deuterium: refund.Deuterium - lost.Deuterium},
-			Lost:      lost,
+			Cancelled: len(dropped), Refunded: refund.Minus(lost), Lost: lost,
 		}
 		return nil
 	})
@@ -366,28 +365,46 @@ func (r *EconomyRepository) CancelBuilding(ctx context.Context, accountID, plane
 	return cancellation, nil
 }
 
-// droppedFromQueue picks the order the player named plus every later order for
-// the same building, and adds up what they cost.
-func droppedFromQueue(queue []appeconomy.Queue, entryID int64) ([]appeconomy.Queue, economy.Resources, bool) {
+// droppedFromQueue picks the order the player named and every later order that
+// can no longer stand once it is gone: the levels of the same building, which
+// were counting on it, and anything whose prerequisite it was going to supply.
+// What survives is exactly what completion would still accept, so a cancelled
+// prerequisite can never leave a dependent order to finish on its own.
+func droppedFromQueue(planet appeconomy.Planet, entryID int64, catalogue building.Catalogue) ([]appeconomy.Queue, economy.Resources, bool) {
+	projected := building.Levels{}
+	for id, level := range planet.Levels {
+		projected[id] = level
+	}
+	researches := planet.Researches.Generic()
 	var dropped []appeconomy.Queue
 	var refund economy.Resources
-	var target building.ID
-	found := false
-	head := false
-	for index, entry := range queue {
-		switch {
-		case entry.ID == entryID:
-			found, target, head = true, entry.Building, index == 0
-		case !found || entry.Building != target:
+	found, head := false, false
+	for index, entry := range planet.Queue {
+		if entry.ID == entryID {
+			found, head = true, index == 0
+		} else if !found || survivesCancellation(entry, projected, researches, catalogue) {
+			projected[entry.Building] = entry.TargetLevel
 			continue
 		}
 		dropped = append(dropped, entry)
-		refund = economy.Resources{
-			Metal: refund.Metal + entry.Cost.Metal, Crystal: refund.Crystal + entry.Cost.Crystal,
-			Deuterium: refund.Deuterium + entry.Cost.Deuterium,
-		}
+		refund = refund.Plus(entry.Cost)
 	}
 	return dropped, refund, head
+}
+
+// survivesCancellation applies the two rules completion enforces: an order
+// raises exactly one level at a time, and its prerequisites hold when it runs.
+func survivesCancellation(entry appeconomy.Queue, projected building.Levels, researches prerequisite.Levels, catalogue building.Catalogue) bool {
+	if projected[entry.Building]+1 != entry.TargetLevel {
+		return false
+	}
+	definition, known := catalogue.Definition(entry.Building)
+	if !known {
+		return false
+	}
+	return prerequisite.Check(definition.Prerequisites, prerequisite.State{
+		Buildings: projected.Generic(), Researches: researches,
+	}) == nil
 }
 
 // cancelQueueEntry closes one queue row, the event it may have booked and the

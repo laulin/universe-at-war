@@ -29,8 +29,13 @@ func queuedWeb(t *testing.T) (http.Handler, *world, appauth.Principal, *http.Coo
 		t.Fatalf("CreateEmpire() error = %v", err)
 	}
 	setResources(t, ctx, database, 1, 5_000_000, 5_000_000, 5_000_000)
+	for _, store := range []string{"metal_storage", "crystal_storage", "deuterium_tank"} {
+		setBuilding(t, ctx, database, 1, store, 10)
+	}
 	setBuilding(t, ctx, database, 1, "research_lab", 4)
 	setBuilding(t, ctx, database, 1, "solar_plant", 20)
+	setBuilding(t, ctx, database, 1, "shipyard", 2)
+	setResearch(t, ctx, database, 1, "combustion_drive", 1)
 	handler, err := webhandler.New(webhandler.Dependencies{
 		Authentication: webAuthenticationStub{principal: principal},
 		ServerState:    runningStateStub{},
@@ -301,5 +306,58 @@ func TestOrderingAgainAfterACancellationIsANewOrder(t *testing.T) {
 	after := getPage(t, handler, "/planets/1", session, csrf)
 	if got := strings.Count(after, `<li class="queue-entry`); got != 1 {
 		t.Fatalf("ordering again after a cancellation left %d entries, want 1: %q", got, after)
+	}
+}
+
+// A batch that has finished still holds the idempotency key it took. Ordering
+// the same batch again must not come back as a replay of it, which is what a
+// key built from the length of the queue would do once the queue emptied.
+func TestOrderingTheSameBatchAgainAfterItFinishedIsANewOrder(t *testing.T) {
+	ctx := context.Background()
+	handler, universeWorld, principal, session, csrf := queuedWeb(t)
+	planet, err := universeWorld.Economy.Planet(ctx, principal, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	order := func() {
+		t.Helper()
+		page := getPage(t, handler, "/planets/1/shipyard", session, csrf)
+		key := formValue(t, page, `action="/planets/1/shipyard/light_fighter"`, "idempotency_key")
+		request := postFormRequest("/planets/1/shipyard/light_fighter",
+			url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {key}, "quantity": {"2"}})
+		request.AddCookie(session)
+		request.AddCookie(csrf)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusSeeOther {
+			t.Fatalf("order = %d %q", recorder.Code, recorder.Body.String())
+		}
+	}
+
+	order()
+	first, err := universeWorld.Shipyard.Ships(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Queue) != 1 {
+		t.Fatalf("first order = %#v", first.Queue)
+	}
+	// Let the batch finish and leave the queue.
+	setClock(t, universeWorld.Clock, first.Queue[0].CompletesAt)
+	if _, err := universeWorld.Events.CompleteDue(ctx, 10); err != nil {
+		t.Fatal(err)
+	}
+
+	order()
+	second, err := universeWorld.Shipyard.Ships(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Queue) != 1 {
+		t.Fatalf("ordering the same batch again was swallowed as a replay: %#v", second.Queue)
+	}
+	if second.Queue[0].ID == first.Queue[0].ID {
+		t.Fatalf("the second order is the first one over again: %#v", second.Queue[0])
 	}
 }

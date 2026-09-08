@@ -25,6 +25,24 @@ func (r Resources) Covers(cost Resources) bool {
 		r.Metal >= cost.Metal && r.Crystal >= cost.Crystal && r.Deuterium >= cost.Deuterium
 }
 
+// Plus adds two amounts. A caller only ever sums costs the catalogue already
+// refused to let overflow, so the total stays well inside the range.
+func (r Resources) Plus(other Resources) Resources {
+	return Resources{
+		Metal: r.Metal + other.Metal, Crystal: r.Crystal + other.Crystal,
+		Deuterium: r.Deuterium + other.Deuterium,
+	}
+}
+
+// Minus subtracts an amount known to be smaller, such as the part of a refund
+// the stores could not hold.
+func (r Resources) Minus(other Resources) Resources {
+	return Resources{
+		Metal: r.Metal - other.Metal, Crystal: r.Crystal - other.Crystal,
+		Deuterium: r.Deuterium - other.Deuterium,
+	}
+}
+
 // Refund gives a cost back without ever passing the storage capacity. It
 // returns the new stock and what the full stores could not hold, so the caller
 // can tell the player exactly what the refund cost them.

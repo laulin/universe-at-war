@@ -11,7 +11,7 @@
           <span class="card__badge">{{.Level}}</span>
         </div>
         <div class="card__body">
-          <h3 class="card__title">{{.Name}}</h3>
+          <h3 class="card__title">{{.Name}}{{if .TargetLevel}} <span class="muted">niveau {{.TargetLevel}}</span>{{end}}</h3>
           {{if .Duration}}
           <p class="cost">
             {{if .CostMetal}}<span class="res-metal"><img src="/art/resource/metal" alt="Métal" width="13" height="13"> {{figure .CostMetal}}</span>{{end}}

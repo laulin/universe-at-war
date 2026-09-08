@@ -844,9 +844,12 @@ func (h *Handler) startBuilding(response http.ResponseWriter, request *http.Requ
 }
 
 type buildingPageChoice struct {
-	ID             building.ID
-	Name           string
+	ID   building.ID
+	Name string
+	// Level is what the body has built; TargetLevel is what the button orders,
+	// which the queue may already have pushed further ahead.
 	Level          int
+	TargetLevel    int
 	CostMetal      int64
 	CostCrystal    int64
 	CostDeuterium  int64
@@ -913,7 +916,8 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 			len(planet.Queue) >= planet.Rules.Progression.QueueLength, choice.Available && !choice.Affordable)
 		views = append(views, buildingPageChoice{
 			ID: choice.Definition.ID, Name: buildingName(choice.Definition.ID), Level: choice.Level,
-			CostMetal: choice.Plan.Cost.Metal, CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
+			TargetLevel: choice.Plan.TargetLevel,
+			CostMetal:   choice.Plan.Cost.Metal, CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
 			Duration: choice.Plan.Duration, CanStart: choice.Available && choice.Affordable,
 			Reason: reason, IdempotencyKey: fmt.Sprintf("%s:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
 		})

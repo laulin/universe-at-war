@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -228,21 +230,37 @@ func (r *ResearchRepository) CancelResearch(ctx context.Context, accountID, plan
 		if err != nil {
 			return err
 		}
-		dropped, refund, headWasDropped := droppedFromResearchQueue(entries, entryID)
+		dropped, headWasDropped := droppedFromResearchQueue(entries, planet, entryID, r.catalogues.Research)
 		if len(dropped) == 0 {
 			return appresearch.ErrQueueEntryNotFound
 		}
+		// Settle the planet the page was opened from, whether or not it paid for
+		// anything: every read of a body is also a settlement.
+		if err := persistProduction(ctx, tx, planet.ID, production); err != nil {
+			return err
+		}
+		// A research is paid by the planet it was launched from, and the queue
+		// belongs to the empire, so each order goes back to its own payer rather
+		// than to whichever page the player happened to cancel it from.
+		owed := map[int64]economy.Resources{}
 		for _, entry := range dropped {
 			if err := cancelQueueEntry(ctx, tx, "research_queue", entry.ID, fmt.Sprintf("research-complete:%d", entry.ID), now); err != nil {
 				return err
 			}
+			owed[entry.PlanetID] = owed[entry.PlanetID].Plus(entry.Cost)
 		}
-		// A research is paid by the planet it was launched from, so that is the
-		// planet the refund goes back to.
-		var lost economy.Resources
-		production.Stock, lost = production.Stock.Refund(refund, planet.Capacity)
-		if err := persistProduction(ctx, tx, planet.ID, production); err != nil {
-			return err
+		var refund, lost economy.Resources
+		for _, payerID := range slices.Sorted(maps.Keys(owed)) {
+			payer, _, stock, err := loadPlanetByID(ctx, tx, payerID, now, r.catalogues.Buildings)
+			if err != nil {
+				return err
+			}
+			var lostHere economy.Resources
+			stock.Stock, lostHere = stock.Stock.Refund(owed[payerID], payer.Capacity)
+			if err := persistProduction(ctx, tx, payerID, stock); err != nil {
+				return err
+			}
+			refund, lost = refund.Plus(owed[payerID]), lost.Plus(lostHere)
 		}
 		if headWasDropped {
 			if err := promoteNextResearch(ctx, tx, playerID, now, r.catalogues); err != nil {
@@ -256,9 +274,7 @@ func (r *ResearchRepository) CancelResearch(ctx context.Context, accountID, plan
 			return fmt.Errorf("research repository: log cancellation: %w", err)
 		}
 		cancellation = appeconomy.Cancellation{
-			Cancelled: len(dropped),
-			Refunded:  economy.Resources{Metal: refund.Metal - lost.Metal, Crystal: refund.Crystal - lost.Crystal, Deuterium: refund.Deuterium - lost.Deuterium},
-			Lost:      lost,
+			Cancelled: len(dropped), Refunded: refund.Minus(lost), Lost: lost,
 		}
 		return nil
 	})
@@ -268,27 +284,43 @@ func (r *ResearchRepository) CancelResearch(ctx context.Context, accountID, plan
 	return cancellation, nil
 }
 
-// droppedFromResearchQueue picks the order the player named plus every later
-// order for the same technology, and adds up what they cost.
-func droppedFromResearchQueue(queue []appresearch.Queue, entryID int64) ([]appresearch.Queue, economy.Resources, bool) {
+// droppedFromResearchQueue picks the order the player named and every later
+// order that can no longer stand once it is gone: the levels of the same
+// technology, and anything whose prerequisite it was going to supply. What
+// survives is exactly what completion would still accept.
+func droppedFromResearchQueue(queue []appresearch.Queue, planet appeconomy.Planet, entryID int64, catalogue research.Catalogue) ([]appresearch.Queue, bool) {
+	projected := research.Levels{}
+	for id, level := range planet.Researches {
+		projected[id] = level
+	}
+	buildings := planet.Levels.Generic()
 	var dropped []appresearch.Queue
-	var refund economy.Resources
-	var target research.ID
 	found, head := false, false
 	for index, entry := range queue {
-		switch {
-		case entry.ID == entryID:
-			found, target, head = true, entry.Research, index == 0
-		case !found || entry.Research != target:
+		if entry.ID == entryID {
+			found, head = true, index == 0
+		} else if !found || researchSurvivesCancellation(entry, projected, buildings, catalogue) {
+			projected[entry.Research] = entry.TargetLevel
 			continue
 		}
 		dropped = append(dropped, entry)
-		refund = economy.Resources{
-			Metal: refund.Metal + entry.Cost.Metal, Crystal: refund.Crystal + entry.Cost.Crystal,
-			Deuterium: refund.Deuterium + entry.Cost.Deuterium,
-		}
 	}
-	return dropped, refund, head
+	return dropped, head
+}
+
+// researchSurvivesCancellation applies the two rules completion enforces: an
+// order raises exactly one level, and its prerequisites hold when it runs.
+func researchSurvivesCancellation(entry appresearch.Queue, projected research.Levels, buildings prerequisite.Levels, catalogue research.Catalogue) bool {
+	if projected[entry.Research]+1 != entry.TargetLevel {
+		return false
+	}
+	definition, known := catalogue.Definition(entry.Research)
+	if !known {
+		return false
+	}
+	return prerequisite.Check(definition.Prerequisites, prerequisite.State{
+		Buildings: buildings, Researches: projected.Generic(),
+	}) == nil
 }
 
 // completeResearch raises the finished level exactly once, then hands the
