@@ -31,22 +31,27 @@ func TestResearchStartsCompletesOnceAndRefusesConcurrentQueues(t *testing.T) {
 	setBuilding(t, ctx, database, planet.ID, "research_lab", 1)
 	setResources(t, ctx, database, planet.ID, 5000, 5000, 5000)
 
-	queue, err := universe.Research.Start(ctx, principal, planet.ID, research.EnergyTechnology, "key-1")
+	queue, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, "key-1")
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if queue.TargetLevel != 1 || queue.CompletesAt.Sub(queue.StartedAt) != 1440*time.Second {
 		t.Fatalf("queue = %+v", queue)
 	}
-	replay, err := universe.Research.Start(ctx, principal, planet.ID, research.EnergyTechnology, "key-1")
+	replay, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, "key-1")
 	if err != nil || replay.ID != queue.ID {
 		t.Fatalf("idempotent replay = %+v %v", replay, err)
 	}
-	if _, err := universe.Research.Start(ctx, principal, planet.ID, research.ComputerTechnology, "key-2"); !errors.Is(err, appresearch.ErrQueueBusy) {
-		t.Fatalf("second research error = %v, want ErrQueueBusy", err)
-	}
 	assertSingleValue(t, database, "SELECT crystal FROM planet_resources WHERE planet_id = 1", 4200)
 	assertSingleValue(t, database, "SELECT deuterium FROM planet_resources WHERE planet_id = 1", 4600)
+	// A second research no longer collides with the first: it waits behind it,
+	// and pays on the spot all the same.
+	behind, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.ComputerTechnology, "key-2")
+	if err != nil || behind.Position != 1 || behind.State != "queued" {
+		t.Fatalf("second research = %+v, %v", behind, err)
+	}
+	assertSingleValue(t, database, "SELECT crystal FROM planet_resources WHERE planet_id = 1", int(4200-behind.Cost.Crystal))
+	assertSingleValue(t, database, "SELECT deuterium FROM planet_resources WHERE planet_id = 1", int(4600-behind.Cost.Deuterium))
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM scheduled_events WHERE event_type = 'research_completed' AND state = 'pending'", 1)
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM game_event_log WHERE event_type = 'research_started'", 1)
 
@@ -68,8 +73,11 @@ func TestResearchStartsCompletesOnceAndRefusesConcurrentQueues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Overview() error = %v", err)
 	}
-	if overview.Levels[research.EnergyTechnology] != 1 || overview.Active != nil {
+	if overview.Levels[research.EnergyTechnology] != 1 || len(overview.Queue) != 1 {
 		t.Fatalf("overview = %+v", overview)
+	}
+	if head := overview.Queue[0]; head.Research != research.ComputerTechnology || head.State != "active" {
+		t.Fatalf("the computer technology did not take over the laboratory: %+v", head)
 	}
 	if len(overview.Choices) == 0 {
 		t.Fatal("overview lists no research")
@@ -101,7 +109,7 @@ func TestResearchNetworkUsesTheBestRemoteLaboratories(t *testing.T) {
 	setResearch(t, ctx, database, 1, "intergalactic_research_network", 1)
 	setResources(t, ctx, database, planet.ID, 5000, 5000, 5000)
 
-	queue, err := universe.Research.Start(ctx, principal, planet.ID, research.EnergyTechnology, "network")
+	queue, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, "network")
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
@@ -124,12 +132,12 @@ func TestGravitonNeedsAvailableEnergyAndCostsNoResources(t *testing.T) {
 	setBuilding(t, ctx, database, planet.ID, "research_lab", 12)
 	setResources(t, ctx, database, planet.ID, 1000, 1000, 1000)
 
-	if _, err := universe.Research.Start(ctx, principal, planet.ID, research.GravitonTechnology, "graviton-1"); !errors.Is(err, appresearch.ErrInsufficientEnergy) {
+	if _, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.GravitonTechnology, "graviton-1"); !errors.Is(err, appresearch.ErrInsufficientEnergy) {
 		t.Fatalf("Start() without energy error = %v, want ErrInsufficientEnergy", err)
 	}
 	setUnits(t, ctx, database, planet.ID, "solar_satellite", 10000)
 
-	queue, err := universe.Research.Start(ctx, principal, planet.ID, research.GravitonTechnology, "graviton-2")
+	queue, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.GravitonTechnology, "graviton-2")
 	if err != nil {
 		t.Fatalf("Start() with satellites error = %v", err)
 	}
@@ -161,7 +169,7 @@ func TestConcurrentResearchStartsSpendOnlyOnce(t *testing.T) {
 		go func(index int, id research.ID) {
 			defer wait.Done()
 			<-start
-			_, err := universe.Research.Start(ctx, principal, planet.ID, id, fmt.Sprintf("concurrent-%d", index))
+			_, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, id, fmt.Sprintf("concurrent-%d", index))
 			results <- err
 		}(index, id)
 	}
@@ -205,7 +213,7 @@ func TestResearchAndLaboratoryUpgradeExcludeEachOther(t *testing.T) {
 	setBuilding(t, ctx, database, planet.ID, "research_lab", 1)
 	setResources(t, ctx, database, planet.ID, 50000, 50000, 50000)
 
-	if _, err := universe.Research.Start(ctx, principal, planet.ID, research.EnergyTechnology, "exclusive-1"); err != nil {
+	if _, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, "exclusive-1"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if _, err := universe.Economy.EnqueueBuilding(ctx, principal, planet.ID, "research_lab", "build-lab"); !errors.Is(err, appeconomy.ErrFacilityBusy) {

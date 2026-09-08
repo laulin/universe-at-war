@@ -42,7 +42,7 @@ type Economy interface {
 // Research is the laboratory page of a player.
 type Research interface {
 	Overview(context.Context, appauth.Principal, int64) (appresearch.Overview, error)
-	Start(context.Context, appauth.Principal, int64, research.ID, string) (appresearch.Queue, error)
+	EnqueueResearch(context.Context, appauth.Principal, int64, research.ID, string) (appresearch.Queue, error)
 }
 
 // Shipyard is the yard and the defence page of a player.
@@ -190,7 +190,9 @@ func (b *Brain) research(ctx context.Context, principal appauth.Principal, profi
 	if err != nil {
 		return failure(domainai.Strategic, "research", err)
 	}
-	if overview.Active != nil {
+	// One research at a time, as before: the queue is a convenience offered to
+	// human players, not a way for an artificial one to spend faster.
+	if len(overview.Queue) > 0 {
 		return skip(domainai.Strategic, "research", "a research is already running", bodyID)
 	}
 	options := make(map[string]domainai.Option, len(overview.Choices))
@@ -209,7 +211,7 @@ func (b *Brain) research(ctx context.Context, principal appauth.Principal, profi
 		return skip(domainai.Strategic, "research", reason, bodyID)
 	}
 	key := commandKey(profile, "research", chosen)
-	if _, err := b.Research.Start(ctx, principal, bodyID, research.ID(chosen), key); err != nil {
+	if _, err := b.Research.EnqueueResearch(ctx, principal, bodyID, research.ID(chosen), key); err != nil {
 		return failure(domainai.Strategic, "research "+chosen, err)
 	}
 	return domainai.Decision{

@@ -35,13 +35,11 @@ type researchPageChoice struct {
 
 type researchPageData struct {
 	pageShell
-	Planet      appeconomy.Planet
-	Levels      research.Levels
-	Active      *appresearch.Queue
-	ActiveName  string
-	Laboratory  int
-	Choices     []researchPageChoice
-	CompletesAt string
+	Planet     appeconomy.Planet
+	Levels     research.Levels
+	Queue      queuePanel
+	Laboratory int
+	Choices    []researchPageChoice
 }
 
 // unitPageChoice is one unit prepared for display.
@@ -94,7 +92,7 @@ func (h *Handler) startResearch(response http.ResponseWriter, request *http.Requ
 		}
 		return
 	}
-	_, err := h.research.Start(request.Context(), principal, planetID,
+	_, err := h.research.EnqueueResearch(request.Context(), principal, planetID,
 		research.ID(request.PathValue("research")), request.PostFormValue("idempotency_key"))
 	if err == nil {
 		http.Redirect(response, request, fmt.Sprintf("/planets/%d/research", planetID), http.StatusSeeOther)
@@ -133,23 +131,21 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 			TargetLevel: choice.Plan.TargetLevel, CostMetal: choice.Plan.Cost.Metal,
 			CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
 			Energy: choice.Plan.Energy, Duration: choice.Plan.Duration,
-			CanStart:       choice.Available && choice.Affordable,
-			Reason:         choiceReason(choice.Missing, choice.Reason, overview.Active != nil, choice.Available && !choice.Affordable),
+			CanStart: choice.Available && choice.Affordable,
+			Reason: choiceReason(choice.Missing, choice.Reason,
+				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength,
+				choice.Available && !choice.Affordable),
 			IdempotencyKey: fmt.Sprintf("%s:research:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
 		}
 		choices = append(choices, view)
 	}
 	shell := h.gameShell(request.Context(), token, principal, "research", planets, planetID)
 	shell.Error = message
-	data := researchPageData{
+	h.render(response, status, "research", researchPageData{
 		pageShell: shell, Planet: overview.Planet, Levels: overview.Levels,
-		Active: overview.Active, Laboratory: overview.Laboratories.Local, Choices: choices,
-	}
-	if overview.Active != nil {
-		data.ActiveName = researchName(overview.Active.Research)
-		data.CompletesAt = overview.Active.CompletesAt.Format(time.RFC3339)
-	}
-	h.render(response, status, "research", data)
+		Queue:      researchQueuePanel(overview.Queue, shell.Now),
+		Laboratory: overview.Laboratories.Local, Choices: choices,
+	})
 }
 
 func (h *Handler) shipyardPage(response http.ResponseWriter, request *http.Request) {
@@ -338,10 +334,12 @@ func joinWithComma(values []string) string {
 
 func researchError(err error) string {
 	switch {
+	case errors.Is(err, appresearch.ErrQueueFull):
+		return "La file de recherche est pleine."
 	case errors.Is(err, appresearch.ErrQueueBusy):
-		return "Une recherche est déjà en cours."
+		return "La file de recherche vient de changer : réessayez."
 	case errors.Is(err, appresearch.ErrLaboratoryBusy):
-		return "Le laboratoire est en cours d'amélioration."
+		return "Le laboratoire est dans la file de construction."
 	case errors.Is(err, appresearch.ErrInsufficientEnergy):
 		return "Énergie disponible insuffisante."
 	case errors.Is(err, domaineconomy.ErrInsufficientResources):

@@ -55,13 +55,19 @@ func TestWebResearchFlow(t *testing.T) {
 		t.Fatalf("running research page = %q", running)
 	}
 
+	// A second research joins the queue instead of being refused, and the panel
+	// shows it waiting with the forecast of its turn.
 	second := postFormRequest("/planets/1/research/computer_technology", url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {"another"}})
 	second.AddCookie(session)
 	second.AddCookie(csrfCookie)
-	refused := httptest.NewRecorder()
-	handler.ServeHTTP(refused, second)
-	if refused.Code != http.StatusBadRequest || !strings.Contains(refused.Body.String(), "Une recherche est déjà en cours.") {
-		t.Fatalf("second research = %d %q", refused.Code, refused.Body.String())
+	queued := httptest.NewRecorder()
+	handler.ServeHTTP(queued, second)
+	if queued.Code != http.StatusSeeOther {
+		t.Fatalf("second research = %d %q", queued.Code, queued.Body.String())
+	}
+	queuePage := getPage(t, handler, "/planets/1/research", session, csrfCookie)
+	if !strings.Contains(queuePage, "Technologie ordinateur") || !strings.Contains(queuePage, "queue-entry--waiting") {
+		t.Fatalf("research queue page = %q", queuePage)
 	}
 }
 

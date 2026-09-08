@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appeconomy "universeatwar/internal/app/economy"
+	appresearch "universeatwar/internal/app/research"
 )
 
 // queuePanel is what the "buildQueue" template renders.
@@ -70,6 +71,21 @@ func buildingQueuePanel(planet appeconomy.Planet, now time.Time) queuePanel {
 	for _, entry := range planet.Queue {
 		detail := fmt.Sprintf("niveau %d", entry.TargetLevel)
 		name := buildingName(entry.Building)
+		if entry.Waiting() {
+			panel.Entries = append(panel.Entries, waitingEntry(entry.ID, name, detail, entry.EstimatedStartAt, entry.EstimatedCompletesAt))
+			continue
+		}
+		panel.Entries = append(panel.Entries, runningEntry(entry.ID, name, detail, entry.StartedAt, entry.CompletesAt, now))
+	}
+	return panel
+}
+
+// researchQueuePanel turns a player's research queue into the shared view.
+func researchQueuePanel(queue []appresearch.Queue, now time.Time) queuePanel {
+	panel := queuePanel{Eyebrow: "File de recherche", Title: "Recherche en cours"}
+	for _, entry := range queue {
+		detail := fmt.Sprintf("niveau %d", entry.TargetLevel)
+		name := researchName(entry.Research)
 		if entry.Waiting() {
 			panel.Entries = append(panel.Entries, waitingEntry(entry.ID, name, detail, entry.EstimatedStartAt, entry.EstimatedCompletesAt))
 			continue

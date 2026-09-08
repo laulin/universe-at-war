@@ -1,13 +1,6 @@
 {{define "title"}}Recherche{{end}}
 {{define "content"}}
-  {{with .Active}}
-  <section class="queue panel-wide" aria-labelledby="running-title">
-    <p class="eyebrow">Recherche en cours</p>
-    <h2 id="running-title">{{$.ActiveName}} niveau {{.TargetLevel}}</h2>
-    <p>Fin prévue à {{.CompletesAt.Format "15:04:05"}} UTC —
-      <time datetime="{{$.CompletesAt}}" data-countdown data-done="terminée" data-refresh="page" aria-live="off">{{.CompletesAt.Format "15:04:05"}}</time></p>
-  </section>
-  {{end}}
+  {{template "buildQueue" .Queue}}
   <section class="panel-wide" aria-labelledby="research-title">
     <div class="section-bar">
       <h2 id="research-title">Progression technologique</h2>

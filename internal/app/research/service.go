@@ -18,31 +18,42 @@ import (
 
 var (
 	ErrForbidden          = errors.New("research: authenticated account required")
-	ErrQueueBusy          = errors.New("research: a research is already running")
+	ErrQueueBusy          = errors.New("research: the research queue changed under this order")
+	ErrQueueFull          = errors.New("research: the research queue is full")
 	ErrLaboratoryBusy     = errors.New("research: the laboratory is being upgraded")
 	ErrInsufficientEnergy = errors.New("research: available energy is too low")
 	ErrInvalidRequest     = errors.New("research: invalid research request")
 )
 
-// Queue is the active or completed research projection.
+// Queue is one entry of a player's research queue. The entry at position zero
+// is the one running and carries a real schedule; the ones behind it only carry
+// the forecast of when their turn comes.
 type Queue struct {
-	ID          int64
-	PlanetID    int64
-	Research    research.ID
-	TargetLevel int
-	Cost        economy.Resources
-	Energy      int64
-	StartedAt   time.Time
-	CompletesAt time.Time
-	State       string
+	ID                   int64
+	PlanetID             int64
+	Research             research.ID
+	TargetLevel          int
+	Cost                 economy.Resources
+	Energy               int64
+	Position             int
+	StartedAt            time.Time
+	CompletesAt          time.Time
+	EstimatedStartAt     time.Time
+	EstimatedCompletesAt time.Time
+	State                string
 }
+
+// Waiting reports an entry that has not started yet.
+func (q Queue) Waiting() bool { return q.State == "queued" }
 
 // State is everything the repository knows about a player's research.
 type State struct {
 	Planet       appeconomy.Planet
 	Levels       research.Levels
 	Laboratories research.Laboratories
-	Active       *Queue
+	// Queue holds every research ordered by the player and not yet finished,
+	// head first. It belongs to the empire, not to one planet.
+	Queue []Queue
 }
 
 // Choice is one catalogue entry enriched for the player.
@@ -65,7 +76,7 @@ type Overview struct {
 // Repository is the atomic persistence boundary for research use cases.
 type Repository interface {
 	State(context.Context, int64, int64, time.Time) (State, error)
-	Start(context.Context, int64, int64, research.ID, string, time.Time) (Queue, error)
+	EnqueueResearch(context.Context, int64, int64, research.ID, string, time.Time) (Queue, error)
 }
 
 // Service runs the research use cases of one player.
@@ -97,7 +108,7 @@ func (s Service) Overview(ctx context.Context, principal appauth.Principal, plan
 		Buildings:  state.Planet.Levels.Generic(),
 		Researches: state.Levels.Generic(),
 	}
-	available := state.Active == nil
+	available := len(state.Queue) < state.Planet.Rules.Progression.QueueLength
 	for _, definition := range definitions {
 		choice := Choice{Definition: definition, Level: state.Levels[definition.ID]}
 		choice.Missing = prerequisite.Unmet(definition.Prerequisites, requirements)
@@ -115,15 +126,16 @@ func (s Service) Overview(ctx context.Context, principal appauth.Principal, plan
 	return Overview{State: state, Choices: choices}, nil
 }
 
-// Start launches one research for the player owning the planet.
-func (s Service) Start(ctx context.Context, principal appauth.Principal, planetID int64, id research.ID, idempotencyKey string) (Queue, error) {
+// EnqueueResearch adds one research at the end of the player's queue. Its cost
+// is taken immediately, so an order that reached the queue is already paid for.
+func (s Service) EnqueueResearch(ctx context.Context, principal appauth.Principal, planetID int64, id research.ID, idempotencyKey string) (Queue, error) {
 	if err := s.validate(principal); err != nil {
 		return Queue{}, err
 	}
 	if planetID <= 0 || strings.TrimSpace(idempotencyKey) == "" || len(idempotencyKey) > 128 {
 		return Queue{}, ErrInvalidRequest
 	}
-	queue, err := s.Repository.Start(ctx, principal.AccountID, planetID, id, idempotencyKey, s.Clock.Now().UTC())
+	queue, err := s.Repository.EnqueueResearch(ctx, principal.AccountID, planetID, id, idempotencyKey, s.Clock.Now().UTC())
 	if err == nil && s.Wake != nil {
 		s.Wake()
 	}

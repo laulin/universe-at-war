@@ -39,11 +39,11 @@ func TestMilestoneThreeProgressionFromEmptyEmpireToFleetAndDefense(t *testing.T)
 	assertSingleValue(t, database, "SELECT level FROM planet_buildings WHERE planet_id = 1 AND building_id = 'research_lab'", 1)
 
 	// A research completes and unlocks the drive the light fighter needs.
-	if _, err := universe.Research.Start(ctx, principal, planet.ID, research.EnergyTechnology, "energy"); err != nil {
+	if _, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, "energy"); err != nil {
 		t.Fatalf("Start(energy) error = %v", err)
 	}
 	advanceUntilIdle(t, ctx, universe, clock)
-	if _, err := universe.Research.Start(ctx, principal, planet.ID, research.CombustionDrive, "combustion"); err != nil {
+	if _, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.CombustionDrive, "combustion"); err != nil {
 		t.Fatalf("Start(combustion) error = %v", err)
 	}
 	advanceUntilIdle(t, ctx, universe, clock)
@@ -102,7 +102,7 @@ func TestEventsDueAtTheSameInstantFollowTheDocumentedPriority(t *testing.T) {
 	if _, err := universe.Shipyard.Order(ctx, principal, planet.ID, unit.RocketLauncher, 1, "launcher"); err != nil {
 		t.Fatalf("Order() error = %v", err)
 	}
-	if _, err := universe.Research.Start(ctx, principal, planet.ID, research.EnergyTechnology, "energy"); err != nil {
+	if _, err := universe.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, "energy"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if _, err := universe.Economy.EnqueueBuilding(ctx, principal, planet.ID, building.MetalMine, "mine"); err != nil {
@@ -166,7 +166,7 @@ func TestEmpireWithoutAnyProgressionStaysPlayable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Research overview error = %v", err)
 	}
-	if len(overview.Levels) != 0 || overview.Active != nil {
+	if len(overview.Levels) != 0 || len(overview.Queue) != 0 {
 		t.Fatalf("fresh empire has research state: %+v", overview)
 	}
 	ships, err := universe.Shipyard.Ships(ctx, principal, planet.ID)

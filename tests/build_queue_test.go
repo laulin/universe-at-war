@@ -9,9 +9,11 @@ import (
 
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
+	appresearch "universeatwar/internal/app/research"
 	appclock "universeatwar/internal/clock"
 	"universeatwar/internal/domain/building"
 	domaineconomy "universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/research"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 
@@ -223,5 +225,92 @@ func TestAPromotedConstructionUsesTheFactoryLevelsOfItsOwnStart(t *testing.T) {
 	promoted := planet.Queue[0]
 	if got := promoted.CompletesAt.Sub(promoted.StartedAt); got != helped {
 		t.Fatalf("promoted mine takes %s, want %s", got, helped)
+	}
+}
+
+// researchingEmpire founds an empire with a laboratory and enough of everything
+// to fill the research queue.
+func researchingEmpire(t *testing.T, ctx context.Context) (*storagesqlite.Database, *world, *appclock.Fake, appauth.Principal, appeconomy.Planet) {
+	t.Helper()
+	database, universeWorld, clock, principal, planet := queuedEmpire(t, ctx)
+	setBuilding(t, ctx, database, planet.ID, "research_lab", 4)
+	setBuilding(t, ctx, database, planet.ID, "solar_plant", 20)
+	planet, err := universeWorld.Economy.Planet(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return database, universeWorld, clock, principal, planet
+}
+
+func TestQueueingSeveralResearchLevelsPaysForEachAtOrderTime(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, clock, principal, planet := researchingEmpire(t, ctx)
+	before := planet.Stock
+
+	spent := domaineconomy.Resources{}
+	for index := range 3 {
+		entry, err := universeWorld.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, fmt.Sprintf("energy-%d", index))
+		if err != nil {
+			t.Fatalf("EnqueueResearch(%d) error = %v", index, err)
+		}
+		if entry.TargetLevel != index+1 || entry.Position != index {
+			t.Fatalf("entry %d = %#v", index, entry)
+		}
+		spent = domaineconomy.Resources{
+			Metal:     spent.Metal + entry.Cost.Metal,
+			Crystal:   spent.Crystal + entry.Cost.Crystal,
+			Deuterium: spent.Deuterium + entry.Cost.Deuterium,
+		}
+	}
+
+	overview, err := universeWorld.Research.Overview(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(overview.Queue) != 3 {
+		t.Fatalf("research queue = %#v", overview.Queue)
+	}
+	want := domaineconomy.Resources{
+		Metal: before.Metal - spent.Metal, Crystal: before.Crystal - spent.Crystal,
+		Deuterium: before.Deuterium - spent.Deuterium,
+	}
+	if overview.Planet.Stock != want {
+		t.Fatalf("stock after three orders = %#v, want %#v", overview.Planet.Stock, want)
+	}
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM scheduled_events WHERE event_type = 'research_completed' AND state = 'pending'", 1)
+
+	advanceUntilIdle(t, ctx, universeWorld, clock)
+	assertSingleValue(t, database, "SELECT level FROM player_research WHERE player_id = 1 AND research_id = 'energy_technology'", 3)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM research_queue WHERE state = 'completed'", 3)
+}
+
+// The laboratory cannot be upgraded while a research is anywhere in the queue,
+// and a research cannot be ordered while the laboratory is anywhere in the
+// building queue. Looking at whole queues keeps that exclusion true at every
+// instant instead of only while an entry runs.
+func TestTheLaboratoryExclusionCoversWholeQueues(t *testing.T) {
+	ctx := context.Background()
+	_, universeWorld, _, principal, planet := researchingEmpire(t, ctx)
+
+	// A research waiting behind another still blocks the laboratory.
+	for index := range 2 {
+		if _, err := universeWorld.Research.EnqueueResearch(ctx, principal, planet.ID, research.EnergyTechnology, fmt.Sprintf("energy-%d", index)); err != nil {
+			t.Fatalf("EnqueueResearch(%d) error = %v", index, err)
+		}
+	}
+	if _, err := universeWorld.Economy.EnqueueBuilding(ctx, principal, planet.ID, building.ResearchLab, "lab"); !errors.Is(err, appeconomy.ErrFacilityBusy) {
+		t.Fatalf("laboratory upgrade during a research queue = %v", err)
+	}
+
+	_, otherWorld, _, otherPrincipal, otherPlanet := researchingEmpire(t, ctx)
+	// A laboratory waiting behind another building still blocks research.
+	if _, err := otherWorld.Economy.EnqueueBuilding(ctx, otherPrincipal, otherPlanet.ID, building.MetalMine, "mine"); err != nil {
+		t.Fatalf("EnqueueBuilding(mine) error = %v", err)
+	}
+	if _, err := otherWorld.Economy.EnqueueBuilding(ctx, otherPrincipal, otherPlanet.ID, building.ResearchLab, "lab"); err != nil {
+		t.Fatalf("EnqueueBuilding(lab) error = %v", err)
+	}
+	if _, err := otherWorld.Research.EnqueueResearch(ctx, otherPrincipal, otherPlanet.ID, research.EnergyTechnology, "energy"); !errors.Is(err, appresearch.ErrLaboratoryBusy) {
+		t.Fatalf("research during a queued laboratory = %v", err)
 	}
 }

@@ -95,7 +95,7 @@ type economyService interface {
 
 type researchService interface {
 	Overview(context.Context, appauth.Principal, int64) (appresearch.Overview, error)
-	Start(context.Context, appauth.Principal, int64, research.ID, string) (appresearch.Queue, error)
+	EnqueueResearch(context.Context, appauth.Principal, int64, research.ID, string) (appresearch.Queue, error)
 }
 
 type shipyardService interface {

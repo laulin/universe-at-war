@@ -284,6 +284,26 @@ func (c Catalogue) Plan(id ID, state prerequisite.State, laboratories Laboratori
 	}, nil
 }
 
+// DurationFor recomputes how long a research of already known cost takes with
+// the laboratories of the moment. A queued research is priced when it is
+// ordered and timed only when its turn comes, so the two halves of Plan are
+// needed apart. It also returns the effective laboratory that timing used.
+func (c Catalogue) DurationFor(id ID, cost economy.Resources, laboratories Laboratories, configured rules.Ruleset) (time.Duration, int, error) {
+	definition, known := c.definitions[id]
+	if !known {
+		return 0, 0, errors.New("research: unknown research")
+	}
+	if !configured.Progression.ResearchNetworkEnabled {
+		laboratories.NetworkLevel = 0
+	}
+	minimum := minimumLaboratory(definition)
+	duration, err := c.Duration(cost, laboratories, minimum, configured.Progression.LaboratoryBonus, configured.Time.ResearchSpeed)
+	if err != nil {
+		return 0, 0, err
+	}
+	return duration, EffectiveLaboratory(laboratories, minimum), nil
+}
+
 // minimumLaboratory is the laboratory level the research itself demands.
 func minimumLaboratory(definition Definition) int {
 	for _, requirement := range definition.Prerequisites {
