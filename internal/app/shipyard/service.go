@@ -18,14 +18,17 @@ import (
 
 var (
 	ErrForbidden       = errors.New("shipyard: authenticated account required")
-	ErrQueueBusy       = errors.New("shipyard: a production is already running")
+	ErrQueueBusy       = errors.New("shipyard: the production queue changed under this order")
+	ErrQueueFull       = errors.New("shipyard: the production queue is full")
 	ErrFacilityBusy    = errors.New("shipyard: the shipyard is being upgraded")
 	ErrInvalidQuantity = errors.New("shipyard: quantity must be positive and within the order limit")
 	ErrInvalidRequest  = errors.New("shipyard: invalid production request")
 	ErrWrongFamily     = errors.New("shipyard: unit does not belong to this page")
 )
 
-// Order is the active or completed production projection.
+// Order is one entry of a production queue: a batch of one model. The entry at
+// position zero is the batch being built and carries a real schedule; the ones
+// behind it only carry the forecast of when their turn comes.
 type Order struct {
 	ID           int64
 	PlanetID     int64
@@ -36,17 +39,34 @@ type Order struct {
 	UnitCost     economy.Resources
 	TotalCost    economy.Resources
 	UnitDuration time.Duration
+	Position     int
 	StartedAt    time.Time
 	CompletesAt  time.Time
-	State        string
+
+	EstimatedStartAt     time.Time
+	EstimatedCompletesAt time.Time
+	State                string
 }
 
-// State is everything the repository knows about a planet's shipyard.
+// Waiting reports a batch that has not started yet.
+func (o Order) Waiting() bool { return o.State == "queued" }
+
+// State is everything the repository knows about a planet's shipyard. The yard
+// and the defences hold one queue each and advance side by side.
 type State struct {
 	Planet    appeconomy.Planet
 	Inventory unit.Inventory
 	SiloUsed  int
-	Active    *Order
+	Ships     []Order
+	Defenses  []Order
+}
+
+// QueueOf returns the queue of one family.
+func (s State) QueueOf(family unit.Family) []Order {
+	if family == unit.Defense {
+		return s.Defenses
+	}
+	return s.Ships
 }
 
 // Choice is one catalogue entry enriched for the planet.
@@ -64,7 +84,9 @@ type Choice struct {
 // Overview is the shipyard or defense page projection.
 type Overview struct {
 	State
-	Family  unit.Family
+	Family unit.Family
+	// Queue is the queue of the family this page shows.
+	Queue   []Order
 	Choices []Choice
 }
 
@@ -106,6 +128,8 @@ func (s Service) overview(ctx context.Context, principal appauth.Principal, plan
 	if err != nil {
 		return Overview{}, err
 	}
+	queue := state.QueueOf(family)
+	room := len(queue) < state.Planet.Rules.Progression.QueueLength
 	definitions := s.Catalogues.Units.Definitions(family)
 	choices := make([]Choice, 0, len(definitions))
 	requirements := prerequisite.State{
@@ -135,10 +159,10 @@ func (s Service) overview(ctx context.Context, principal appauth.Principal, plan
 		}
 		choice.UnitDuration = duration
 		choice.MaximumAffordable = affordable(state.Planet.Stock, unitCost)
-		choice.Available = state.Active == nil && len(choice.Missing) == 0
+		choice.Available = room && len(choice.Missing) == 0
 		choices = append(choices, choice)
 	}
-	return Overview{State: state, Family: family, Choices: choices}, nil
+	return Overview{State: state, Family: family, Queue: queue, Choices: choices}, nil
 }
 
 // Order launches a production of one unit on the planet.

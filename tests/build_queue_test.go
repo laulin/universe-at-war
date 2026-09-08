@@ -14,6 +14,7 @@ import (
 	"universeatwar/internal/domain/building"
 	domaineconomy "universeatwar/internal/domain/economy"
 	"universeatwar/internal/domain/research"
+	"universeatwar/internal/domain/unit"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 
@@ -28,6 +29,11 @@ func queuedEmpire(t *testing.T, ctx context.Context) (*storagesqlite.Database, *
 	planet, err := universeWorld.Economy.CreateEmpire(ctx, principal, "Captain")
 	if err != nil {
 		t.Fatalf("CreateEmpire() error = %v", err)
+	}
+	// Stores large enough that settling never clips the fortune below, so a
+	// test watches the queue and nothing else.
+	for _, store := range []string{"metal_storage", "crystal_storage", "deuterium_tank"} {
+		setBuilding(t, ctx, database, planet.ID, store, 10)
 	}
 	setResources(t, ctx, database, planet.ID, 5_000_000, 5_000_000, 5_000_000)
 	planet, err = universeWorld.Economy.Planet(ctx, principal, planet.ID)
@@ -312,5 +318,103 @@ func TestTheLaboratoryExclusionCoversWholeQueues(t *testing.T) {
 	}
 	if _, err := otherWorld.Research.EnqueueResearch(ctx, otherPrincipal, otherPlanet.ID, research.EnergyTechnology, "energy"); !errors.Is(err, appresearch.ErrLaboratoryBusy) {
 		t.Fatalf("research during a queued laboratory = %v", err)
+	}
+}
+
+// producingEmpire founds an empire with a shipyard and the research a light
+// fighter needs.
+func producingEmpire(t *testing.T, ctx context.Context) (*storagesqlite.Database, *world, *appclock.Fake, appauth.Principal, appeconomy.Planet) {
+	t.Helper()
+	database, universeWorld, clock, principal, planet := queuedEmpire(t, ctx)
+	setBuilding(t, ctx, database, planet.ID, "shipyard", 2)
+	setResearch(t, ctx, database, 1, "combustion_drive", 1)
+	planet, err := universeWorld.Economy.Planet(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return database, universeWorld, clock, principal, planet
+}
+
+// The yard and the defences hold one queue each and advance side by side, so a
+// batch of fighters never holds a rocket launcher back.
+func TestShipsAndDefencesProgressInTwoIndependentQueues(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, _, principal, planet := producingEmpire(t, ctx)
+
+	if _, err := universeWorld.Shipyard.OrderFamily(ctx, principal, planet.ID, unit.LightFighter, unit.Ship, 3, "fighters"); err != nil {
+		t.Fatalf("OrderFamily(ships) error = %v", err)
+	}
+	if _, err := universeWorld.Shipyard.OrderFamily(ctx, principal, planet.ID, unit.RocketLauncher, unit.Defense, 4, "launchers"); err != nil {
+		t.Fatalf("OrderFamily(defences) error = %v", err)
+	}
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM production_orders WHERE planet_id = ? AND state = 'active'", 2, planet.ID)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM scheduled_events WHERE event_type = 'production_completed' AND state = 'pending'", 2)
+
+	ships, err := universeWorld.Shipyard.Ships(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defenses, err := universeWorld.Shipyard.Defenses(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ships.Queue) != 1 || ships.Queue[0].Unit != unit.LightFighter {
+		t.Fatalf("ship queue = %+v", ships.Queue)
+	}
+	if len(defenses.Queue) != 1 || defenses.Queue[0].Unit != unit.RocketLauncher {
+		t.Fatalf("defence queue = %+v", defenses.Queue)
+	}
+}
+
+func TestQueueingTwoBatchesPaysForBothAndBuildsThemInOrder(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, clock, principal, planet := producingEmpire(t, ctx)
+	before := planet.Stock
+
+	first, err := universeWorld.Shipyard.OrderFamily(ctx, principal, planet.ID, unit.LightFighter, unit.Ship, 3, "batch-1")
+	if err != nil {
+		t.Fatalf("OrderFamily(first) error = %v", err)
+	}
+	second, err := universeWorld.Shipyard.OrderFamily(ctx, principal, planet.ID, unit.LightFighter, unit.Ship, 2, "batch-2")
+	if err != nil {
+		t.Fatalf("OrderFamily(second) error = %v", err)
+	}
+	if second.Position != 1 || second.State != "queued" {
+		t.Fatalf("second batch = %+v", second)
+	}
+
+	ships, err := universeWorld.Shipyard.Ships(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := domaineconomy.Resources{
+		Metal:     before.Metal - first.TotalCost.Metal - second.TotalCost.Metal,
+		Crystal:   before.Crystal - first.TotalCost.Crystal - second.TotalCost.Crystal,
+		Deuterium: before.Deuterium - first.TotalCost.Deuterium - second.TotalCost.Deuterium,
+	}
+	if ships.Planet.Stock != want {
+		t.Fatalf("stock after two batches = %#v, want %#v", ships.Planet.Stock, want)
+	}
+	// A batch waiting its turn delivers nothing yet.
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM production_orders WHERE state = 'queued' AND delivered = 0", 1)
+
+	advanceUntilIdle(t, ctx, universeWorld, clock)
+	assertSingleValue(t, database, "SELECT quantity FROM planet_units WHERE planet_id = 1 AND unit_id = 'light_fighter'", 5)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM production_orders WHERE state = 'completed'", 2)
+}
+
+// A queued batch counts towards the limits a unit carries, so a second shield
+// dome cannot slip in behind the first.
+func TestAQueuedBatchCountsTowardsTheUnitLimits(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, _, principal, planet := producingEmpire(t, ctx)
+	setResearch(t, ctx, database, 1, "shielding_technology", 2)
+	setResearch(t, ctx, database, 1, "energy_technology", 3)
+
+	if _, err := universeWorld.Shipyard.OrderFamily(ctx, principal, planet.ID, unit.SmallShieldDome, unit.Defense, 1, "dome-1"); err != nil {
+		t.Fatalf("OrderFamily(dome) error = %v", err)
+	}
+	if _, err := universeWorld.Shipyard.OrderFamily(ctx, principal, planet.ID, unit.SmallShieldDome, unit.Defense, 1, "dome-2"); !errors.Is(err, unit.ErrQuantityLimit) {
+		t.Fatalf("second shield dome error = %v, want ErrQuantityLimit", err)
 	}
 }

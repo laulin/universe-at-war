@@ -47,8 +47,10 @@ func TestProductionOrderDeliversIncrementallyAndCompletesOnce(t *testing.T) {
 	if err != nil || replay.ID != order.ID {
 		t.Fatalf("idempotent replay = %+v %v", replay, err)
 	}
-	if _, err := universe.Shipyard.Order(ctx, principal, planet.ID, unit.RocketLauncher, 1, "order-2"); !errors.Is(err, appshipyard.ErrQueueBusy) {
-		t.Fatalf("second order error = %v, want ErrQueueBusy", err)
+	// A queued batch is paid for the moment it is ordered, so an empty purse
+	// refuses it even though the defence queue is free.
+	if _, err := universe.Shipyard.Order(ctx, principal, planet.ID, unit.RocketLauncher, 1, "order-2"); !errors.Is(err, domaineconomy.ErrInsufficientResources) {
+		t.Fatalf("second order error = %v, want ErrInsufficientResources", err)
 	}
 
 	clock.Advance(2 * 2880 * time.Second)
@@ -59,8 +61,8 @@ func TestProductionOrderDeliversIncrementallyAndCompletesOnce(t *testing.T) {
 	if overview.Inventory[unit.LightFighter] != 2 {
 		t.Fatalf("delivered units = %d, want 2", overview.Inventory[unit.LightFighter])
 	}
-	if overview.Active == nil || overview.Active.Delivered != 2 || overview.Active.Quantity != 3 {
-		t.Fatalf("active order = %+v", overview.Active)
+	if len(overview.Queue) != 1 || overview.Queue[0].Delivered != 2 || overview.Queue[0].Quantity != 3 {
+		t.Fatalf("running order = %+v", overview.Queue)
 	}
 
 	clock.Advance(2880 * time.Second)
@@ -216,8 +218,8 @@ func TestProductionKeepsItsCostsAfterARulesetChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Defenses() error = %v", err)
 	}
-	if overview.Active == nil || !overview.Active.CompletesAt.Equal(order.CompletesAt) {
-		t.Fatalf("running order changed after the ruleset changed: %+v", overview.Active)
+	if len(overview.Queue) != 1 || !overview.Queue[0].CompletesAt.Equal(order.CompletesAt) {
+		t.Fatalf("running order changed after the ruleset changed: %+v", overview.Queue)
 	}
 	for _, choice := range overview.Choices {
 		if choice.Definition.ID == unit.RocketLauncher && choice.UnitDuration != 144*time.Second {

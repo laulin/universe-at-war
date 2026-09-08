@@ -59,14 +59,12 @@ type unitPageChoice struct {
 
 type productionPageData struct {
 	pageShell
-	Planet      appeconomy.Planet
-	Family      string
-	Title       string
-	Action      string
-	Active      *appshipyard.Order
-	ActiveName  string
-	Choices     []unitPageChoice
-	CompletesAt string
+	Planet  appeconomy.Planet
+	Family  string
+	Title   string
+	Action  string
+	Queue   queuePanel
+	Choices []unitPageChoice
 }
 
 func (h *Handler) researchPage(response http.ResponseWriter, request *http.Request) {
@@ -237,9 +235,12 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 			CostDeuterium: choice.UnitCost.Deuterium, Duration: choice.UnitDuration,
 			Maximum:  choice.MaximumAffordable,
 			CanOrder: choice.Available && choice.MaximumAffordable > 0,
-			Reason: choiceReason(choice.Missing, choice.Reason, overview.Active != nil,
+			Reason: choiceReason(choice.Missing, choice.Reason,
+				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength,
 				choice.Available && choice.MaximumAffordable == 0),
-			IdempotencyKey: fmt.Sprintf("%s:unit:%s", token, choice.Definition.ID),
+			// The queue length joins the key so that a second identical batch is
+			// a new order rather than a replay of the first.
+			IdempotencyKey: fmt.Sprintf("%s:unit:%s:%d", token, choice.Definition.ID, len(overview.Queue)),
 		}
 		choices = append(choices, view)
 	}
@@ -251,15 +252,11 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 	}
 	shell := h.gameShell(request.Context(), token, principal, section, planets, planetID)
 	shell.Error = message
-	data := productionPageData{
+	h.render(response, status, "production", productionPageData{
 		pageShell: shell, Planet: overview.Planet, Family: string(family), Title: title,
-		Action: familyPath(family), Active: overview.Active, Choices: choices,
-	}
-	if overview.Active != nil {
-		data.ActiveName = unitName(overview.Active.Unit)
-		data.CompletesAt = overview.Active.CompletesAt.Format(time.RFC3339)
-	}
-	h.render(response, status, "production", data)
+		Action: familyPath(family), Queue: productionQueuePanel(overview.Queue, shell.Now),
+		Choices: choices,
+	})
 }
 
 // gamePageContext resolves the signed-in player and the planet of a game page.
@@ -355,10 +352,12 @@ func researchError(err error) string {
 
 func productionError(err error) string {
 	switch {
+	case errors.Is(err, appshipyard.ErrQueueFull):
+		return "La file de production est pleine."
 	case errors.Is(err, appshipyard.ErrQueueBusy):
-		return "Une production est déjà en cours."
+		return "La file de production vient de changer : réessayez."
 	case errors.Is(err, appshipyard.ErrFacilityBusy):
-		return "Le chantier spatial est en cours d'amélioration."
+		return "Le chantier spatial est dans la file de construction."
 	case errors.Is(err, appshipyard.ErrInvalidQuantity), errors.Is(err, unit.ErrInvalidQuantity):
 		return "Indiquez une quantité comprise entre 1 et 1 000 000."
 	case errors.Is(err, unit.ErrQuantityLimit):

@@ -11,12 +11,14 @@ import (
 	"strings"
 	"time"
 
+	appeconomy "universeatwar/internal/app/economy"
 	appshipyard "universeatwar/internal/app/shipyard"
 	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/catalogue"
 	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/prerequisite"
+	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/unit"
 )
 
@@ -37,7 +39,7 @@ func NewShipyardRepository(write *sql.DB, catalogues catalogue.Set) *ShipyardRep
 // RegisterHandlers plugs production completion into the shared event processor.
 func (r *ShipyardRepository) RegisterHandlers(processor *EventProcessor) {
 	processor.Register("production_completed", func(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time) error {
-		return completeProduction(ctx, tx, event, now)
+		return completeProduction(ctx, tx, event, now, r.catalogues)
 	})
 }
 
@@ -52,15 +54,22 @@ func (r *ShipyardRepository) State(ctx context.Context, accountID, planetID int6
 		if err := persistProduction(ctx, tx, planet.ID, production); err != nil {
 			return err
 		}
-		active, err := activeProduction(ctx, tx, planet.ID)
+		ships, err := planetProductionQueue(ctx, tx, planet.ID, unit.Ship)
 		if err != nil {
 			return err
 		}
+		defenses, err := planetProductionQueue(ctx, tx, planet.ID, unit.Defense)
+		if err != nil {
+			return err
+		}
+		estimateProductionQueue(ships, planet, r.catalogues.Units, now)
+		estimateProductionQueue(defenses, planet, r.catalogues.Units, now)
 		state = appshipyard.State{
 			Planet:    planet,
 			Inventory: planet.Units,
-			SiloUsed:  siloSlotsUsed(planet.Units, active, r.catalogues.Units),
-			Active:    active,
+			SiloUsed:  siloSlotsUsed(planet.Units, append(append([]appshipyard.Order{}, ships...), defenses...), r.catalogues.Units),
+			Ships:     ships,
+			Defenses:  defenses,
 		}
 		return nil
 	})
@@ -70,8 +79,9 @@ func (r *ShipyardRepository) State(ctx context.Context, accountID, planetID int6
 	return state, nil
 }
 
-// Order debits the total cost, creates the order, its completion event, its
-// idempotency key and its journal entry in a single transaction.
+// Order debits the total cost and appends the batch to the queue of its family.
+// Only the batch that lands at the head is scheduled; the ones behind it wait
+// with no deadline of their own.
 func (r *ShipyardRepository) Order(ctx context.Context, accountID, planetID int64, id unit.ID, quantity int64, idempotencyKey string, now time.Time) (appshipyard.Order, error) {
 	var order appshipyard.Order
 	err := withWriteTx(ctx, r.write, "shipyard repository: order", func(tx *sql.Tx) error {
@@ -93,14 +103,24 @@ func (r *ShipyardRepository) Order(ctx context.Context, accountID, planetID int6
 		if err := r.catalogues.Matches(planet.Rules); err != nil {
 			return err
 		}
-		active, err := activeProduction(ctx, tx, planet.ID)
+		definition, known := r.catalogues.Units.Definition(id)
+		if !known {
+			return unit.ErrUnknownUnit
+		}
+		queue, err := planetProductionQueue(ctx, tx, planet.ID, definition.Family)
 		if err != nil {
 			return err
 		}
-		if active != nil {
-			return appshipyard.ErrQueueBusy
+		if len(queue) >= planet.Rules.Progression.QueueLength {
+			return appshipyard.ErrQueueFull
 		}
 		if err := shipyardIsIdle(ctx, tx, planet.ID); err != nil {
+			return err
+		}
+		// Units still owed by the whole yard count against the limits a model
+		// carries, so a second shield dome cannot slip in behind the first.
+		pending, err := pendingUnits(ctx, tx, planet.ID)
+		if err != nil {
 			return err
 		}
 		plan, err := r.catalogues.Units.Order(id, quantity, unit.Inputs{
@@ -112,7 +132,7 @@ func (r *ShipyardRepository) Order(ctx context.Context, accountID, planetID int6
 			NaniteLevel:      planet.Levels[building.NaniteFactory],
 			MissileSiloLevel: planet.Levels[building.MissileSilo],
 			Inventory:        planet.Units,
-			Pending:          unit.Inventory{},
+			Pending:          pending,
 		}, planet.Rules)
 		if err != nil {
 			return err
@@ -124,16 +144,29 @@ func (r *ShipyardRepository) Order(ctx context.Context, accountID, planetID int6
 		if err := persistProduction(ctx, tx, planet.ID, production); err != nil {
 			return err
 		}
-		startedAt := now.UTC().Truncate(time.Second)
-		completesAt := startedAt.Add(plan.Duration)
+		queuedAt := now.UTC().Truncate(time.Second)
 		unitSeconds := int64(plan.UnitDuration / time.Second)
+		position := 0
+		if last := len(queue); last > 0 {
+			position = queue[last-1].Position + 1
+		}
+		head := len(queue) == 0
+		orderState := "queued"
+		var startedAt, completesAt time.Time
+		var startedValue, completesValue any
+		if head {
+			orderState = "active"
+			startedAt = queuedAt
+			completesAt = startedAt.Add(plan.Duration)
+			startedValue, completesValue = timestamp(startedAt), timestamp(completesAt)
+		}
 		result, err := tx.ExecContext(ctx, `
 			INSERT INTO production_orders(planet_id, unit_id, family, quantity, unit_metal_cost, unit_crystal_cost, unit_deuterium_cost, unit_seconds, ruleset_version, position, queued_at, started_at, completes_at, state)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'active')
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, planet.ID, string(id), string(plan.Family), plan.Quantity, plan.UnitCost.Metal, plan.UnitCost.Crystal,
-			plan.UnitCost.Deuterium, unitSeconds, rulesetVersion, timestamp(startedAt), timestamp(startedAt), timestamp(completesAt))
+			plan.UnitCost.Deuterium, unitSeconds, rulesetVersion, position, timestamp(queuedAt), startedValue, completesValue, orderState)
 		if err != nil {
-			if strings.Contains(err.Error(), "production_orders_one_active_idx") || strings.Contains(err.Error(), "UNIQUE") {
+			if strings.Contains(err.Error(), "production_orders_one_active_idx") || strings.Contains(err.Error(), "production_orders_position_idx") {
 				return appshipyard.ErrQueueBusy
 			}
 			return fmt.Errorf("shipyard repository: enqueue production: %w", err)
@@ -142,29 +175,27 @@ func (r *ShipyardRepository) Order(ctx context.Context, accountID, planetID int6
 		if err != nil {
 			return fmt.Errorf("shipyard repository: order id: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO scheduled_events(event_type, due_at, priority, entity_type, entity_id, ruleset_version, payload, idempotency_key, created_at)
-			VALUES ('production_completed', ?, ?, 'production_orders', ?, ?, json_object('order_id', ?), ?, ?)
-		`, timestamp(completesAt), productionEventPriority, strconv.FormatInt(orderID, 10), rulesetVersion, orderID,
-			fmt.Sprintf("production-complete:%d", orderID), timestamp(startedAt)); err != nil {
-			return fmt.Errorf("shipyard repository: schedule production: %w", err)
+		if head {
+			if err := scheduleProduction(ctx, tx, orderID, rulesetVersion, startedAt, completesAt); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO idempotency_keys(actor_id, operation, key, request_hash, result_type, result_id, created_at)
 			VALUES (?, 'order_units', ?, ?, 'production_orders', ?, ?)
-		`, strconv.FormatInt(accountID, 10), idempotencyKey, requestHash, strconv.FormatInt(orderID, 10), timestamp(startedAt)); err != nil {
+		`, strconv.FormatInt(accountID, 10), idempotencyKey, requestHash, strconv.FormatInt(orderID, 10), timestamp(queuedAt)); err != nil {
 			return fmt.Errorf("shipyard repository: record idempotency: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO game_event_log(event_type, actor_type, actor_id, entity_type, entity_id, occurred_at, payload)
-			VALUES ('production_ordered', 'account', ?, 'planet', ?, ?, json_object('unit_id', ?, 'quantity', ?, 'order_id', ?))
-		`, accountID, planet.ID, timestamp(startedAt), string(id), plan.Quantity, orderID); err != nil {
+			VALUES ('production_ordered', 'account', ?, 'planet', ?, ?, json_object('unit_id', ?, 'quantity', ?, 'order_id', ?, 'position', ?))
+		`, accountID, planet.ID, timestamp(queuedAt), string(id), plan.Quantity, orderID, position); err != nil {
 			return fmt.Errorf("shipyard repository: log production order: %w", err)
 		}
 		order = appshipyard.Order{
 			ID: orderID, PlanetID: planet.ID, Unit: id, Family: plan.Family, Quantity: plan.Quantity,
 			UnitCost: plan.UnitCost, TotalCost: plan.TotalCost, UnitDuration: plan.UnitDuration,
-			StartedAt: startedAt, CompletesAt: completesAt, State: "active",
+			Position: position, StartedAt: startedAt, CompletesAt: completesAt, State: orderState,
 		}
 		return nil
 	})
@@ -174,13 +205,23 @@ func (r *ShipyardRepository) Order(ctx context.Context, accountID, planetID int6
 	return order, nil
 }
 
-// settleProduction delivers the units an active order has finished. It runs in
-// every transaction that reads or spends units, exactly like lazy production.
+// settleProduction delivers the units the running batches have finished. It
+// runs in every transaction that reads or spends units, exactly like lazy
+// production, and covers both families because they build side by side.
 func settleProduction(ctx context.Context, tx *sql.Tx, planetID int64, now time.Time) error {
-	order, err := activeProduction(ctx, tx, planetID)
-	if err != nil || order == nil {
+	running, err := activeProductions(ctx, tx, planetID)
+	if err != nil {
 		return err
 	}
+	for _, order := range running {
+		if err := settleOneProduction(ctx, tx, planetID, order, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func settleOneProduction(ctx context.Context, tx *sql.Tx, planetID int64, order appshipyard.Order, now time.Time) error {
 	produced := unit.Delivered(order.StartedAt, order.UnitDuration, order.Quantity, now)
 	if produced <= order.Delivered {
 		return nil
@@ -205,17 +246,17 @@ func settleProduction(ctx context.Context, tx *sql.Tx, planetID int64, now time.
 	return nil
 }
 
-// completeProduction delivers the remainder of a batch and closes it exactly
-// once.
-func completeProduction(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time) error {
+// completeProduction delivers the remainder of a batch, closes it exactly once
+// and hands the yard to whatever the player queued behind it.
+func completeProduction(ctx context.Context, tx *sql.Tx, event ScheduledEvent, now time.Time, catalogues catalogue.Set) error {
 	orderID, err := strconv.ParseInt(event.EntityID, 10, 64)
 	if err != nil {
 		return errors.New("shipyard repository: invalid order event reference")
 	}
 	var planetID int64
-	var state string
-	if err := tx.QueryRowContext(ctx, "SELECT planet_id, state FROM production_orders WHERE id = ?", orderID).
-		Scan(&planetID, &state); err != nil {
+	var state, family string
+	if err := tx.QueryRowContext(ctx, "SELECT planet_id, state, family FROM production_orders WHERE id = ?", orderID).
+		Scan(&planetID, &state, &family); err != nil {
 		return fmt.Errorf("shipyard repository: read due order: %w", err)
 	}
 	if state != "active" {
@@ -250,7 +291,78 @@ func completeProduction(ctx context.Context, tx *sql.Tx, event ScheduledEvent, n
 	`, planetID, timestamp(now), unitID, quantity, orderID); err != nil {
 		return fmt.Errorf("shipyard repository: log completion: %w", err)
 	}
+	// The queue must not gain idle time from a late settlement, so the next
+	// batch starts at the instant this one was due.
+	return promoteNextProduction(ctx, tx, planetID, unit.Family(family), event.DueAt, catalogues)
+}
+
+// scheduleProduction books the completion of the batch now at the head.
+func scheduleProduction(ctx context.Context, tx *sql.Tx, orderID, rulesetVersion int64, startedAt, completesAt time.Time) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO scheduled_events(event_type, due_at, priority, entity_type, entity_id, ruleset_version, payload, idempotency_key, created_at)
+		VALUES ('production_completed', ?, ?, 'production_orders', ?, ?, json_object('order_id', ?), ?, ?)
+	`, timestamp(completesAt), productionEventPriority, strconv.FormatInt(orderID, 10), rulesetVersion, orderID,
+		fmt.Sprintf("production-complete:%d", orderID), timestamp(startedAt)); err != nil {
+		return fmt.Errorf("shipyard repository: schedule production: %w", err)
+	}
 	return nil
+}
+
+// promoteNextProduction starts whichever batch now waits at the front of a
+// family's queue, timing it with the yard the planet owns at this instant.
+func promoteNextProduction(ctx context.Context, tx *sql.Tx, planetID int64, family unit.Family, now time.Time, catalogues catalogue.Set) error {
+	var orderID, quantity int64
+	var unitID string
+	var unitCost domaineconomy.Resources
+	err := tx.QueryRowContext(ctx, `
+		SELECT id, unit_id, quantity, unit_metal_cost, unit_crystal_cost, unit_deuterium_cost
+		FROM production_orders
+		WHERE planet_id = ? AND family = ? AND state = 'queued' ORDER BY position, id LIMIT 1
+	`, planetID, string(family)).Scan(&orderID, &unitID, &quantity, &unitCost.Metal, &unitCost.Crystal, &unitCost.Deuterium)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("shipyard repository: read waiting batch: %w", err)
+	}
+	configured, rulesetVersion, err := activeRuleset(ctx, tx)
+	if err != nil {
+		return err
+	}
+	levels, err := loadLevels(ctx, tx, planetID, catalogues.Buildings)
+	if err != nil {
+		return err
+	}
+	unitDuration, err := catalogues.Units.UnitDuration(unitCost,
+		levels[building.Shipyard], levels[building.NaniteFactory], familySpeed(family, configured))
+	if err != nil {
+		return err
+	}
+	startedAt := now.UTC().Truncate(time.Second)
+	completesAt := startedAt.Add(unitDuration * time.Duration(quantity))
+	result, err := tx.ExecContext(ctx, `
+		UPDATE production_orders SET state = 'active', started_at = ?, completes_at = ?, unit_seconds = ?, ruleset_version = ?
+		WHERE id = ? AND state = 'queued'
+	`, timestamp(startedAt), timestamp(completesAt), int64(unitDuration/time.Second), rulesetVersion, orderID)
+	if err != nil {
+		return fmt.Errorf("shipyard repository: promote batch: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("shipyard repository: promote batch: %w", err)
+	}
+	if affected != 1 {
+		return errors.New("shipyard repository: the waiting batch changed during promotion")
+	}
+	return scheduleProduction(ctx, tx, orderID, rulesetVersion, startedAt, completesAt)
+}
+
+// familySpeed is the ruleset speed that applies to one family.
+func familySpeed(family unit.Family, configured rules.Ruleset) float64 {
+	if family == unit.Defense {
+		return configured.Time.DefenseSpeed
+	}
+	return configured.Time.ShipyardSpeed
 }
 
 // adjustInventory adds or removes units. A removal is a guarded update: it only
@@ -291,38 +403,124 @@ func economyTimes(cost domaineconomy.Resources, quantity int64) domaineconomy.Re
 	return domaineconomy.Resources{Metal: cost.Metal * quantity, Crystal: cost.Crystal * quantity, Deuterium: cost.Deuterium * quantity}
 }
 
-// activeProduction returns the running order of a planet, if any.
-func activeProduction(ctx context.Context, tx *sql.Tx, planetID int64) (*appshipyard.Order, error) {
-	order, err := loadProductionOrder(ctx, tx, "planet_id = ? AND state = 'active'", planetID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+const productionColumns = `id, planet_id, unit_id, family, quantity, delivered, unit_metal_cost, unit_crystal_cost, unit_deuterium_cost, unit_seconds, position, started_at, completes_at, state`
+
+// activeProductions returns the batches of a planet that are being built, one
+// per family at most.
+func activeProductions(ctx context.Context, tx *sql.Tx, planetID int64) ([]appshipyard.Order, error) {
+	rows, err := tx.QueryContext(ctx,
+		"SELECT "+productionColumns+" FROM production_orders WHERE planet_id = ? AND state = 'active' ORDER BY family, id", planetID)
+	if err != nil {
+		return nil, fmt.Errorf("shipyard repository: read running batches: %w", err)
 	}
-	return order, err
+	return scanProductionOrders(rows)
 }
 
-func loadProductionOrder(ctx context.Context, tx *sql.Tx, condition string, argument any) (*appshipyard.Order, error) {
-	var order appshipyard.Order
-	var unitID, family, startedText, completesText string
-	var unitSeconds int64
-	err := tx.QueryRowContext(ctx, `
-		SELECT id, planet_id, unit_id, family, quantity, delivered, unit_metal_cost, unit_crystal_cost, unit_deuterium_cost, unit_seconds, started_at, completes_at, state
-		FROM production_orders WHERE `+condition, argument).
-		Scan(&order.ID, &order.PlanetID, &unitID, &family, &order.Quantity, &order.Delivered, &order.UnitCost.Metal,
-			&order.UnitCost.Crystal, &order.UnitCost.Deuterium, &unitSeconds, &startedText, &completesText, &order.State)
+// planetProductionQueue reads one family's queue, head first. Only the head
+// carries a schedule.
+func planetProductionQueue(ctx context.Context, tx *sql.Tx, planetID int64, family unit.Family) ([]appshipyard.Order, error) {
+	rows, err := tx.QueryContext(ctx,
+		"SELECT "+productionColumns+" FROM production_orders WHERE planet_id = ? AND family = ? AND state IN ('active', 'queued') ORDER BY position, id",
+		planetID, string(family))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("shipyard repository: read production queue: %w", err)
+	}
+	return scanProductionOrders(rows)
+}
+
+// pendingUnits counts the units the whole yard still owes the planet.
+func pendingUnits(ctx context.Context, tx *sql.Tx, planetID int64) (unit.Inventory, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT unit_id, SUM(quantity - delivered) FROM production_orders
+		WHERE planet_id = ? AND state IN ('active', 'queued') GROUP BY unit_id
+	`, planetID)
+	if err != nil {
+		return nil, fmt.Errorf("shipyard repository: read pending units: %w", err)
+	}
+	defer rows.Close()
+	pending := unit.Inventory{}
+	for rows.Next() {
+		var id string
+		var owed int64
+		if err := rows.Scan(&id, &owed); err != nil {
+			return nil, fmt.Errorf("shipyard repository: scan pending units: %w", err)
+		}
+		pending[unit.ID(id)] = owed
+	}
+	return pending, rows.Err()
+}
+
+// estimateProductionQueue dates the batches still waiting, at the pace the yard
+// runs today.
+func estimateProductionQueue(orders []appshipyard.Order, planet appeconomy.Planet, catalogue unit.Catalogue, now time.Time) {
+	cursor := now
+	for index, order := range orders {
+		if !order.Waiting() {
+			if order.CompletesAt.After(cursor) {
+				cursor = order.CompletesAt
+			}
+			continue
+		}
+		unitDuration, err := catalogue.UnitDuration(order.UnitCost,
+			planet.Levels[building.Shipyard], planet.Levels[building.NaniteFactory], familySpeed(order.Family, planet.Rules))
+		if err != nil {
+			return
+		}
+		orders[index].EstimatedStartAt = cursor
+		cursor = cursor.Add(unitDuration * time.Duration(order.Quantity))
+		orders[index].EstimatedCompletesAt = cursor
+	}
+}
+
+func scanProductionOrders(rows *sql.Rows) ([]appshipyard.Order, error) {
+	defer rows.Close()
+	var orders []appshipyard.Order
+	for rows.Next() {
+		order, err := scanProductionOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, order)
+	}
+	return orders, rows.Err()
+}
+
+type productionScanner interface {
+	Scan(destination ...any) error
+}
+
+func scanProductionOrder(row productionScanner) (appshipyard.Order, error) {
+	var order appshipyard.Order
+	var unitID, family string
+	var startedText, completesText sql.NullString
+	var unitSeconds int64
+	if err := row.Scan(&order.ID, &order.PlanetID, &unitID, &family, &order.Quantity, &order.Delivered,
+		&order.UnitCost.Metal, &order.UnitCost.Crystal, &order.UnitCost.Deuterium, &unitSeconds,
+		&order.Position, &startedText, &completesText, &order.State); err != nil {
+		return appshipyard.Order{}, err
 	}
 	order.Unit = unit.ID(unitID)
 	order.Family = unit.Family(family)
 	order.UnitDuration = time.Duration(unitSeconds) * time.Second
 	order.TotalCost = economyTimes(order.UnitCost, order.Quantity)
-	order.StartedAt, err = time.Parse(time.RFC3339Nano, startedText)
-	if err != nil {
-		return nil, fmt.Errorf("shipyard repository: parse start time: %w", err)
+	if !startedText.Valid {
+		return order, nil
 	}
-	order.CompletesAt, err = time.Parse(time.RFC3339Nano, completesText)
+	var err error
+	if order.StartedAt, err = time.Parse(time.RFC3339Nano, startedText.String); err != nil {
+		return appshipyard.Order{}, fmt.Errorf("shipyard repository: parse start time: %w", err)
+	}
+	if order.CompletesAt, err = time.Parse(time.RFC3339Nano, completesText.String); err != nil {
+		return appshipyard.Order{}, fmt.Errorf("shipyard repository: parse completion time: %w", err)
+	}
+	return order, nil
+}
+
+func loadProductionOrder(ctx context.Context, tx *sql.Tx, condition string, argument any) (*appshipyard.Order, error) {
+	row := tx.QueryRowContext(ctx, "SELECT "+productionColumns+" FROM production_orders WHERE "+condition, argument)
+	order, err := scanProductionOrder(row)
 	if err != nil {
-		return nil, fmt.Errorf("shipyard repository: parse completion time: %w", err)
+		return nil, err
 	}
 	return &order, nil
 }
@@ -355,13 +553,14 @@ func replayedProduction(ctx context.Context, tx *sql.Tx, accountID int64, idempo
 }
 
 // shipyardIsIdle refuses a production while the shipyard or the nanite factory
-// is being upgraded.
+// sits anywhere in the building queue, running or waiting. Looking at the whole
+// queue keeps the exclusion true at every instant.
 func shipyardIsIdle(ctx context.Context, tx *sql.Tx, planetID int64) error {
 	var busy bool
 	if err := tx.QueryRowContext(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM building_queue
-			WHERE planet_id = ? AND state = 'active' AND building_id IN ('shipyard', 'nanite_factory')
+			WHERE planet_id = ? AND state IN ('active', 'queued') AND building_id IN ('shipyard', 'nanite_factory')
 		)
 	`, planetID).Scan(&busy); err != nil {
 		return fmt.Errorf("shipyard repository: inspect shipyard: %w", err)
@@ -372,17 +571,18 @@ func shipyardIsIdle(ctx context.Context, tx *sql.Tx, planetID int64) error {
 	return nil
 }
 
-// siloSlotsUsed counts the missile slots already taken, production included.
-func siloSlotsUsed(inventory unit.Inventory, active *appshipyard.Order, catalogue unit.Catalogue) int {
+// siloSlotsUsed counts the missile slots already taken, everything the queues
+// still owe included.
+func siloSlotsUsed(inventory unit.Inventory, queued []appshipyard.Order, catalogue unit.Catalogue) int {
 	used := 0
 	for id, quantity := range inventory {
 		if definition, known := catalogue.Definition(id); known {
 			used += definition.SiloSlots * int(quantity)
 		}
 	}
-	if active != nil {
-		if definition, known := catalogue.Definition(active.Unit); known {
-			used += definition.SiloSlots * int(active.Quantity-active.Delivered)
+	for _, order := range queued {
+		if definition, known := catalogue.Definition(order.Unit); known {
+			used += definition.SiloSlots * int(order.Quantity-order.Delivered)
 		}
 	}
 	return used

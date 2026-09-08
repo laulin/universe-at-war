@@ -9,6 +9,7 @@ import (
 
 	appeconomy "universeatwar/internal/app/economy"
 	appresearch "universeatwar/internal/app/research"
+	appshipyard "universeatwar/internal/app/shipyard"
 )
 
 // queuePanel is what the "buildQueue" template renders.
@@ -91,6 +92,25 @@ func researchQueuePanel(queue []appresearch.Queue, now time.Time) queuePanel {
 			continue
 		}
 		panel.Entries = append(panel.Entries, runningEntry(entry.ID, name, detail, entry.StartedAt, entry.CompletesAt, now))
+	}
+	return panel
+}
+
+// productionQueuePanel turns one family's queue into the shared view. A batch
+// also states how many of its units have already left the yard.
+func productionQueuePanel(queue []appshipyard.Order, now time.Time) queuePanel {
+	panel := queuePanel{Eyebrow: "File de production", Title: "Production en cours"}
+	for _, order := range queue {
+		detail := fmt.Sprintf("× %d", order.Quantity)
+		name := unitName(order.Unit)
+		var view queueEntryView
+		if order.Waiting() {
+			view = waitingEntry(order.ID, name, detail, order.EstimatedStartAt, order.EstimatedCompletesAt)
+		} else {
+			view = runningEntry(order.ID, name, detail, order.StartedAt, order.CompletesAt, now)
+			view.Delivered, view.Quantity = order.Delivered, order.Quantity
+		}
+		panel.Entries = append(panel.Entries, view)
 	}
 	return panel
 }

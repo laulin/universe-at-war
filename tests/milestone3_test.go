@@ -173,7 +173,7 @@ func TestEmpireWithoutAnyProgressionStaysPlayable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ships() error = %v", err)
 	}
-	if len(ships.Inventory) != 0 || ships.Active != nil {
+	if len(ships.Inventory) != 0 || len(ships.Queue) != 0 {
 		t.Fatalf("fresh empire has production state: %+v", ships)
 	}
 	defenses, err := universe.Shipyard.Defenses(ctx, principal, planet.ID)

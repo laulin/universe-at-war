@@ -1,13 +1,6 @@
 {{define "title"}}{{.Title}}{{end}}
 {{define "content"}}
-  {{with .Active}}
-  <section class="queue panel-wide" aria-labelledby="running-title">
-    <p class="eyebrow">Production en cours</p>
-    <h2 id="running-title">{{$.ActiveName}}</h2>
-    <p>{{.Delivered}} / {{.Quantity}} livrés — fin prévue à {{.CompletesAt.Format "15:04:05"}} UTC
-      (<time datetime="{{$.CompletesAt}}" data-countdown data-done="terminée" data-refresh="page" aria-live="off">{{.CompletesAt.Format "15:04:05"}}</time>)</p>
-  </section>
-  {{end}}
+  {{template "buildQueue" .Queue}}
   <section class="panel-wide" aria-labelledby="production-title">
     <div class="section-bar"><h2 id="production-title">{{.Title}}</h2></div>
     <div class="card-grid">

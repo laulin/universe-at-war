@@ -230,7 +230,8 @@ func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profil
 	if err != nil {
 		return failure(domainai.Tactical, "produce", err)
 	}
-	if ships.Active != nil {
+	// One batch at a time, as before.
+	if len(ships.Queue) > 0 {
 		return skip(domainai.Tactical, "produce", "the yard is already busy", bodyID)
 	}
 	defenses, err := b.Shipyard.Defenses(ctx, principal, bodyID)
