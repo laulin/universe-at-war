@@ -12,6 +12,7 @@ import (
 	appresearch "universeatwar/internal/app/research"
 	appshipyard "universeatwar/internal/app/shipyard"
 	domaineconomy "universeatwar/internal/domain/economy"
+	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/prerequisite"
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/unit"
@@ -42,6 +43,12 @@ type researchPageData struct {
 	Choices    []researchPageChoice
 }
 
+// unitPageVolley is one rapid-fire pairing named for the player.
+type unitPageVolley struct {
+	Name  string
+	Shots int
+}
+
 // unitPageChoice is one unit prepared for display.
 type unitPageChoice struct {
 	ID             unit.ID
@@ -55,6 +62,17 @@ type unitPageChoice struct {
 	CanOrder       bool
 	Reason         string
 	IdempotencyKey string
+	// What the unit is worth in a battle. Speed is zero for whatever has no
+	// drive, which is every defence and the solar satellite, and the card then
+	// shows no speed rather than a nought.
+	Weapon   int64
+	Shield   int64
+	Hull     int64
+	Cargo    int64
+	Speed    int64
+	Fuel     int64
+	Inflicts []unitPageVolley
+	Suffers  []unitPageVolley
 }
 
 type productionPageData struct {
@@ -206,6 +224,27 @@ func (h *Handler) orderUnits(response http.ResponseWriter, request *http.Request
 	h.renderProduction(response, request, http.StatusBadRequest, principal, planetID, family, productionError(err))
 }
 
+// unitSpeed is the speed the player's drives actually give. Whatever has no
+// drive at all has no speed to show, which the card reads as an absence rather
+// than as a nought.
+func unitSpeed(definition unit.Definition, levels research.Levels) int64 {
+	speed, err := domainfleet.UnitSpeed(definition, levels)
+	if err != nil {
+		return 0
+	}
+	return speed
+}
+
+// namedVolleys puts a player's word on each rapid-fire pairing, in the order
+// the catalogue already settled.
+func namedVolleys(volleys []unit.Volley) []unitPageVolley {
+	named := make([]unitPageVolley, 0, len(volleys))
+	for _, volley := range volleys {
+		named = append(named, unitPageVolley{Name: unitName(volley.Unit), Shots: volley.Shots})
+	}
+	return named
+}
+
 func (h *Handler) renderProduction(response http.ResponseWriter, request *http.Request, status int, principal appauth.Principal, planetID int64, family unit.Family, message string) {
 	if h.shipyard == nil {
 		http.NotFound(response, request)
@@ -228,6 +267,7 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 	if !ok {
 		return
 	}
+	catalogue := unit.DefaultCatalogue()
 	choices := make([]unitPageChoice, 0, len(overview.Choices))
 	for _, choice := range overview.Choices {
 		view := unitPageChoice{
@@ -244,6 +284,14 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 			// It only grows, unlike the length of the queue, which would come
 			// back round to a value a live order still holds.
 			IdempotencyKey: fmt.Sprintf("%s:unit:%s:%d", token, choice.Definition.ID, overview.Ordered[choice.Definition.ID]),
+			Weapon:         choice.Definition.Weapon,
+			Shield:         choice.Definition.Shield,
+			Hull:           choice.Definition.Hull(),
+			Cargo:          choice.Definition.Cargo,
+			Speed:          unitSpeed(choice.Definition, overview.Planet.Researches),
+			Fuel:           choice.Definition.FuelConsumption,
+			Inflicts:       namedVolleys(catalogue.RapidFireOf(choice.Definition.ID)),
+			Suffers:        namedVolleys(catalogue.RapidFireAgainst(choice.Definition.ID)),
 		}
 		choices = append(choices, view)
 	}

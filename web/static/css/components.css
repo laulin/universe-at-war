@@ -106,11 +106,75 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-panel);
-  overflow: hidden;
 }
 .card--locked { opacity: 0.62; }
 
-.card__art { position: relative; background: var(--surface-sunken); }
+/* The card frames the panel that folds into it. */
+.card { position: relative; }
+
+/* The panel is folded away until the card is hovered or something inside it
+   takes focus, so a mouse, a keyboard and a finger all reach it. The button is
+   there to be that focus target and does nothing else; without it the panel
+   would be reachable by pointer alone. */
+.card__more {
+  align-self: start;
+  min-height: auto;
+  padding: var(--space-1) var(--space-2);
+  background: none;
+  box-shadow: none;
+  border-color: var(--border);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+.card:hover .card__more { color: var(--text); border-color: var(--border-strong); }
+
+.card__stats {
+  position: absolute;
+  /* Laid over the card rather than beside it: a panel that grew sideways would
+     be cut off by the window on the last column of the grid. Downwards is the
+     free direction, so it covers its card and spills over the row below rather
+     than scrolling. The cap is above the longest table in the catalogue, the
+     death star's eighteen entries, and is there for a catalogue that grows. */
+  inset: 0 0 auto 0;
+  min-height: 100%;
+  max-height: 32rem;
+  z-index: 2;
+  overflow-y: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  font-size: var(--text-xs);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.card:hover .card__stats,
+.card:focus-within .card__stats { visibility: visible; opacity: 1; }
+
+.card__stats dl { display: grid; grid-template-columns: 1fr auto; gap: 0 var(--space-3); margin: 0; }
+.card__stats dt { color: var(--muted); }
+.card__stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.card__stats ul { list-style: none; margin: 0; padding: 0; }
+.card__stats li { display: flex; justify-content: space-between; gap: var(--space-3); }
+.card__stats b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.card__volleys {
+  margin: var(--space-3) 0 var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* The card no longer clips its children, so the picture rounds its own top
+   corners: a panel that grows past the card has to be free to do so. */
+.card__art {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
+  background: var(--surface-sunken);
+}
 .card__art img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
 
 /* The level or the quantity, bottom right of the illustration. */

@@ -78,12 +78,14 @@ func TestWebShipyardAndDefensePages(t *testing.T) {
 	setResearch(t, ctx, database, 1, "combustion_drive", 1)
 	setResources(t, ctx, database, 1, 9000, 3000, 0)
 
+	// A page is judged on the cards it offers, not on the names it happens to
+	// print: a card names units of the other family in its rapid fire table.
 	shipyard := getPage(t, handler, "/planets/1/shipyard", session, csrfCookie)
-	if !strings.Contains(shipyard, "Chasseur léger") || strings.Contains(shipyard, "Lanceur de missiles") {
+	if !strings.Contains(shipyard, cardTitle("Chasseur léger")) || strings.Contains(shipyard, cardTitle("Lanceur de missiles")) {
 		t.Fatalf("shipyard page = %q", shipyard)
 	}
 	defense := getPage(t, handler, "/planets/1/defense", session, csrfCookie)
-	if !strings.Contains(defense, "Lanceur de missiles") || strings.Contains(defense, "Chasseur léger") {
+	if !strings.Contains(defense, cardTitle("Lanceur de missiles")) || strings.Contains(defense, cardTitle("Chasseur léger")) {
 		t.Fatalf("defense page = %q", defense)
 	}
 
@@ -175,4 +177,9 @@ func progressionHandler(t *testing.T) (http.Handler, *storagesqlite.Database, *h
 		t.Fatal(err)
 	}
 	return handler, database, &http.Cookie{Name: "uaw_session", Value: "session"}, &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
+}
+
+// cardTitle is how a page says it offers a unit, as opposed to merely naming it.
+func cardTitle(name string) string {
+	return `<h3 class="card__title">` + name + `</h3>`
 }
