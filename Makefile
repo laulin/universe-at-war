@@ -1,4 +1,4 @@
-.PHONY: build release test test-race vet lint audit bench check
+.PHONY: build release art test test-race vet lint audit bench check
 
 GO ?= go
 VERSION ?= dev
@@ -17,6 +17,12 @@ release:
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "$(LDFLAGS)" \
 			-o bin/universe-at-war-$(VERSION)-$$os-$$arch$$suffix ./cmd/universe-at-war; \
 	done
+
+# art regenerates the embedded illustrations from the masters in images/. It
+# is a developer target: the derivatives are committed, so nothing that builds
+# or runs the game needs an image toolchain.
+art:
+	./scripts/build-art.sh
 
 test:
 	$(GO) test ./...
