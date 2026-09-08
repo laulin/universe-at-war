@@ -4,13 +4,24 @@
 
 Un joueur possède un niveau entier positif ou nul par recherche. Les niveaux
 appartiennent au joueur, pas à la planète : une recherche terminée profite à tout
-l'empire. Une seule recherche peut être active par joueur, quel que soit le
-nombre de planètes.
+l'empire. Le joueur tient une file de recherche d'au plus
+`progression.queue_length` ordres, dix par défaut, dont un seul se mène à la
+fois, quel que soit le nombre de planètes.
 
-Démarrer une recherche règle d'abord la production de la planète de lancement,
-vérifie les prérequis de bâtiments et de recherches, calcule coût et durée,
-débite les ressources sur cette planète, crée la file et son événement planifié
-dans une même transaction. Le niveau ne change qu'à l'achèvement.
+Mettre une recherche en file règle d'abord la production de la planète de
+lancement, vérifie les prérequis de bâtiments et de recherches — en y comptant
+les niveaux que la file atteint déjà —, calcule le coût, **débite les ressources
+immédiatement** sur cette planète et ajoute l'ordre à la fin de la file. La durée
+n'est décidée qu'au moment où l'ordre prend la tête, avec les laboratoires du
+joueur à cet instant. Le niveau ne change qu'à l'achèvement.
+
+Un ordre s'annule à tout moment et rembourse intégralement la planète qui a payé,
+écrêté à la capacité de ses entrepôts. Annuler un niveau annule aussi les niveaux
+de la même technologie empilés au-dessus.
+
+Le laboratoire ne s'améliore pas tant qu'une recherche est active ou en attente,
+et réciproquement une recherche ne démarre pas tant que le laboratoire est
+quelque part dans la file de construction de sa planète.
 
 Le laboratoire de la planète de lancement détermine la durée. Le réseau de
 recherche intergalactique y ajoute les laboratoires des autres planètes du

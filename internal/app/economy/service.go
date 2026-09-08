@@ -90,6 +90,25 @@ type Cancellation struct {
 	Lost      economy.Resources
 }
 
+// ProjectedLevels applies the whole queue to the built levels. Every reader
+// plans against it, so a card offers the level after the queue rather than one
+// the queue already reaches — and its price, its duration and the idempotency
+// key of its form move with the queue.
+func (p Planet) ProjectedLevels() building.Levels {
+	projected := building.Levels{}
+	for id, level := range p.Levels {
+		projected[id] = level
+	}
+	for _, entry := range p.Queue {
+		projected[entry.Building] = entry.TargetLevel
+	}
+	return projected
+}
+
+// BookedFields counts the fields the queue has already spoken for. They are
+// only consumed at completion, so a queue would otherwise overrun the body.
+func (p Planet) BookedFields() int { return p.UsedFields + len(p.Queue) }
+
 // BuildingChoice is one catalogue entry enriched for a planet.
 type BuildingChoice struct {
 	Definition building.Definition
@@ -174,14 +193,17 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 		return Planet{}, nil, err
 	}
 	choices := make([]BuildingChoice, 0, len(s.Catalogue.DefinitionsFor(planet.Kind)))
+	// The page plans exactly as the order will: on top of what the queue
+	// already reaches, and on the fields it has already booked.
+	projected := planet.ProjectedLevels()
 	requirements := prerequisite.State{
-		Buildings:  planet.Levels.Generic(),
+		Buildings:  projected.Generic(),
 		Researches: planet.Researches.Generic(),
 	}
 	for _, definition := range s.Catalogue.DefinitionsFor(planet.Kind) {
 		choice := BuildingChoice{Definition: definition, Level: planet.Levels[definition.ID]}
 		choice.Missing = prerequisite.Unmet(definition.Prerequisites, requirements)
-		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Kind, planet.Levels, planet.Researches.Generic(), planet.UsedFields, planet.TotalFields, planet.Rules)
+		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Kind, projected, planet.Researches.Generic(), planet.BookedFields(), planet.TotalFields, planet.Rules)
 		if planErr == nil {
 			choice.Plan = plan
 			choice.Available = len(planet.Queue) < planet.Rules.Progression.QueueLength

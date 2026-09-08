@@ -183,10 +183,11 @@ func TestEmpireWithoutAnyProgressionStaysPlayable(t *testing.T) {
 }
 
 // advanceUntilIdle moves the clock to the next deadline and settles it, until
-// nothing is due any more.
+// nothing is due any more. The bound is generous because a queue turns one
+// order into a chain of deadlines.
 func advanceUntilIdle(t *testing.T, ctx context.Context, universe *world, clock *appclock.Fake) {
 	t.Helper()
-	for range 32 {
+	for range 128 {
 		dueAt, ok, err := universe.Events.NextDue(ctx)
 		if err != nil {
 			t.Fatalf("NextDue() error = %v", err)

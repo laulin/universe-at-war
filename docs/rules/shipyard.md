@@ -3,13 +3,25 @@
 ## Comportement attendu
 
 Une planète possède une quantité entière positive ou nulle par unité. Les
-vaisseaux et les défenses partagent le chantier spatial : une seule commande de
-production peut être active par planète.
+vaisseaux et les défenses tiennent chacun leur file, d'au plus
+`progression.queue_length` lots, dix par défaut, et avancent en parallèle : un
+lot de chasseurs ne retient plus un lanceur de missiles. Un lot est une quantité
+d'un seul modèle.
 
 Passer une commande règle d'abord la production, vérifie les prérequis, la
-quantité demandée, les limites de l'unité et le coût total, débite les
-ressources, crée la commande et son événement d'achèvement dans une même
-transaction.
+quantité demandée, les limites de l'unité — en y comptant ce que les files
+doivent encore, de sorte qu'un second dôme de protection ne se glisse pas
+derrière le premier — et le coût total, **débite les ressources immédiatement**
+et ajoute le lot à la fin de sa file. La durée unitaire d'un lot n'est décidée
+qu'au moment où il prend la tête.
+
+Un lot s'annule à tout moment et rembourse les unités que le chantier devait
+encore ; celles déjà livrées restent acquises. Le remboursement est écrêté à la
+capacité des entrepôts.
+
+Le chantier spatial et l'usine de nanites ne s'améliorent pas tant qu'un lot est
+en cours ou en attente, et réciproquement aucun lot ne se commande tant que l'un
+des deux est quelque part dans la file de construction de la planète.
 
 Les unités sont livrées au fur et à mesure : à chaque règlement, la commande
 livre les unités entièrement produites depuis son démarrage. Une unité livrée est

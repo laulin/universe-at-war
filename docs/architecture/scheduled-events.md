@@ -50,6 +50,15 @@ valeur documentée ; une valeur plus faible est traitée en premier.
 reparte et avant qu'une production ne livre ses unités ; une intelligence
 artificielle réfléchit après que le monde a changé.
 
+Une file de construction, de recherche ou de production ne planifie qu'un seul
+événement : celui de l'ordre en tête, sous les clés `building-complete:<file>`,
+`research-complete:<file>` et `production-complete:<commande>`. Les ordres qui
+attendent derrière n'ont ni échéance ni événement. Achever la tête promeut le
+suivant **dans la même transaction** : la promotion calcule sa durée avec les
+installations du moment, le date à `due_at` pour que la file ne gagne aucun temps
+mort, et planifie son événement. Annuler un ordre passe son événement encore
+`pending` en `cancelled`, exactement comme un rappel de flotte.
+
 L'arrivée d'une flotte porte le type de sa mission : une attaque planifie
 `combat_resolved`, un espionnage `espionage_resolved`, toute autre mission
 `fleet_arrived`. Les trois partagent la clé d'idempotence `fleet-arrive:<id>`,

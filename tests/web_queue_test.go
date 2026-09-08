@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,11 +29,15 @@ func queuedWeb(t *testing.T) (http.Handler, *world, appauth.Principal, *http.Coo
 		t.Fatalf("CreateEmpire() error = %v", err)
 	}
 	setResources(t, ctx, database, 1, 5_000_000, 5_000_000, 5_000_000)
+	setBuilding(t, ctx, database, 1, "research_lab", 4)
+	setBuilding(t, ctx, database, 1, "solar_plant", 20)
 	handler, err := webhandler.New(webhandler.Dependencies{
 		Authentication: webAuthenticationStub{principal: principal},
 		ServerState:    runningStateStub{},
 		CSRFSecrets:    sequenceSecret{value: "csrf-token"},
 		Economy:        universeWorld.Economy,
+		Research:       universeWorld.Research,
+		Shipyard:       universeWorld.Shipyard,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -166,4 +171,92 @@ func TestCancellingFromTheQueuePanelRefundsAndReportsIt(t *testing.T) {
 	if refused.Code != http.StatusBadRequest || !strings.Contains(refused.Body.String(), "n&#39;est plus dans la file") {
 		t.Fatalf("second cancellation = %d %q", refused.Code, refused.Body.String())
 	}
+}
+
+// Ordering the same building twice from the page must queue two levels. The
+// card plans against what the queue already reaches, so its price, its target
+// and its idempotency key all move with the queue; otherwise the second post
+// looks like a replay of the first and is silently swallowed.
+func TestOrderingTheSameBuildingTwiceQueuesTwoLevels(t *testing.T) {
+	handler, _, _, session, csrf := queuedWeb(t)
+
+	for attempt := range 3 {
+		page := getPage(t, handler, "/planets/1", session, csrf)
+		key := formValue(t, page, `action="/planets/1/buildings/metal_mine"`, "idempotency_key")
+		request := postFormRequest("/planets/1/buildings/metal_mine",
+			url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {key}})
+		request.AddCookie(session)
+		request.AddCookie(csrf)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusSeeOther {
+			t.Fatalf("order %d = %d %q", attempt, recorder.Code, recorder.Body.String())
+		}
+	}
+
+	page := getPage(t, handler, "/planets/1", session, csrf)
+	if got := strings.Count(page, `<li class="queue-entry`); got != 3 {
+		t.Fatalf("three orders left %d entries in the queue: %q", got, page)
+	}
+	for _, level := range []string{"niveau 1", "niveau 2", "niveau 3"} {
+		if !strings.Contains(page, level) {
+			t.Fatalf("the queue does not show %q: %q", level, page)
+		}
+	}
+	// The card now offers the level after the queue, at its own price.
+	if !strings.Contains(page, `value="csrf-token:metal_mine:4"`) {
+		t.Fatalf("the card still offers a level the queue already reaches: %q", page)
+	}
+}
+
+// The same holds for the laboratory: a second order must be a new research, not
+// a replay of the first.
+func TestOrderingTheSameResearchTwiceQueuesTwoLevels(t *testing.T) {
+	ctx := context.Background()
+	handler, universeWorld, principal, session, csrf := queuedWeb(t)
+	planet, err := universeWorld.Economy.Planet(ctx, principal, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universeWorld.Economy.Planet(ctx, principal, planet.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	for attempt := range 2 {
+		page := getPage(t, handler, "/planets/1/research", session, csrf)
+		key := formValue(t, page, `action="/planets/1/research/energy_technology"`, "idempotency_key")
+		request := postFormRequest("/planets/1/research/energy_technology",
+			url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {key}})
+		request.AddCookie(session)
+		request.AddCookie(csrf)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusSeeOther {
+			t.Fatalf("research order %d = %d %q", attempt, recorder.Code, recorder.Body.String())
+		}
+	}
+	page := getPage(t, handler, "/planets/1/research", session, csrf)
+	if got := strings.Count(page, `<li class="queue-entry`); got != 2 {
+		t.Fatalf("two research orders left %d entries: %q", got, page)
+	}
+}
+
+// formValue reads one hidden field out of the form whose action is given.
+func formValue(t *testing.T, page, action, field string) string {
+	t.Helper()
+	start := strings.Index(page, action)
+	if start < 0 {
+		t.Fatalf("no form with %s in %q", action, page)
+	}
+	form := page[start:]
+	if end := strings.Index(form, "</form>"); end >= 0 {
+		form = form[:end]
+	}
+	marker := `name="` + field + `" value="`
+	from := strings.Index(form, marker)
+	if from < 0 {
+		t.Fatalf("form %s carries no %s: %q", action, field, form)
+	}
+	rest := form[from+len(marker):]
+	return html.UnescapeString(rest[:strings.Index(rest, `"`)])
 }

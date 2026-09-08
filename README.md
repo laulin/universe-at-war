@@ -39,9 +39,14 @@ propose de créer un compte joueur ; sinon le parcours reste totalement fermé.
 Une fois l'univers lancé, la page principale liste les corps de l'empire et
 propose de fonder un empire si le compte n'en a pas encore. Chaque planète a sa
 page de bâtiments, une page de recherche, un chantier spatial et une page de
-défense. Les recherches, les vaisseaux et les défenses suivent les mêmes règles
-transactionnelles que les bâtiments : coût débité au démarrage, achèvement par
-événement planifié, reprise après redémarrage.
+défense. Chacune tient une file d'attente : jusqu'à dix ordres par type, qui
+avancent en parallèle d'un type à l'autre. Le coût est débité à la commande, si
+bien qu'un ordre entré dans la file ne peut jamais caler faute de ressources ;
+seule sa durée est décidée quand vient son tour. L'ordre en cours affiche une
+barre de progression animée et un compte à rebours, ceux qui attendent affichent
+la prévision de leur tour, et n'importe lequel s'annule avec remboursement
+intégral. Achèvement par événement planifié et reprise après redémarrage restent
+les mêmes que pour tout le reste du jeu.
 
 La page Flotte liste les vaisseaux stationnés, les emplacements disponibles et
 les missions en vol avec leurs horaires absolus. L'assistant d'envoi calcule

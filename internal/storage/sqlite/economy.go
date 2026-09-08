@@ -256,8 +256,7 @@ func (r *EconomyRepository) EnqueueBuilding(ctx context.Context, accountID, plan
 	}
 	// Every entry still in the queue counts: its level is the one the new order
 	// builds upon, and the field it will consume is already spoken for.
-	projected := projectedLevels(planet)
-	plan, err := catalogue.Plan(id, planet.Kind, projected, planet.Researches.Generic(), planet.UsedFields+len(planet.Queue), planet.TotalFields, planet.Rules)
+	plan, err := catalogue.Plan(id, planet.Kind, planet.ProjectedLevels(), planet.Researches.Generic(), planet.BookedFields(), planet.TotalFields, planet.Rules)
 	if err != nil {
 		return appeconomy.Queue{}, err
 	}
@@ -834,19 +833,6 @@ func planetQueue(ctx context.Context, tx *sql.Tx, planetID int64) ([]appeconomy.
 		entries = append(entries, entry)
 	}
 	return entries, rows.Err()
-}
-
-// projectedLevels applies the whole queue to the built levels, so that a second
-// order for the same building targets the level after the first.
-func projectedLevels(planet appeconomy.Planet) building.Levels {
-	projected := building.Levels{}
-	for id, level := range planet.Levels {
-		projected[id] = level
-	}
-	for _, entry := range planet.Queue {
-		projected[entry.Building] = entry.TargetLevel
-	}
-	return projected
 }
 
 // estimateQueue dates the entries that are still waiting, by walking the queue

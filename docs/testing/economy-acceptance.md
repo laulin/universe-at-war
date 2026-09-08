@@ -11,9 +11,19 @@ migrations et une horloge factice. Ils couvrent :
 - création d'empire atomique ;
 - double soumission avec la même clé d'idempotence ;
 - deux constructions concurrentes tentant de dépenser le même stock ;
+- mise en file de plusieurs constructions, chacune débitée à la commande ;
+- démarrage sans temps mort de l'ordre suivant, à la vitesse des usines du
+  moment ;
+- refus d'un ordre au-delà du plafond de file, sans aucune dépense ;
+- réservation d'une case par ordre encore en file ;
+- annulation avec remboursement intégral, cascade sur les niveaux empilés et
+  écrêtage à la capacité des entrepôts ;
 - achèvement exactement une fois et redélivrance simulée après crash ;
 - ordre par identifiant de deux événements au même instant ;
 - parcours HTTP création d'empire → vue planète → lancement d'une mine ;
+- panneau de file HTTP : barre de progression, compte à rebours silencieux pour
+  les lecteurs d'écran, ordres en attente et bouton d'annulation, sans un seul
+  style en ligne ;
 - refus HTTP sans jeton CSRF ;
 - wake-up et arrêt propre du worker ;
 - benchmark `BenchmarkSettleLazy` sans attente réelle.

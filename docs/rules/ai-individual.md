@@ -29,7 +29,9 @@ le butin espéré ; un ramassage de débris emporte juste assez de recycleurs.
 
 Chaque réflexion parcourt les trois niveaux dans cet ordre et n'engage au plus
 qu'une action par niveau : une construction, une recherche, une commande, une
-mission. Les files du jeu font le reste de la limitation.
+mission. Un joueur artificiel ne commande d'ailleurs que si la file concernée est
+vide : les files d'attente sont une commodité offerte au joueur humain, pas un
+moyen de dépenser plus vite.
 
 ## Réflexion et jitter
 
@@ -181,8 +183,8 @@ des débris, et la réflexion suivante va les chercher.
 ## Budgets
 
 Une réflexion n'engage jamais plus d'une action par niveau : une construction,
-une recherche, une commande de chantier, une mission. Les files du jeu font le
-reste de la limitation, exactement comme pour un humain. Une commande de
+une recherche, une commande de chantier, une mission, et seulement si la file
+correspondante est vide. Une commande de
 chantier ne prend que la moitié de ce que le stock permet, bornée à dix unités,
 si bien qu'il reste toujours de quoi bâtir. Un lot de réflexions est borné par
 la taille de lot du worker : un univers plein d'IA ne monopolise pas la boucle.

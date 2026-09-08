@@ -57,6 +57,19 @@ type State struct {
 	Queue []Queue
 }
 
+// ProjectedLevels applies the whole queue to the known levels, so the page
+// offers the level after the queue rather than one the queue already reaches.
+func (s State) ProjectedLevels() research.Levels {
+	projected := research.Levels{}
+	for id, level := range s.Levels {
+		projected[id] = level
+	}
+	for _, entry := range s.Queue {
+		projected[entry.Research] = entry.TargetLevel
+	}
+	return projected
+}
+
 // Choice is one catalogue entry enriched for the player.
 type Choice struct {
 	Definition research.Definition
@@ -106,9 +119,12 @@ func (s Service) Overview(ctx context.Context, principal appauth.Principal, plan
 	}
 	definitions := s.Catalogues.Research.Definitions()
 	choices := make([]Choice, 0, len(definitions))
+	// The page plans exactly as the order will: on top of what the queue
+	// already reaches.
+	projected := state.ProjectedLevels()
 	requirements := prerequisite.State{
 		Buildings:  state.Planet.Levels.Generic(),
-		Researches: state.Levels.Generic(),
+		Researches: projected.Generic(),
 	}
 	available := len(state.Queue) < state.Planet.Rules.Progression.QueueLength
 	for _, definition := range definitions {

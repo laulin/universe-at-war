@@ -2,11 +2,27 @@
 
 ## Comportement attendu
 
-Une planète possède un niveau entier positif ou nul par bâtiment. Une seule
-construction de bâtiment peut être active par planète. Démarrer une construction
-règle d'abord la production, vérifie les prérequis, les cases libres et le coût,
-débite les ressources, crée la file et son événement planifié dans une même
-transaction. Le niveau ne change qu'à l'achèvement.
+Une planète possède un niveau entier positif ou nul par bâtiment. Elle tient une
+file de construction d'au plus `progression.queue_length` ordres, dix par défaut,
+dont un seul se construit à la fois.
+
+Mettre une construction en file règle d'abord la production, vérifie les
+prérequis, les cases libres et le coût, **débite les ressources immédiatement**,
+puis ajoute l'ordre à la fin de la file. Un ordre entré dans la file est donc
+toujours financé et ne peut jamais caler faute de ressources. Le niveau ne change
+qu'à l'achèvement.
+
+Le niveau visé et les cases réservées tiennent compte de ce que la file atteint
+déjà : trois mines enfilées visent les niveaux N+1, N+2 et N+3, et réservent
+trois cases. La durée d'un ordre, en revanche, n'est calculée qu'au moment où il
+prend la tête de la file : une usine de robots terminée entre-temps accélère
+réellement tout ce qui attendait derrière elle.
+
+Un ordre s'annule à tout moment, en cours comme en attente, et rembourse
+intégralement. Les niveaux d'un même bâtiment formant une chaîne, annuler un
+niveau annule aussi ceux qui étaient empilés au-dessus. Un remboursement ne
+dépasse jamais la capacité des entrepôts : ce qui ne rentre pas est perdu, et le
+joueur en est averti avant comme après.
 
 Le catalogue initial contient les mines de métal/cristal/deutérium, la centrale
 solaire, les trois stockages, l'usine de robots, l'usine de nanites, le chantier
@@ -73,11 +89,15 @@ atomiques. Une reprise après crash ne peut donc incrémenter qu'une fois.
 
 ## Cas limites et invariants
 
-- niveau cible exactement égal au niveau courant + 1 ;
-- coûts et durées calculés avec le ruleset capturé au démarrage ;
-- refus si prérequis, ressources ou case manquent ;
-- jamais deux files actives sur une planète ;
-- aucun débit sans création de file et d'événement ;
+- niveau cible exactement égal au niveau courant + 1 au moment de l'achèvement ;
+- coût figé à la commande, durée décidée à la prise de tête ;
+- refus si prérequis, ressources, case libre ou place dans la file manquent ;
+- jamais deux constructions en cours sur une planète ;
+- un seul ordre en tête, un rang unique parmi les ordres non terminés ;
+- aucun débit sans création de ligne de file ;
+- un ordre en attente n'a ni horaire ni événement planifié ;
+- une annulation rembourse exactement ce qui a été débité, écrêté aux entrepôts,
+  et n'est jamais appliquée deux fois ;
 - aucune seconde consommation de case lors d'une reprise d'événement ;
 - coût ou durée non représentable rejeté, jamais saturé silencieusement.
 
@@ -87,6 +107,10 @@ atomiques. Une reprise après crash ne peut donc incrémenter qu'une fois.
 - influence robots, nanites, vitesse et durée minimale ;
 - prérequis et cases ;
 - démarrage atomique et refus pour ressources insuffisantes ;
+- mise en file de plusieurs niveaux, débit de chacun à la commande ;
+- refus d'un ordre au-delà du plafond, sans rien dépenser ;
+- promotion sans temps mort, à la vitesse des usines du moment ;
+- annulation avec remboursement, cascade et écrêtage aux entrepôts ;
 - double soumission et double dépense concurrente ;
 - achèvement exactement une fois, y compris après reprise simulée ;
 - ordre stable de deux événements au même instant.
