@@ -138,7 +138,7 @@ func CalculateRates(configured rules.Ruleset, levels Levels, maximumTemperature 
 	if err != nil {
 		return Rates{}, Energy{}, err
 	}
-	produced, err := floored(20 * float64(levels.SolarPlant) * math.Pow(1.1, float64(levels.SolarPlant)))
+	produced, err := SolarPlantEnergy(levels.SolarPlant)
 	if err != nil {
 		return Rates{}, Energy{}, err
 	}
@@ -180,10 +180,28 @@ func satelliteEnergy(maximumTemperature int) float64 {
 	return math.Min(50, math.Max(0, energy))
 }
 
+// MineEnergy is the energy one mine draws at a level. The three mines share the
+// formula, and it is the only thing on a planet that consumes energy.
+func MineEnergy(level int, growth float64) (int64, error) {
+	if level < 0 {
+		return 0, errors.New("economy: building levels cannot be negative")
+	}
+	return floored(10 * float64(level) * math.Pow(growth, float64(level)))
+}
+
+// SolarPlantEnergy is the energy a solar plant yields at a level. Its growth is
+// part of the formula rather than of the ruleset, as the classic rules have it.
+func SolarPlantEnergy(level int) (int64, error) {
+	if level < 0 {
+		return 0, errors.New("economy: building levels cannot be negative")
+	}
+	return floored(20 * float64(level) * math.Pow(1.1, float64(level)))
+}
+
 func sumFlooredEnergy(levels Levels, growth float64) (int64, error) {
 	var total int64
 	for _, level := range []int{levels.MetalMine, levels.CrystalMine, levels.DeuteriumSynthesizer} {
-		value, err := floored(10 * float64(level) * math.Pow(growth, float64(level)))
+		value, err := MineEnergy(level, growth)
 		if err != nil || value > math.MaxInt64-total {
 			return 0, errors.New("economy: energy overflow")
 		}

@@ -130,3 +130,63 @@ func TestSolarSatellitesProduceEnergyFromTemperature(t *testing.T) {
 		t.Fatal("CalculateRates() accepted a negative satellite count")
 	}
 }
+
+// TestMineEnergyMatchesTheAggregate pins the extracted formula against the one
+// reader that had it before: whatever CalculateRates reports as consumed must
+// be the three mines added up one by one.
+func TestMineEnergyMatchesTheAggregate(t *testing.T) {
+	configured := rules.Default()
+	levels := Levels{MetalMine: 13, CrystalMine: 11, DeuteriumSynthesizer: 7, SolarPlant: 14}
+	_, energy, err := CalculateRates(configured, levels, 35)
+	if err != nil {
+		t.Fatalf("calculate rates: %v", err)
+	}
+	growth := configured.Economy.EnergyConsumptionGrowth
+	var summed int64
+	for _, level := range []int{levels.MetalMine, levels.CrystalMine, levels.DeuteriumSynthesizer} {
+		drawn, err := MineEnergy(level, growth)
+		if err != nil {
+			t.Fatalf("mine energy at level %d: %v", level, err)
+		}
+		summed += drawn
+	}
+	if summed != energy.Consumed {
+		t.Fatalf("mines draw %d, planet consumes %d", summed, energy.Consumed)
+	}
+}
+
+// TestSolarPlantEnergyMatchesTheAggregate does the same for the plant, which a
+// body without satellites is the whole of its production.
+func TestSolarPlantEnergyMatchesTheAggregate(t *testing.T) {
+	_, energy, err := CalculateRates(rules.Default(), Levels{SolarPlant: 14}, 35)
+	if err != nil {
+		t.Fatalf("calculate rates: %v", err)
+	}
+	produced, err := SolarPlantEnergy(14)
+	if err != nil {
+		t.Fatalf("solar plant energy: %v", err)
+	}
+	if produced != energy.Produced {
+		t.Fatalf("plant yields %d, planet produces %d", produced, energy.Produced)
+	}
+}
+
+func TestEnergyOfAnUnbuiltLevelIsNothing(t *testing.T) {
+	drawn, err := MineEnergy(0, rules.Default().Economy.EnergyConsumptionGrowth)
+	if err != nil || drawn != 0 {
+		t.Fatalf("a mine that is not there draws %d (%v)", drawn, err)
+	}
+	produced, err := SolarPlantEnergy(0)
+	if err != nil || produced != 0 {
+		t.Fatalf("a plant that is not there yields %d (%v)", produced, err)
+	}
+}
+
+func TestEnergyRefusesANegativeLevel(t *testing.T) {
+	if _, err := MineEnergy(-1, rules.Default().Economy.EnergyConsumptionGrowth); err == nil {
+		t.Fatal("a negative mine level was accepted")
+	}
+	if _, err := SolarPlantEnergy(-1); err == nil {
+		t.Fatal("a negative plant level was accepted")
+	}
+}
