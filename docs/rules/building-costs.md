@@ -28,7 +28,15 @@ comme après.
 Le catalogue initial contient les mines de métal/cristal/deutérium, la centrale
 solaire, les trois stockages, l'usine de robots, l'usine de nanites, le chantier
 spatial, le laboratoire, le silo à missiles et le terraformeur. Les bâtiments
-lunaires seront ajoutés avec les lunes.
+lunaires ont leur propre catalogue, décrit dans `moon.md`.
+
+Une installation dont une autre file dépend ne s'agrandit pas : le laboratoire
+pendant qu'une recherche est en cours ou en attente, le chantier spatial et
+l'usine de nanites pendant qu'une production l'est. L'exclusion porte sur les
+files entières et non sur l'ordre en cours, ce qui la rend vraie à tout instant
+sans jamais faire caler une file. Elle est lue avec le corps, de sorte que
+l'écran qui propose une construction et la transaction qui l'accepte appliquent
+la même règle au même instant.
 
 ## Formules
 
@@ -51,6 +59,19 @@ duration = max(1 seconde, seconds)
 Le chantier, le laboratoire et les autres bâtiments n'accélèrent pas les
 bâtiments. La construction consomme une case ; le terraformeur augmente le total
 de 5 cases à son achèvement.
+
+Le plan d'une construction rapporte enfin ce que le niveau visé change au bilan
+énergétique du corps, en différence et non en total :
+
+```text
+mine           : energie(niveau_courant) - energie(niveau_visé)   (négatif)
+centrale       : energie(niveau_visé) - energie(niveau_courant)   (positif)
+autres         : 0
+```
+
+Les deux fonctions d'énergie sont celles de `economy.md`, appelées par niveau et
+non plus seulement sommées sur la planète. La différence se mesure depuis le
+niveau que la file atteint déjà, comme le coût et la durée du même plan.
 
 ## Catalogue initial
 
@@ -92,7 +113,11 @@ atomiques. Une reprise après crash ne peut donc incrémenter qu'une fois.
 
 - niveau cible exactement égal au niveau courant + 1 au moment de l'achèvement ;
 - coût figé à la commande, durée décidée à la prise de tête ;
-- refus si prérequis, ressources, case libre ou place dans la file manquent ;
+- refus si prérequis, ressources, case libre ou place dans la file manquent, ou
+  si une autre file occupe l'installation visée ;
+- chaque refus se distingue des autres et se dit dans la langue du joueur :
+  un message unique devrait deviner, et une mauvaise devinette envoie chercher
+  au mauvais endroit ;
 - jamais deux constructions en cours sur une planète ;
 - un seul ordre en tête, un rang unique parmi les ordres non terminés ;
 - aucun débit sans création de ligne de file ;
@@ -107,6 +132,10 @@ atomiques. Une reprise après crash ne peut donc incrémenter qu'une fois.
 ## Tests de référence
 
 - table de coûts des niveaux 1, 2 et élevés ;
+- énergie rapportée par le plan : négative pour une mine, positive pour la
+  centrale, nulle ailleurs ;
+- installation occupée : aucun formulaire proposé, et refus nommé si un ordre
+  part quand même ;
 - influence robots, nanites, vitesse et durée minimale ;
 - prérequis et cases ;
 - démarrage atomique et refus pour ressources insuffisantes ;

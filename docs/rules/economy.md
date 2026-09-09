@@ -38,6 +38,11 @@ La centrale solaire produit :
 floor(20 * level * 1.1^level)
 ```
 
+Les deux formules s'appellent par niveau autant qu'elles se somment sur la
+planète, de sorte qu'un écran peut dire ce qu'un niveau donné consomme ou produit
+sans réécrire la formule. C'est ce que la carte d'un bâtiment affiche, en
+différence entre le niveau atteint et le niveau visé.
+
 Le facteur énergétique vaut 1 si la production couvre la consommation. Sinon :
 
 ```text
