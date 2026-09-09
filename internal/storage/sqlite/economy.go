@@ -301,7 +301,7 @@ func (r *EconomyRepository) EnqueueBuilding(ctx context.Context, accountID, plan
 	if len(planet.Queue) >= planet.Rules.Progression.QueueLength {
 		return appeconomy.Queue{}, appeconomy.ErrQueueFull
 	}
-	if err := facilityIsIdle(ctx, tx, planet.ID, id); err != nil {
+	if err := facilityIsIdle(planet, id); err != nil {
 		return appeconomy.Queue{}, err
 	}
 	// Every entry still in the queue counts: its level is the one the new order
@@ -690,6 +690,10 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, fmt.Errorf("economy repository: read construction queue: %w", err)
 	}
 	estimateQueue(planet.Queue, planet.Levels, configured, catalogue, now)
+	planet.BusyFacilities, err = loadBusyFacilities(ctx, tx, planet.ID, planet.Kind)
+	if err != nil {
+		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
+	}
 	return planet, rulesetVersion, state, nil
 }
 
@@ -745,35 +749,53 @@ func loadLevels(ctx context.Context, tx *sql.Tx, planetID int64, catalogue build
 	return levels, nil
 }
 
-// facilityIsIdle refuses to upgrade a facility that another queue is counting
-// on: the laboratory while a research is running or waiting, the shipyard and
-// the nanite factory while a production order is running or waiting. Looking at
+// loadBusyFacilities names the installations another queue is counting on: the
+// laboratory while a research is running or waiting, the shipyard and the
+// nanite factory while a production order is running or waiting. Looking at
 // whole queues rather than at the running entry alone keeps the exclusion true
 // at every instant, without a queue ever having to stall.
-func facilityIsIdle(ctx context.Context, tx *sql.Tx, planetID int64, id building.ID) error {
-	var busy bool
-	switch id {
-	case building.ResearchLab:
-		if err := tx.QueryRowContext(ctx, `
-			SELECT EXISTS(
-				SELECT 1 FROM research_queue q
-				JOIN planets p ON p.owner_player_id = q.player_id
-				WHERE p.id = ? AND q.state IN ('active', 'queued')
-			)
-		`, planetID).Scan(&busy); err != nil {
-			return fmt.Errorf("economy repository: inspect research queue: %w", err)
-		}
-	case building.Shipyard, building.NaniteFactory:
-		if err := tx.QueryRowContext(ctx,
-			"SELECT EXISTS(SELECT 1 FROM production_orders WHERE planet_id = ? AND state IN ('active', 'queued'))",
-			planetID).Scan(&busy); err != nil {
-			return fmt.Errorf("economy repository: inspect production orders: %w", err)
-		}
-	default:
-		return nil
+//
+// It is read with the body rather than at the moment an order is taken, so the
+// page that offers a card and the transaction that accepts it apply the same
+// rule instead of the page ignoring it.
+func loadBusyFacilities(ctx context.Context, tx *sql.Tx, planetID int64, kind building.Placement) ([]building.ID, error) {
+	if kind != building.OnPlanet {
+		return nil, nil
 	}
-	if busy {
-		return appeconomy.ErrFacilityBusy
+	var busy []building.ID
+	var researching bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM research_queue q
+			JOIN planets p ON p.owner_player_id = q.player_id
+			WHERE p.id = ? AND q.state IN ('active', 'queued')
+		)
+	`, planetID).Scan(&researching); err != nil {
+		return nil, fmt.Errorf("economy repository: inspect research queue: %w", err)
+	}
+	if researching {
+		busy = append(busy, building.ResearchLab)
+	}
+	var producing bool
+	if err := tx.QueryRowContext(ctx,
+		"SELECT EXISTS(SELECT 1 FROM production_orders WHERE planet_id = ? AND state IN ('active', 'queued'))",
+		planetID).Scan(&producing); err != nil {
+		return nil, fmt.Errorf("economy repository: inspect production orders: %w", err)
+	}
+	if producing {
+		busy = append(busy, building.Shipyard, building.NaniteFactory)
+	}
+	return busy, nil
+}
+
+// facilityIsIdle refuses an upgrade of a facility another queue is counting on.
+// The body was read inside this transaction, so the exclusion the page showed
+// and the one the order applies are read from the same instant.
+func facilityIsIdle(planet appeconomy.Planet, id building.ID) error {
+	for _, facility := range planet.BusyFacilities {
+		if facility == id {
+			return appeconomy.ErrFacilityBusy
+		}
 	}
 	return nil
 }
