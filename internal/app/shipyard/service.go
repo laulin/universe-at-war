@@ -61,11 +61,6 @@ type State struct {
 	SiloUsed  int
 	Ships     []Order
 	Defenses  []Order
-	// Ordered counts every unit of each model ever ordered on the body,
-	// finished and cancelled included. It only grows, which is what makes it a
-	// safe ingredient for the idempotency key of the next order: a key is never
-	// offered twice while an order still holds it.
-	Ordered unit.Inventory
 }
 
 // QueueOf returns the queue of one family.
