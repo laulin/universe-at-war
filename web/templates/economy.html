@@ -17,8 +17,24 @@
             {{if .CostMetal}}<span class="res-metal"><img src="/art/resource/metal" alt="Métal" width="13" height="13"> {{figure .CostMetal}}</span>{{end}}
             {{if .CostCrystal}}<span class="res-crystal"><img src="/art/resource/crystal" alt="Cristal" width="13" height="13"> {{figure .CostCrystal}}</span>{{end}}
             {{if .CostDeuterium}}<span class="res-deuterium"><img src="/art/resource/deuterium" alt="Deutérium" width="13" height="13"> {{figure .CostDeuterium}}</span>{{end}}
+            {{if .EnergyChange}}<span class="res-energy"><img src="/art/resource/energy" alt="Énergie" width="13" height="13"> {{signed .EnergyChange}}</span>{{end}}
           </p>
           <p class="muted">{{.Duration}}</p>
+          {{end}}
+          {{if or .Role .Requirements}}
+          <button type="button" class="card__more" aria-describedby="role-{{.ID}}">Rôle</button>
+          <div class="card__stats" id="role-{{.ID}}" role="note">
+            {{if .Role}}<p>{{.Role}}</p>{{end}}
+            {{if and .Requirements (not .Offered)}}
+            <p class="card__volleys">Nécessite</p>
+            <dl>
+              {{range .Requirements}}
+              <dt class="{{if .Met}}requirement--met{{else}}requirement--unmet{{end}}">{{.Name}}</dt>
+              <dd class="{{if .Met}}requirement--met{{else}}requirement--unmet{{end}}">{{.Reached}} / {{.Level}}</dd>
+              {{end}}
+            </dl>
+            {{end}}
+          </div>
           {{end}}
           {{if .Offered}}
           <form method="post" action="/planets/{{$.Planet.ID}}/buildings/{{.ID}}"{{if .AwaitingResources}} data-cost-metal="{{.CostMetal}}" data-cost-crystal="{{.CostCrystal}}" data-cost-deuterium="{{.CostDeuterium}}"{{end}}>

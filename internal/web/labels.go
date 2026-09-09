@@ -18,12 +18,52 @@ func buildingName(id building.ID) string {
 		building.DeuteriumTank: "Réservoir de deutérium", building.RoboticsFactory: "Usine de robots",
 		building.NaniteFactory: "Usine de nanites", building.Shipyard: "Chantier spatial",
 		building.ResearchLab: "Laboratoire de recherche", building.MissileSilo: "Silo à missiles",
-		building.Terraformer: "Terraformeur",
+		building.Terraformer: "Terraformeur", building.LunarBase: "Base lunaire",
+		building.SensorPhalanx: "Phalange de capteurs", building.JumpGate: "Porte de saut",
 	}
 	if name := names[id]; name != "" {
 		return name
 	}
 	return string(id)
+}
+
+// buildingRole says what a building is for, in one or two sentences. A player
+// reading a catalogue of sixteen entries needs to know what each one does
+// before its price means anything, and the entry that touches the energy
+// balance says so, because the card puts a figure of energy next to it.
+func buildingRole(id building.ID) string {
+	roles := map[building.ID]string{
+		building.MetalMine:            "Extrait le métal, la ressource de base de toute construction. Chaque niveau produit davantage et consomme plus d'énergie.",
+		building.CrystalMine:          "Extrait le cristal, qu'exigent l'électronique, les recherches et les vaisseaux les plus avancés. Chaque niveau consomme plus d'énergie.",
+		building.DeuteriumSynthesizer: "Condense le deutérium, carburant des flottes et matière des recherches lourdes. Son rendement dépend de la température du monde, et chaque niveau consomme plus d'énergie.",
+		building.SolarPlant:           "Produit l'énergie que les trois mines consomment. Sans énergie suffisante, elles tournent au ralenti et la production s'effondre.",
+		building.MetalStorage:         "Double la capacité de stockage du métal à chaque niveau. Ce qui dépasse la capacité est perdu.",
+		building.CrystalStorage:       "Double la capacité de stockage du cristal à chaque niveau. Ce qui dépasse la capacité est perdu.",
+		building.DeuteriumTank:        "Double la capacité de stockage du deutérium à chaque niveau. Ce qui dépasse la capacité est perdu.",
+		building.RoboticsFactory:      "Accélère toutes les constructions du monde, la sienne comprise, et ouvre l'accès au chantier spatial puis à l'usine de nanites.",
+		building.NaniteFactory:        "Divise par deux la durée de chaque construction et de chaque production à chaque niveau. Le bâtiment le plus cher du catalogue.",
+		building.Shipyard:             "Construit les vaisseaux et les défenses. Chaque niveau accélère la production, et le silo à missiles en dépend.",
+		building.ResearchLab:          "Mène les recherches et fixe leur vitesse. Il ne peut pas être agrandi pendant qu'une recherche est en cours.",
+		building.MissileSilo:          "Abrite les missiles d'interception et les missiles interplanétaires. Chaque niveau ajoute des emplacements.",
+		building.Terraformer:          "Gagne des cases constructibles sur un monde devenu trop petit. Il n'y a pas d'autre moyen d'en obtenir.",
+		building.LunarBase:            "Rend la lune habitable et fixe le nombre de cases qu'elle offre. Rien d'autre ne peut y être bâti avant elle.",
+		building.SensorPhalanx:        "Observe les mouvements de flotte autour des mondes voisins. Chaque niveau étend sa portée, et chaque observation coûte du deutérium.",
+		building.JumpGate:             "Déplace une flotte d'une lune à une autre sans temps de trajet. Les deux lunes doivent en être équipées.",
+	}
+	return roles[id]
+}
+
+// facilityBusyReason says which activity is holding an installation, since the
+// player has to finish or cancel it before the upgrade can be ordered.
+func facilityBusyReason(id building.ID) string {
+	switch id {
+	case building.ResearchLab:
+		return "Une recherche occupe ce laboratoire : terminez-la ou annulez-la d'abord."
+	case building.Shipyard, building.NaniteFactory:
+		return "Une production occupe cette installation : terminez-la ou annulez-la d'abord."
+	default:
+		return "Une autre progression occupe cette installation."
+	}
 }
 
 func researchName(id research.ID) string {
@@ -66,14 +106,19 @@ func unitName(id unit.ID) string {
 
 // requirementName describes one missing prerequisite in the player's language.
 func requirementName(requirement prerequisite.Requirement) string {
-	name := requirement.ID
+	return requirementLabel(requirement) + " niveau " + itoa(requirement.Level)
+}
+
+// requirementLabel names a prerequisite without its level, for a card that
+// shows the level reached beside the level required rather than in a sentence.
+func requirementLabel(requirement prerequisite.Requirement) string {
 	switch requirement.Kind {
 	case prerequisite.Building:
-		name = buildingName(building.ID(requirement.ID))
+		return buildingName(building.ID(requirement.ID))
 	case prerequisite.Research:
-		name = researchName(research.ID(requirement.ID))
+		return researchName(research.ID(requirement.ID))
 	}
-	return name + " niveau " + itoa(requirement.Level)
+	return requirement.ID
 }
 
 func itoa(value int) string {

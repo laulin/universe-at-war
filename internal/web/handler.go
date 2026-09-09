@@ -33,6 +33,7 @@ import (
 	"universeatwar/internal/domain/building"
 	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
+	"universeatwar/internal/domain/prerequisite"
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/server"
@@ -865,6 +866,14 @@ type buildingPageChoice struct {
 	CostCrystal   int64
 	CostDeuterium int64
 	Duration      time.Duration
+	// EnergyChange is what the ordered level does to the body's energy balance,
+	// negative for a mine and positive for the solar plant.
+	EnergyChange int64
+	// Role says what the building is for, and Requirements lists what it depends
+	// on, each with the level the body reaches, so a locked card names its whole
+	// dependency rather than only the first gap.
+	Role         string
+	Requirements []requirementView
 	// Offered says the card carries a form at all. AwaitingResources says that
 	// form is there but disabled, because the only thing missing is a stock the
 	// planet is already filling: the page lifts it when the figures meet.
@@ -872,6 +881,15 @@ type buildingPageChoice struct {
 	AwaitingResources bool
 	Reason            string
 	IdempotencyKey    string
+}
+
+// requirementView is one dependency of a card: what it is, how far the body has
+// gone and how far it must go.
+type requirementView struct {
+	Name    string
+	Level   int
+	Reached int
+	Met     bool
 }
 
 type overviewPageData struct {
@@ -927,14 +945,21 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	}
 	views := make([]buildingPageChoice, 0, len(choices))
 	for _, choice := range choices {
-		reason := choiceReason(choice.Missing, choice.Reason,
+		reason := choiceReason(choice.Missing, planRefusal(choice.Refusal),
 			len(planet.Queue) >= planet.Rules.Progression.QueueLength, choice.Available && !choice.Affordable)
+		// A prerequisite that is still missing outranks an installation that is
+		// merely busy: the busy one is over in a while, the missing one is not.
+		if len(choice.Missing) == 0 && choice.FacilityBusy {
+			reason = facilityBusyReason(choice.Definition.ID)
+		}
 		views = append(views, buildingPageChoice{
 			ID: choice.Definition.ID, Name: buildingName(choice.Definition.ID), Level: choice.Level,
 			TargetLevel: choice.Plan.TargetLevel,
 			CostMetal:   choice.Plan.Cost.Metal, CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
-			Duration: choice.Plan.Duration,
-			Offered:  choice.Available, AwaitingResources: choice.Available && !choice.Affordable,
+			Duration: choice.Plan.Duration, EnergyChange: choice.Plan.EnergyChange,
+			Role:         buildingRole(choice.Definition.ID),
+			Requirements: requirementViews(choice.Requirements),
+			Offered:      choice.Available, AwaitingResources: choice.Available && !choice.Affordable,
 			Reason: reason, IdempotencyKey: fmt.Sprintf("%s:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
 		})
 	}
@@ -947,16 +972,64 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	})
 }
 
+// requirementViews translates the dependencies of one entry for the card.
+func requirementViews(requirements []appeconomy.Requirement) []requirementView {
+	if len(requirements) == 0 {
+		return nil
+	}
+	views := make([]requirementView, 0, len(requirements))
+	for _, requirement := range requirements {
+		views = append(views, requirementView{
+			Name: requirementLabel(requirement.Requirement), Level: requirement.Level,
+			Reached: requirement.Reached, Met: requirement.Met(),
+		})
+	}
+	return views
+}
+
+// planRefusal says why a building has no plan at all, which is a state of the
+// card rather than the outcome of an order. Left untranslated it reached the
+// player as the domain's own English: a full planet showed "building: no free
+// field" on every one of its cards.
+func planRefusal(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, building.ErrNoFreeField):
+		return "Plus aucune case libre sur cette planète."
+	case errors.Is(err, building.ErrWrongPlacement):
+		return "Ce bâtiment ne peut pas être construit ici."
+	case errors.Is(err, building.ErrUnknownBuilding):
+		return "Ce bâtiment ne figure pas au catalogue."
+	default:
+		return "Cette construction n'est pas disponible."
+	}
+}
+
+// buildingError names the reason an order was refused. Naming them apart is the
+// whole point: a single message covering every refusal has to guess, and the
+// guess it used to make blamed prerequisites for a laboratory that was merely
+// busy.
 func buildingError(err error) string {
 	switch {
 	case errors.Is(err, appeconomy.ErrQueueFull):
 		return "La file de construction est pleine."
 	case errors.Is(err, appeconomy.ErrQueueBusy):
 		return "La file de construction vient de changer : réessayez."
-	case errors.Is(err, appeconomy.ErrInvalidRequest):
+	case errors.Is(err, appeconomy.ErrFacilityBusy):
+		return "Une autre progression occupe cette installation : terminez-la ou annulez-la d'abord."
+	case errors.Is(err, prerequisite.ErrUnmet):
+		return "Les prérequis de cette construction ne sont pas remplis : la carte en donne le détail."
+	case errors.Is(err, domaineconomy.ErrInsufficientResources):
+		return "Les ressources ne suffisent plus pour cette construction."
+	case errors.Is(err, building.ErrNoFreeField):
+		return "Cette planète n'a plus de case libre."
+	case errors.Is(err, building.ErrWrongPlacement):
+		return "Ce bâtiment ne peut pas être construit ici."
+	case errors.Is(err, appeconomy.ErrInvalidRequest), errors.Is(err, building.ErrUnknownBuilding):
 		return "La demande de construction est invalide."
 	default:
-		return "La construction ne peut pas démarrer : vérifiez les ressources et les prérequis."
+		return "La construction n'a pas pu démarrer."
 	}
 }
 

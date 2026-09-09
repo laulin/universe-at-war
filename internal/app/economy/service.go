@@ -141,7 +141,10 @@ type BuildingChoice struct {
 	// FacilityBusy says another queue is counting on this installation. The
 	// wording belongs to the caller, as every other reason does.
 	FacilityBusy bool
-	Reason       string
+	// Refusal is why the plan could not be calculated at all, kept as the error
+	// it is rather than as its text: only the caller can say it in the player's
+	// language, and only from a value it can recognise.
+	Refusal error
 }
 
 // Repository is the atomic persistence boundary for economic use cases.
@@ -251,7 +254,7 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 			choice.Available = !choice.FacilityBusy && len(planet.Queue) < planet.Rules.Progression.QueueLength
 			choice.Affordable = planet.Stock.Covers(plan.Cost)
 		} else if len(choice.Missing) == 0 {
-			choice.Reason = planErr.Error()
+			choice.Refusal = planErr
 		}
 		choices = append(choices, choice)
 	}
