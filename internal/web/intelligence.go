@@ -31,7 +31,11 @@ type galaxyPageRow struct {
 	DebrisMetal   int64
 	DebrisCrystal int64
 	HasDebris     bool
-	SpyKey        string
+	// IsOrigin marks the very body the actions would fly from. A fleet may fly
+	// to its own coordinate — the domain measures that trip at five — but
+	// offering to send one there from itself helps nobody.
+	IsOrigin bool
+	SpyKey   string
 }
 
 type galaxyPageData struct {
@@ -190,6 +194,16 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 	if !ok {
 		return
 	}
+	// The actions of the map fly from one body, so its own line is the one line
+	// that has nothing to offer but its debris. It is found by coordinate rather
+	// than by identifier: a moon shares the coordinate of its planet and the map
+	// reads them into the same row.
+	origin := universe.Coordinate{}
+	for _, planet := range planets {
+		if len(view.HomePlanets) > 0 && planet.ID == view.HomePlanets[0] {
+			origin = planet.Coordinate
+		}
+	}
 	rows := make([]galaxyPageRow, 0, len(view.Rows))
 	for _, row := range view.Rows {
 		display := galaxyPageRow{
@@ -199,6 +213,8 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 			OwnerName:  row.OwnerName,
 			Own:        row.Own,
 			Occupied:   row.PlanetID > 0,
+			IsOrigin: origin.Galaxy == view.Galaxy && origin.System == view.System &&
+				origin.Position == row.Position,
 		}
 		if row.Debris != nil {
 			display.HasDebris = true

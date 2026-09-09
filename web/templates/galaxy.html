@@ -30,6 +30,8 @@
               <button type="submit">Espionner</button>
             </form>
             <a href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}">Envoyer une flotte</a>
+            {{else if and $.CanAct .Own (not .IsOrigin)}}
+            <a href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}">Envoyer une flotte</a>
             {{else if and $.CanAct .HasDebris}}
             <a href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}">Recycler</a>
             {{else}}<span class="muted">—</span>{{end}}
