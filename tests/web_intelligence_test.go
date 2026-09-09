@@ -170,3 +170,33 @@ func intelligenceHandler(t *testing.T) (http.Handler, *storagesqlite.Database, *
 	}
 	return handler, database, universe, &http.Cookie{Name: "uaw_session", Value: "session"}, &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
 }
+
+// The map mints one key per button per rendering, so the same neighbour may be
+// spied again from a fresh page. A key made of the target alone turned the
+// second click into a replay of the first: no fleet, no report, no error.
+func TestWebGalaxySpiesTheSameNeighbourTwice(t *testing.T) {
+	handler, database, _, session, csrfCookie := intelligenceHandler(t)
+	// A second slot, or the second espionage would be refused for want of one.
+	setResearch(t, context.Background(), database, 1, "computer_technology", 1)
+
+	keys := map[string]bool{}
+	for range 2 {
+		page := getPage(t, handler, "/galaxy/1/1", session, csrfCookie)
+		key := formValue(t, page, `action="/galaxy/1/1/1/spy"`, "idempotency_key")
+		keys[key] = true
+		spy := postFormRequest("/galaxy/1/1/1/spy", url.Values{
+			"csrf_token": {"csrf-token"}, "planet": {"1"}, "probes": {"1"}, "idempotency_key": {key},
+		})
+		spy.AddCookie(session)
+		spy.AddCookie(csrfCookie)
+		launched := httptest.NewRecorder()
+		handler.ServeHTTP(launched, spy)
+		if launched.Code != http.StatusSeeOther {
+			t.Fatalf("POST spy = %d %q", launched.Code, launched.Body.String())
+		}
+	}
+	if len(keys) != 2 {
+		t.Fatal("two renderings of the map carry one espionage key")
+	}
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM fleets WHERE mission = 'espionage'", 2)
+}

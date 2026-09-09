@@ -58,14 +58,15 @@ type fleetSendPageData struct {
 
 type fleetConfirmPageData struct {
 	pageShell
-	Planet         appeconomy.Planet
-	Form           fleetForm
-	Plan           domainfleet.Plan
-	ArrivesISO     string
-	ReturnsISO     string
-	MissionName    string
-	IdempotencyKey string
-	GroupedAttack  bool
+	Planet        appeconomy.Planet
+	Form          fleetForm
+	Plan          domainfleet.Plan
+	ArrivesISO    string
+	ReturnsISO    string
+	MissionName   string
+	LaunchKey     string
+	OperationKey  string
+	GroupedAttack bool
 }
 
 // fleetForm is the transport shape of the send wizard, kept as typed values so
@@ -221,11 +222,22 @@ func (h *Handler) previewFleet(response http.ResponseWriter, request *http.Reque
 	if !ok {
 		return
 	}
+	// The two forms of the confirmation are two different decisions, and a grouped
+	// attack reaches the same launch through the alliance. One key for both would
+	// let the second button replay the first launch instead of doing its own work.
+	launchKey, ok := h.formKey(response, "launch")
+	if !ok {
+		return
+	}
+	operationKey, ok := h.formKey(response, "acs-open")
+	if !ok {
+		return
+	}
 	shell := h.gameShell(request.Context(), token, principal, "fleet", planets, planetID)
 	data := fleetConfirmPageData{
 		pageShell: shell, Planet: overview.Planet, Form: form, Plan: plan,
 		ArrivesISO: plan.ArrivesAt.Format(time.RFC3339), MissionName: missionName(domainfleet.Mission(form.Mission)),
-		IdempotencyKey: fmt.Sprintf("%s:launch:%s", token, form.signature()),
+		LaunchKey: launchKey, OperationKey: operationKey,
 	}
 	if plan.ReturnsAt != nil {
 		data.ReturnsISO = plan.ReturnsAt.Format(time.RFC3339)
@@ -371,24 +383,25 @@ func (f fleetForm) request() (appfleet.LaunchRequest, error) {
 		Percent:     f.Speed,
 	}
 	if mission.Defends() {
-		until, err := time.Parse("2006-01-02T15:04", f.HoldUntil)
+		until, err := parseHold(f.HoldUntil)
 		if err != nil {
-			return appfleet.LaunchRequest{}, domainfleet.ErrInvalidHold
+			return appfleet.LaunchRequest{}, err
 		}
-		launch.HoldUntil = until.UTC()
+		launch.HoldUntil = until
 	}
 	return launch, nil
 }
 
-// signature identifies one exact mission, so a refreshed confirmation cannot
-// launch a second fleet.
-func (f fleetForm) signature() string {
-	signature := fmt.Sprintf("%d:%d:%d:%s:%d:%d/%d/%d:%s", f.Galaxy, f.System, f.Position, f.Mission, f.Speed,
-		f.CargoMetal, f.Crystal, f.Deuterium, f.HoldUntil)
-	for _, id := range sortedUnitIDs(f.Composition) {
-		signature += fmt.Sprintf(":%s=%d", id, f.Composition[id])
+// parseHold reads what a datetime-local field sent. Browsers disagree on whether
+// such a field carries its seconds, and a mission must not be refused over the
+// half of the value the player never typed.
+func parseHold(value string) (time.Time, error) {
+	for _, layout := range []string{"2006-01-02T15:04", "2006-01-02T15:04:05"} {
+		if until, err := time.Parse(layout, value); err == nil {
+			return until.UTC(), nil
+		}
 	}
-	return signature
+	return time.Time{}, domainfleet.ErrInvalidHold
 }
 
 func sortedUnitIDs(composition map[unit.ID]int64) []unit.ID {

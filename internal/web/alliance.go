@@ -347,7 +347,13 @@ func (h *Handler) renderOperations(response http.ResponseWriter, request *http.R
 			return
 		}
 		data.Group = &group
-		data.IdempotencyKey = fmt.Sprintf("%s:acs-join:%d:%s", token, groupID, form.signature())
+		// A second wave of the same ships is a second fleet, so the key belongs to
+		// this rendering of the form and not to what the form happens to ask for.
+		key, keyOK := h.formKey(response, "acs-join")
+		if !keyOK {
+			return
+		}
+		data.IdempotencyKey = key
 	}
 	h.render(response, status, "operations", data)
 }

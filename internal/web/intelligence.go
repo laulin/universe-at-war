@@ -29,6 +29,7 @@ type galaxyPageRow struct {
 	DebrisMetal   int64
 	DebrisCrystal int64
 	HasDebris     bool
+	SpyKey        string
 }
 
 type galaxyPageData struct {
@@ -130,6 +131,15 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 			display.HasDebris = true
 			display.DebrisMetal = row.Debris.Metal
 			display.DebrisCrystal = row.Debris.Crystal
+		}
+		// Spying the same neighbour again is a new mission rather than a repeat of
+		// the last one, so every button of every rendering carries its own key.
+		if display.Occupied && !display.Own {
+			key, ok := h.formKey(response, "spy")
+			if !ok {
+				return
+			}
+			display.SpyKey = key
 		}
 		rows = append(rows, display)
 	}

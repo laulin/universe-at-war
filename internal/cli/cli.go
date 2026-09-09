@@ -413,6 +413,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Authentication: authentication,
 		ServerState:    states,
 		CSRFSecrets:    auth.NewSecretGenerator(random, 32),
+		Nonces:         auth.NewSecretGenerator(random, 16),
 		Setup:          setup,
 		Economy:        economy,
 		Research:       research,

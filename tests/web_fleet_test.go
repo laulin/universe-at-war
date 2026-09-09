@@ -158,3 +158,118 @@ func fleetHandler(t *testing.T) (http.Handler, *storagesqlite.Database, *http.Co
 	}
 	return handler, database, &http.Cookie{Name: "uaw_session", Value: "session"}, &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
 }
+
+// Sending the same mission twice is two missions. The confirmation used to build
+// its key out of what the mission asked for, so the second trip carried the key
+// of the first, was taken for a replay of it, and redirected to a fleet page
+// where nothing had moved: no fleet, no error, nothing said at all.
+func TestWebFleetSendsTheSameMissionTwice(t *testing.T) {
+	handler, database, session, csrfCookie := fleetHandler(t)
+	ctx := context.Background()
+	setUnits(t, ctx, database, 1, "small_cargo", 4)
+	setResources(t, ctx, database, 1, 50000, 5000, 5000)
+	// Two slots, or the second mission would be refused for want of one and the
+	// test would pass on the wrong reason.
+	setResearch(t, ctx, database, 1, "computer_technology", 2)
+
+	first := sendThroughWizard(t, handler, session, csrfCookie, transportMission())
+	second := sendThroughWizard(t, handler, session, csrfCookie, transportMission())
+	if first == second {
+		t.Fatalf("two renderings of the confirmation carry one key: %q", first)
+	}
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM fleets", 2)
+	assertSingleValue(t, database,
+		"SELECT quantity FROM planet_units WHERE planet_id = 1 AND unit_id = 'small_cargo'", 0)
+}
+
+// One rendered confirmation is one fleet, however often it is sent back. A
+// refresh or a double click must not put the same ships in the sky twice.
+func TestWebFleetConfirmationRepostedTwiceLaunchesOnce(t *testing.T) {
+	handler, database, session, csrfCookie := fleetHandler(t)
+	ctx := context.Background()
+	setUnits(t, ctx, database, 1, "small_cargo", 4)
+	setResources(t, ctx, database, 1, 50000, 5000, 5000)
+	setResearch(t, ctx, database, 1, "computer_technology", 2)
+
+	mission := transportMission()
+	key := previewMission(t, handler, session, csrfCookie, mission)
+	launchMission(t, handler, session, csrfCookie, mission, key)
+	launchMission(t, handler, session, csrfCookie, mission, key)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM fleets", 1)
+	assertSingleValue(t, database,
+		"SELECT quantity FROM planet_units WHERE planet_id = 1 AND unit_id = 'small_cargo'", 2)
+}
+
+// The launch reads the form the confirmation sends back, so a field the
+// confirmation drops is a field the mission loses between the two steps. The
+// holding time was dropped, and a defensive mission could be planned and then
+// never launched.
+func TestWebFleetConfirmationRepostsEveryFieldTheLaunchReads(t *testing.T) {
+	handler, database, session, csrfCookie := fleetHandler(t)
+	ctx := context.Background()
+	setUnits(t, ctx, database, 1, "small_cargo", 2)
+	setResources(t, ctx, database, 1, 5000, 500, 200)
+
+	request := postFormRequest("/planets/1/fleet/preview", transportMission())
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	confirmation := httptest.NewRecorder()
+	handler.ServeHTTP(confirmation, request)
+	if confirmation.Code != http.StatusOK {
+		t.Fatalf("POST preview = %d %q", confirmation.Code, confirmation.Body.String())
+	}
+	form := betweenMarkers(confirmation.Body.String(), `action="/planets/1/fleet/launch"`, "</form>")
+	for _, field := range []string{"galaxy", "system", "position", "mission", "hold_until", "speed",
+		"cargo_metal", "cargo_crystal", "cargo_deuterium", "composition[small_cargo]"} {
+		if !strings.Contains(form, `name="`+field+`"`) {
+			t.Fatalf("the confirmation does not send %q back: %q", field, form)
+		}
+	}
+}
+
+func transportMission() url.Values {
+	return url.Values{
+		"csrf_token": {"csrf-token"}, "galaxy": {"1"}, "system": {"1"}, "position": {"1"},
+		"mission": {"transport"}, "speed": {"100"}, "composition[small_cargo]": {"2"},
+		"cargo_metal": {"400"}, "cargo_crystal": {"0"}, "cargo_deuterium": {"0"},
+	}
+}
+
+// sendThroughWizard walks both steps of the send form and returns the key the
+// confirmation carried.
+func sendThroughWizard(t *testing.T, handler http.Handler, session, csrf *http.Cookie, mission url.Values) string {
+	t.Helper()
+	key := previewMission(t, handler, session, csrf, mission)
+	launchMission(t, handler, session, csrf, mission, key)
+	return key
+}
+
+func previewMission(t *testing.T, handler http.Handler, session, csrf *http.Cookie, mission url.Values) string {
+	t.Helper()
+	request := postFormRequest("/planets/1/fleet/preview", mission)
+	request.AddCookie(session)
+	request.AddCookie(csrf)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("POST preview = %d %q", response.Code, response.Body.String())
+	}
+	return formValue(t, response.Body.String(), `action="/planets/1/fleet/launch"`, "idempotency_key")
+}
+
+func launchMission(t *testing.T, handler http.Handler, session, csrf *http.Cookie, mission url.Values, key string) {
+	t.Helper()
+	form := url.Values{}
+	for name, values := range mission {
+		form[name] = values
+	}
+	form.Set("idempotency_key", key)
+	request := postFormRequest("/planets/1/fleet/launch", form)
+	request.AddCookie(session)
+	request.AddCookie(csrf)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/planets/1/fleet" {
+		t.Fatalf("POST launch = %d %q", response.Code, response.Body.String())
+	}
+}

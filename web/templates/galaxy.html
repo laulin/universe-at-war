@@ -24,7 +24,7 @@
             <form method="post" action="/galaxy/{{$.Galaxy}}/{{$.System}}/{{.Position}}/spy">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               <input type="hidden" name="planet" value="{{$.HomePlanet}}">
-              <input type="hidden" name="idempotency_key" value="{{$.CSRFToken}}:spy:{{.Coordinate}}">
+              <input type="hidden" name="idempotency_key" value="{{.SpyKey}}">
               <label for="probes-{{.Position}}">Sondes</label>
               <input id="probes-{{.Position}}" name="probes" type="number" min="1" value="1">
               <button type="submit">Espionner</button>

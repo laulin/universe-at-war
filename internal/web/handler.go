@@ -3,6 +3,7 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -28,6 +29,7 @@ import (
 	appresearch "universeatwar/internal/app/research"
 	appsetup "universeatwar/internal/app/setup"
 	appshipyard "universeatwar/internal/app/shipyard"
+	"universeatwar/internal/auth"
 	"universeatwar/internal/domain/building"
 	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
@@ -149,6 +151,7 @@ type Dependencies struct {
 	Authentication authenticationService
 	ServerState    stateService
 	CSRFSecrets    secretGenerator
+	Nonces         secretGenerator
 	Setup          setupService
 	Economy        economyService
 	Research       researchService
@@ -177,6 +180,7 @@ type Handler struct {
 	authentication  authenticationService
 	serverState     stateService
 	csrfSecrets     secretGenerator
+	nonces          secretGenerator
 	setup           setupService
 	economy         economyService
 	research        researchService
@@ -256,10 +260,17 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	if limiter == nil {
 		limiter = NewLoginLimiter(time.Now)
 	}
+	// A form key must differ at every rendering, so it cannot come from the CSRF
+	// generator: that one hands out a single value per session on purpose.
+	nonces := dependencies.Nonces
+	if nonces == nil {
+		nonces = auth.NewSecretGenerator(rand.Reader, 16)
+	}
 	handler := &Handler{
 		authentication: dependencies.Authentication,
 		serverState:    dependencies.ServerState,
 		csrfSecrets:    dependencies.CSRFSecrets,
+		nonces:         nonces,
 		setup:          dependencies.Setup,
 		economy:        dependencies.Economy,
 		research:       dependencies.Research,
@@ -982,6 +993,19 @@ func (h *Handler) ensureCSRF(response http.ResponseWriter, request *http.Request
 		MaxAge:   int((12 * time.Hour).Seconds()),
 	})
 	return token, true
+}
+
+// formKey mints the idempotency key one rendered form carries. Deriving the key
+// from what the form asks for instead ties every repeat of that request to the
+// first one for as long as the CSRF cookie lives, and the repeat is then
+// swallowed as a replay with nothing said to the player.
+func (h *Handler) formKey(response http.ResponseWriter, purpose string) (string, bool) {
+	nonce, err := h.nonces.Generate()
+	if err != nil {
+		http.Error(response, "security token unavailable", http.StatusInternalServerError)
+		return "", false
+	}
+	return purpose + ":" + nonce, true
 }
 
 func (h *Handler) validCSRF(response http.ResponseWriter, request *http.Request) bool {
