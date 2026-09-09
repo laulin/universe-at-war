@@ -345,6 +345,9 @@ button.danger { background: linear-gradient(180deg, #8e2438, #601523); border-co
 
 form { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
 label { display: grid; gap: var(--space-1); font-size: var(--text-sm); }
+/* The rule above outranks the browser's own rule for [hidden], so a label the
+   page puts away has to be told a second time. */
+label[hidden] { display: none; }
 input, select, textarea {
   min-height: 2.35rem;
   padding: var(--space-2) var(--space-3);

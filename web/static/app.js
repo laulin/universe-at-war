@@ -156,6 +156,21 @@
     }
   };
 
+  // A holding time belongs to one mission out of eight, and shown beside the
+  // seven it means nothing to it reads like a field the player forgot. The
+  // server is unmoved either way: it asks for the time when the mission needs
+  // one and ignores it otherwise, so a page without JavaScript merely shows a
+  // field too many.
+  const missionField = document.getElementById("mission");
+  const holdField = document.getElementById("hold-field");
+  if (missionField && holdField) {
+    const showHold = () => {
+      holdField.hidden = missionField.value !== "hold";
+    };
+    missionField.addEventListener("change", showHold);
+    showHold();
+  }
+
   tick();
   window.setInterval(tick, 1000);
 })();
