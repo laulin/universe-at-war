@@ -129,3 +129,25 @@ func TestDetectedConsumesNoDrawWhenImpossible(t *testing.T) {
 		t.Fatal("a draw of 0.1 must detect at probability 0.5")
 	}
 }
+
+// A planet that holds nothing gives back sections that are empty rather than
+// absent: the mission earned them, and what it earned is the knowledge that
+// there is nothing to find.
+func TestARevealedSectionOfAnEmptyPlanetIsEmptyRatherThanAbsent(t *testing.T) {
+	settings := rules.Default().Espionage
+	bare := Truth{Resources: economy.Resources{Metal: 40}}
+
+	report, err := Reveal(settings, 6, 0, 10, bare)
+	if err != nil {
+		t.Fatalf("Reveal() error = %v", err)
+	}
+	if report.Level < settings.ResearchThreshold {
+		t.Fatalf("level %d does not reach every threshold", report.Level)
+	}
+	if report.Fleet == nil || report.Defenses == nil || report.Buildings == nil || report.Research == nil {
+		t.Fatalf("a revealed section of an empty planet came back unrevealed: %#v", report)
+	}
+	if len(report.Fleet) != 0 || len(report.Defenses) != 0 || len(report.Research) != 0 {
+		t.Fatalf("an empty planet reported contents: %#v", report)
+	}
+}

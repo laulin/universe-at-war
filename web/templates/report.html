@@ -1,4 +1,9 @@
 {{define "title"}}{{.Report.KindName}}{{end}}
+
+{{/* One section of an espionage report has three answers, not two: what was
+     seen, that there is nothing to see, and that nobody looked. */}}
+{{define "spy-section"}}{{if .Known}}{{if .Entries}}{{range $id, $value := .Entries}}{{$id}} {{$value}}. {{end}}{{else}}<span class="muted">{{.Nothing}}</span>{{end}}{{else}}<span class="muted">inconnu</span>{{end}}{{end}}
+
 {{define "content"}}
   <section class="panel-wide" aria-labelledby="report-title">
     <p class="eyebrow">{{.Report.Coordinate}} — {{.Report.OccurredAt.Format "2006-01-02 15:04:05"}} UTC ({{.Report.Freshness}})</p>
@@ -10,10 +15,10 @@
       <dt>Sondes</dt><dd>{{.Probes}}{{if .ProbesLost}} (perdues){{end}}</dd>
       <dt>Niveau de révélation</dt><dd>{{.Level}}</dd>
       <dt>Ressources</dt><dd>{{if .Resources}}<span class="res-metal">M {{figure .Resources.Metal}}</span> · <span class="res-crystal">C {{figure .Resources.Crystal}}</span> · <span class="res-deuterium">D {{figure .Resources.Deuterium}}</span>{{else}}<span class="muted">inconnu</span>{{end}}</dd>
-      <dt>Flotte</dt><dd>{{if .Fleet}}{{range $id, $quantity := .Fleet}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
-      <dt>Défenses</dt><dd>{{if .Defenses}}{{range $id, $quantity := .Defenses}}{{$id}} {{$quantity}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
-      <dt>Bâtiments</dt><dd>{{if .Buildings}}{{range $id, $level := .Buildings}}{{$id}} {{$level}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
-      <dt>Recherches</dt><dd>{{if .Research}}{{range $id, $level := .Research}}{{$id}} {{$level}}. {{end}}{{else}}<span class="muted">inconnu</span>{{end}}</dd>
+      <dt>Flotte</dt><dd>{{template "spy-section" .Fleet}}</dd>
+      <dt>Défenses</dt><dd>{{template "spy-section" .Defenses}}</dd>
+      <dt>Bâtiments</dt><dd>{{template "spy-section" .Buildings}}</dd>
+      <dt>Recherches</dt><dd>{{template "spy-section" .Research}}</dd>
     </dl>
     {{end}}
 

@@ -200,3 +200,65 @@ func TestWebGalaxySpiesTheSameNeighbourTwice(t *testing.T) {
 	}
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM fleets WHERE mission = 'espionage'", 2)
 }
+
+// A mission that reached every threshold against a planet holding nothing says
+// so. Answering "inconnu" there would hide the very thing the probes were spent
+// to learn: that the neighbour has neither fleet nor defence.
+func TestWebReportsTellAnEmptyPlanetFromAnUnseenOne(t *testing.T) {
+	handler, database, universe, session, csrfCookie := intelligenceHandler(t)
+	ctx := context.Background()
+	// Bob keeps no ship, no defence and no research, and five probes behind four
+	// levels of espionage reach every threshold.
+	setResearch(t, ctx, database, 1, "espionage_technology", 4)
+
+	spy, err := universe.Fleet.Launch(ctx, appauth.Principal{AccountID: 1}, 1, appfleet.LaunchRequest{
+		Target: coordinateOf(t, 1, 1, 1), TargetKind: domainfleet.TargetPlanet, Mission: domainfleet.MissionEspionage,
+		Composition: domainfleet.Composition{unit.EspionageProbe: 5}, Percent: 100,
+	}, "complete-spy")
+	if err != nil {
+		t.Fatalf("Launch() error = %v", err)
+	}
+	universe.Clock.Set(spy.ArrivesAt)
+	if _, err := universe.Events.CompleteDue(ctx, 20); err != nil {
+		t.Fatalf("CompleteDue() error = %v", err)
+	}
+
+	detail := getPage(t, handler, "/reports/1", session, csrfCookie)
+	if strings.Contains(detail, "inconnu") {
+		t.Fatalf("a report that saw everything claims to ignore something: %q", detail)
+	}
+	for _, said := range []string{"aucun vaisseau", "aucune défense", "aucune recherche"} {
+		if !strings.Contains(detail, said) {
+			t.Fatalf("the report does not say %q: %q", said, detail)
+		}
+	}
+	// The document keeps the difference too, or the next reader loses it again.
+	assertSingleText(t, database,
+		"SELECT json_type(payload, '$.fleet') FROM reports WHERE id = 1", "object")
+}
+
+// A report written before the document could tell an empty section from an
+// absent one is read through the level it recorded, so an old report repairs
+// itself instead of claiming an ignorance it never had.
+func TestWebReportsReadAnOlderDocumentThroughItsLevel(t *testing.T) {
+	handler, database, _, session, csrfCookie := intelligenceHandler(t)
+	if _, err := database.Write().ExecContext(context.Background(), `
+		INSERT INTO reports(recipient_player_id, kind, subject_type, subject_id, galaxy, system, position,
+			occurred_at, payload_version, payload, created_at)
+		VALUES (1, 'espionage', 'fleet', 1, 1, 1, 1, '2042-09-10T11:12:13Z', 1, ?, '2042-09-10T11:12:13Z')
+	`, `{"target":{"Galaxy":1,"System":1,"Position":1},"target_player_name":"Bob",`+
+		`"target_planet_name":"Planète mère","probes":10,"level":9,"probes_lost":false,`+
+		`"resources":{"Metal":100,"Crystal":50,"Deuterium":10},"buildings":{"metal_mine":11}}`); err != nil {
+		t.Fatalf("insert an older report: %v", err)
+	}
+
+	detail := getPage(t, handler, "/reports/1", session, csrfCookie)
+	if strings.Contains(detail, "inconnu") {
+		t.Fatalf("a level 9 report still claims ignorance: %q", detail)
+	}
+	for _, said := range []string{"aucun vaisseau", "aucune défense", "aucune recherche", "metal_mine 11"} {
+		if !strings.Contains(detail, said) {
+			t.Fatalf("the repaired report does not say %q: %q", said, detail)
+		}
+	}
+}

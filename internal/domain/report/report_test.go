@@ -87,3 +87,42 @@ func TestHostileKinds(t *testing.T) {
 		t.Fatal("only reports about being attacked are hostile")
 	}
 }
+
+// A section revealed on a planet that holds nothing is written as an empty one.
+// Folded back into an absent section, it would say "nobody looked" about the
+// very fact the mission established: that there is nothing there.
+func TestARevealedEmptySectionStaysInTheDocument(t *testing.T) {
+	_, document, err := Marshal(Espionage, EspionagePayload{
+		TargetPlayerName: "Bob", Probes: 10, Level: 9,
+		Resources: &economy.Resources{Metal: 100},
+		Fleet:     map[string]int64{},
+		Defenses:  map[string]int64{},
+		Buildings: map[string]int{"metal_mine": 11},
+		Research:  map[string]int{},
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	stored := string(document)
+	for _, section := range []string{"fleet", "defenses", "research"} {
+		if !strings.Contains(stored, `"`+section+`":{}`) {
+			t.Fatalf("a revealed empty section was dropped: %s", stored)
+		}
+	}
+
+	decoded, err := Unmarshal(Espionage, CurrentPayloadVersion, document)
+	if err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	restored := decoded.(EspionagePayload)
+	for name, section := range map[string]bool{
+		"fleet": restored.Fleet == nil, "defenses": restored.Defenses == nil, "research": restored.Research == nil,
+	} {
+		if section {
+			t.Fatalf("the %s section came back as never revealed", name)
+		}
+	}
+	if len(restored.Fleet) != 0 || len(restored.Research) != 0 {
+		t.Fatalf("a revealed empty section came back with contents: %#v", restored)
+	}
+}

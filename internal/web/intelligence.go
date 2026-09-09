@@ -12,8 +12,10 @@ import (
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appreports "universeatwar/internal/app/reports"
+	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/report"
+	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 )
@@ -69,11 +71,82 @@ type reportPageSummary struct {
 type reportPageData struct {
 	pageShell
 	Report     reportPageSummary
-	Espionage  *report.EspionagePayload
+	Espionage  *espionagePageView
 	Detected   *report.DetectedPayload
 	Combat     *report.CombatPayload
 	Recycling  *report.RecyclingPayload
 	Expedition *report.ExpeditionPayload
+}
+
+// espionagePageSection is one part of an espionage report as the page shows it.
+// Known says the mission earned the section; an entry list that is then empty
+// says the planet holds none of it, which is the opposite of never having
+// looked, and the page must not say the same word for both.
+type espionagePageSection struct {
+	Known   bool
+	Nothing string
+	Entries map[string]int64
+}
+
+type espionagePageView struct {
+	TargetPlanetName string
+	TargetPlayerName string
+	Probes           int64
+	Level            int
+	ProbesLost       bool
+	Resources        *domaineconomy.Resources
+	Fleet            espionagePageSection
+	Defenses         espionagePageSection
+	Buildings        espionagePageSection
+	Research         espionagePageSection
+}
+
+// espionageView prepares a report for display. A section is known when the
+// document carries it. A report written before the document could tell an empty
+// section from an absent one is read through the level it recorded instead,
+// which is how the artificial players have always read one; without a ruleset to
+// name the thresholds, such a report keeps its silence.
+func espionageView(payload report.EspionagePayload, thresholds *rules.EspionageSettings) espionagePageView {
+	view := espionagePageView{
+		TargetPlanetName: payload.TargetPlanetName, TargetPlayerName: payload.TargetPlayerName,
+		Probes: payload.Probes, Level: payload.Level, ProbesLost: payload.ProbesLost,
+		Resources: payload.Resources,
+	}
+	fleet, defenses, buildings, research := false, false, false, false
+	if thresholds != nil {
+		fleet = payload.Level >= thresholds.FleetThreshold
+		defenses = payload.Level >= thresholds.DefensesThreshold
+		buildings = payload.Level >= thresholds.BuildingsThreshold
+		research = payload.Level >= thresholds.ResearchThreshold
+	}
+	view.Fleet = espionagePageSection{
+		Known: payload.Fleet != nil || fleet, Nothing: "aucun vaisseau", Entries: payload.Fleet,
+	}
+	view.Defenses = espionagePageSection{
+		Known: payload.Defenses != nil || defenses, Nothing: "aucune défense", Entries: payload.Defenses,
+	}
+	view.Buildings = espionagePageSection{
+		Known: payload.Buildings != nil || buildings, Nothing: "aucun bâtiment",
+		Entries: levelEntries(payload.Buildings),
+	}
+	view.Research = espionagePageSection{
+		Known: payload.Research != nil || research, Nothing: "aucune recherche",
+		Entries: levelEntries(payload.Research),
+	}
+	return view
+}
+
+// levelEntries widens the levels of a document so that every section of a report
+// is displayed by one template.
+func levelEntries(levels map[string]int) map[string]int64 {
+	if levels == nil {
+		return nil
+	}
+	entries := make(map[string]int64, len(levels))
+	for id, level := range levels {
+		entries[id] = int64(level)
+	}
+	return entries
 }
 
 func (h *Handler) galaxyPage(response http.ResponseWriter, request *http.Request) {
@@ -294,7 +367,13 @@ func (h *Handler) reportPage(response http.ResponseWriter, request *http.Request
 	}
 	switch payload := detail.Payload.(type) {
 	case report.EspionagePayload:
-		data.Espionage = &payload
+		var thresholds *rules.EspionageSettings
+		if len(planets) > 0 {
+			settings := planets[0].Rules.Espionage
+			thresholds = &settings
+		}
+		view := espionageView(payload, thresholds)
+		data.Espionage = &view
 	case report.DetectedPayload:
 		data.Detected = &payload
 	case report.CombatPayload:

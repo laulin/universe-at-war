@@ -67,7 +67,13 @@ func FreshnessOf(occurredAt, now time.Time, recent time.Duration) Freshness {
 }
 
 // EspionagePayload is what a spy brought back. A nil section was not revealed
-// and is absent from the stored document.
+// and is absent from the stored document; a section revealed on a planet that
+// holds nothing is an empty one, and is written, because "we did not look" and
+// "there is nothing there" are opposite pieces of intelligence.
+//
+// The sections are omitted on their zero value rather than when they are empty,
+// which is the whole of that distinction: omitempty would drop the empty map
+// along with the nil one.
 type EspionagePayload struct {
 	Target           universe.Coordinate `json:"target"`
 	TargetPlayerName string              `json:"target_player_name"`
@@ -76,10 +82,10 @@ type EspionagePayload struct {
 	Level            int                 `json:"level"`
 	ProbesLost       bool                `json:"probes_lost"`
 	Resources        *economy.Resources  `json:"resources,omitempty"`
-	Fleet            map[string]int64    `json:"fleet,omitempty"`
-	Defenses         map[string]int64    `json:"defenses,omitempty"`
-	Buildings        map[string]int      `json:"buildings,omitempty"`
-	Research         map[string]int      `json:"research,omitempty"`
+	Fleet            map[string]int64    `json:"fleet,omitzero"`
+	Defenses         map[string]int64    `json:"defenses,omitzero"`
+	Buildings        map[string]int      `json:"buildings,omitzero"`
+	Research         map[string]int      `json:"research,omitzero"`
 }
 
 // DetectedPayload is what the target of an espionage learns: who came, never

@@ -380,10 +380,12 @@ func playerName(ctx context.Context, tx *sql.Tx, playerID int64) (string, error)
 	return name, nil
 }
 
+// The three documents below always answer with a map, empty when they were
+// given nothing. Folding an empty inventory back into nil would say "there was
+// nothing to tell" where the truth is "there is nothing there", and a report
+// keeps those two apart.
+
 func inventoryDocument[V ~int64](units map[unit.ID]V) map[string]int64 {
-	if len(units) == 0 {
-		return nil
-	}
 	document := make(map[string]int64, len(units))
 	for id, quantity := range units {
 		document[string(id)] = int64(quantity)
@@ -392,9 +394,6 @@ func inventoryDocument[V ~int64](units map[unit.ID]V) map[string]int64 {
 }
 
 func buildingDocument(levels building.Levels) map[string]int {
-	if len(levels) == 0 {
-		return nil
-	}
 	document := make(map[string]int, len(levels))
 	for id, level := range levels {
 		document[string(id)] = level
@@ -403,9 +402,6 @@ func buildingDocument(levels building.Levels) map[string]int {
 }
 
 func researchDocument(levels research.Levels) map[string]int {
-	if len(levels) == 0 {
-		return nil
-	}
 	document := make(map[string]int, len(levels))
 	for id, level := range levels {
 		document[string(id)] = level
