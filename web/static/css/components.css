@@ -373,6 +373,16 @@ label[hidden] { display: none; }
 .field-row > input { flex: 1 1 auto; min-width: 0; }
 .field-row > button { flex: 0 0 auto; padding: var(--space-2) var(--space-3); }
 .field-row > button[hidden] { display: none; }
+
+/* What the fleet can carry, what it already carries and what is left. The last
+   figure turns when the loading passes the hold, which is the one thing this
+   block exists to catch before the server has to say it. */
+.hold {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4);
+  margin: 0; font-size: var(--text-sm); color: var(--muted);
+}
+.hold b { color: var(--text); font-variant-numeric: tabular-nums; }
+.hold.is-over b { color: var(--danger); }
 input, select, textarea {
   min-height: 2.35rem;
   padding: var(--space-2) var(--space-3);

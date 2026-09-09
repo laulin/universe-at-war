@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,11 +18,15 @@ import (
 	"universeatwar/internal/domain/universe"
 )
 
-// fleetPageShip is one stationed ship prepared for display.
+// fleetPageShip is one stationed ship prepared for display. Cargo is its own
+// hold, which is what lets the send form say how much the fleet being composed
+// can carry: the hold of a fleet is the sum of the holds of its ships and
+// nothing else, exactly as fleet.Capacity adds it up.
 type fleetPageShip struct {
 	ID    unit.ID
 	Name  string
 	Owned int64
+	Cargo int64
 }
 
 // fleetPageMission is one mission in flight prepared for display.
@@ -56,6 +61,15 @@ type fleetSendPageData struct {
 	Missions []fleetPageMissionChoice
 	Speeds   []int
 	Form     fleetForm
+	// Hold is what the composition of the form can carry, Loaded what the cargo
+	// fields already ask of it and Free what is left. They are rendered rather
+	// than left to the script, so the figures are right on a page without one
+	// and right again after a refused mission comes back with its answers.
+	// The fuel is not taken out of them: it depends on the distance, which
+	// belongs to the confirmation. That page states the exact remainder.
+	Hold   int64
+	Loaded int64
+	Free   int64
 }
 
 // fleetPageMissionChoice is one entry of the mission list of the send form.
@@ -195,10 +209,13 @@ func (h *Handler) renderFleetSend(response http.ResponseWriter, request *http.Re
 	}
 	shell := h.gameShell(request.Context(), token, principal, "fleet", planets, planetID)
 	shell.Error = message
+	hold := composedHold(form.Composition, h.shipCatalogue())
+	loaded := form.CargoMetal + form.Crystal + form.Deuterium
 	h.render(response, status, "fleet-send", fleetSendPageData{
 		pageShell: shell, Planet: overview.Planet,
 		Ships:    stationedShips(overview.Stationed, h.shipCatalogue()),
 		Missions: missionChoices(), Speeds: fleetSpeeds, Form: form,
+		Hold: hold, Loaded: loaded, Free: hold - loaded,
 	})
 }
 
@@ -448,6 +465,25 @@ func sortedUnitIDs(composition map[unit.ID]int64) []unit.ID {
 }
 
 // stationedShips lists the ships a planet may send, in catalogue order.
+// composedHold adds up the holds of a composition. It is fleet.Capacity without
+// its validation: a form is composed one field at a time and passes through
+// states the domain would refuse, and a page that showed nothing until the
+// whole of it was valid would help nobody.
+func composedHold(composition map[unit.ID]int64, definitions []unit.Definition) int64 {
+	var hold int64
+	for _, definition := range definitions {
+		quantity := composition[definition.ID]
+		if quantity <= 0 || definition.Cargo <= 0 {
+			continue
+		}
+		if quantity > (math.MaxInt64-hold)/definition.Cargo {
+			return math.MaxInt64
+		}
+		hold += definition.Cargo * quantity
+	}
+	return hold
+}
+
 func stationedShips(inventory unit.Inventory, definitions []unit.Definition) []fleetPageShip {
 	ships := make([]fleetPageShip, 0, len(definitions))
 	for _, definition := range definitions {
@@ -455,7 +491,9 @@ func stationedShips(inventory unit.Inventory, definitions []unit.Definition) []f
 		if quantity <= 0 || definition.BaseSpeed <= 0 {
 			continue
 		}
-		ships = append(ships, fleetPageShip{ID: definition.ID, Name: unitName(definition.ID), Owned: quantity})
+		ships = append(ships, fleetPageShip{
+			ID: definition.ID, Name: unitName(definition.ID), Owned: quantity, Cargo: definition.Cargo,
+		})
 	}
 	return ships
 }

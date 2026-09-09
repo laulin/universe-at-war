@@ -11,8 +11,11 @@
         {{range .Ships}}
         <div class="ship-picker">
           <img src="/art/ship/{{.ID}}" alt="" width="64" height="48" loading="lazy">
-          <label for="ship-{{.ID}}">{{.Name}} (max {{figure .Owned}})</label>
-          <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="{{index $.Form.Composition .ID}}">
+          <label for="ship-{{.ID}}">{{.Name}} (max {{figure .Owned}}{{if .Cargo}}, soute {{figure .Cargo}}{{end}})</label>
+          <span class="field-row">
+            <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="{{index $.Form.Composition .ID}}" data-cargo="{{.Cargo}}">
+            <button type="button" class="ghost" data-max-for="ship-{{.ID}}" aria-label="Embarquer tous les {{.Name}}" hidden>max</button>
+          </span>
         </div>
         {{end}}
       </fieldset>
@@ -46,15 +49,30 @@
       </fieldset>
       <fieldset>
         <legend>Cargo</legend>
+        <p class="hold" data-hold>
+          <span>Soute de la flotte <b data-hold-capacity>{{figure .Hold}}</b></span>
+          <span>Chargé <b data-hold-loaded>{{figure .Loaded}}</b></span>
+          <span>Reste <b data-hold-free>{{figure .Free}}</b></span>
+        </p>
         <label for="cargo_metal">Métal
-          <input id="cargo_metal" name="cargo_metal" type="number" min="0" value="{{.Form.CargoMetal}}">
+          <span class="field-row">
+            <input id="cargo_metal" name="cargo_metal" type="number" min="0" max="{{.Planet.Stock.Metal}}" data-stock-max="{{.Planet.Stock.Metal}}" data-load value="{{.Form.CargoMetal}}">
+            <button type="button" class="ghost" data-max-for="cargo_metal" aria-label="Charger le maximum de métal" hidden>max</button>
+          </span>
         </label>
         <label for="cargo_crystal">Cristal
-          <input id="cargo_crystal" name="cargo_crystal" type="number" min="0" value="{{.Form.Crystal}}">
+          <span class="field-row">
+            <input id="cargo_crystal" name="cargo_crystal" type="number" min="0" max="{{.Planet.Stock.Crystal}}" data-stock-max="{{.Planet.Stock.Crystal}}" data-load value="{{.Form.Crystal}}">
+            <button type="button" class="ghost" data-max-for="cargo_crystal" aria-label="Charger le maximum de cristal" hidden>max</button>
+          </span>
         </label>
         <label for="cargo_deuterium">Deutérium
-          <input id="cargo_deuterium" name="cargo_deuterium" type="number" min="0" value="{{.Form.Deuterium}}">
+          <span class="field-row">
+            <input id="cargo_deuterium" name="cargo_deuterium" type="number" min="0" max="{{.Planet.Stock.Deuterium}}" data-stock-max="{{.Planet.Stock.Deuterium}}" data-load value="{{.Form.Deuterium}}">
+            <button type="button" class="ghost" data-max-for="cargo_deuterium" aria-label="Charger le maximum de deutérium" hidden>max</button>
+          </span>
         </label>
+        <p class="muted">Le carburant sort de la soute et du même deutérium : la confirmation donne la capacité qu'il laisse.</p>
       </fieldset>
       <button type="submit">Calculer la mission</button>
       <p class="muted">Vous verrez la distance, le carburant et l'heure d'arrivée avant de confirmer.</p>

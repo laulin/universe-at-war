@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"net/http"
 	"regexp"
 	"strings"
 	"testing"
@@ -59,9 +60,17 @@ func TestNoMaximumButtonIsRenderedVisible(t *testing.T) {
 	setResearch(t, ctx, database, 1, "combustion_drive", 1)
 	setResources(t, ctx, database, 1, 100_000, 100_000, 100_000)
 
+	fleet, fleetDatabase, fleetSession, fleetCSRF := fleetHandler(t)
+	setUnits(t, ctx, fleetDatabase, 1, "small_cargo", 4)
+	setResources(t, ctx, fleetDatabase, 1, 8_000, 8_000, 8_000)
+
 	opening := regexp.MustCompile(`<button[^>]*data-max-for[^>]*>`)
-	for _, route := range []string{"/planets/1/shipyard", "/planets/1/defense"} {
-		page := getPage(t, handler, route, session, csrfCookie)
+	swept := map[string][]*http.Cookie{
+		"/planets/1/shipyard": {session, csrfCookie},
+		"/planets/1/defense":  {session, csrfCookie},
+	}
+	for route, cookies := range swept {
+		page := getPage(t, handler, route, cookies...)
 		found := opening.FindAllString(page, -1)
 		if len(found) == 0 {
 			t.Fatalf("%s offers no maximum at all", route)
@@ -70,6 +79,16 @@ func TestNoMaximumButtonIsRenderedVisible(t *testing.T) {
 			if !strings.Contains(tag, " hidden") {
 				t.Fatalf("%s renders a maximum button a page without a script would see: %s", route, tag)
 			}
+		}
+	}
+	send := getPage(t, fleet, "/planets/1/fleet/send", fleetSession, fleetCSRF)
+	found := opening.FindAllString(send, -1)
+	if len(found) == 0 {
+		t.Fatal("the send form offers no maximum at all")
+	}
+	for _, tag := range found {
+		if !strings.Contains(tag, " hidden") {
+			t.Fatalf("the send form renders a maximum button a page without a script would see: %s", tag)
 		}
 	}
 }
