@@ -23,6 +23,7 @@ type artificialService interface {
 	Enlist(ctx context.Context, principal appauth.Principal, playerID int64, name, tag string) error
 	List(ctx context.Context, principal appauth.Principal) ([]appai.Profile, error)
 	Inspect(ctx context.Context, principal appauth.Principal, playerID int64) (appai.Profile, error)
+	Configured(ctx context.Context, principal appauth.Principal) (int, error)
 }
 
 // artificialPageData lists the artificial players of the universe.
@@ -30,6 +31,8 @@ type artificialPageData struct {
 	pageShell
 	Players    []appai.Profile
 	Archetypes []domainai.Archetype
+	// Configured is what the ruleset ordered, against which Players is read.
+	Configured int
 }
 
 // artificialDetailPageData is the omniscient view of one artificial player. It
@@ -84,10 +87,18 @@ func (h *Handler) renderArtificials(response http.ResponseWriter, request *http.
 	if !ok {
 		return
 	}
+	// A universe fills up over a few minutes, so a count on its own would leave
+	// an administrator wondering whether it had stalled.
+	configured, err := h.artificials.Configured(request.Context(), principal)
+	if err != nil {
+		http.Error(response, "artificial players unavailable", http.StatusInternalServerError)
+		return
+	}
 	data := artificialPageData{
 		pageShell:  h.gameShell(request.Context(), token, principal, "admin", planets, h.rememberedBody(request)),
 		Players:    players,
 		Archetypes: domainai.Archetypes(),
+		Configured: configured,
 	}
 	data.Error = message
 	h.render(response, status, "admin-ai", data)

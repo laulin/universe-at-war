@@ -112,6 +112,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 	artificials := appai.Service{
 		Clock:      clock,
 		Repository: aiRepository,
+		Census:     aiRepository,
 		Empires:    economy,
 		Alliances:  alliance,
 		Seeds:      random.NewSeedGenerator(rand.Reader),

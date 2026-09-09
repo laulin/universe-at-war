@@ -109,10 +109,13 @@ type Repository interface {
 type Service struct {
 	Clock      domainclock.Clock
 	Repository Repository
-	Empires    Empires
-	Alliances  Alliances
-	Seeds      Seeds
-	Completer  appeconomy.Completer
+	// Census answers what the ruleset ordered. Without it the administration
+	// still works; it simply cannot say how far the universe has filled up.
+	Census    Censuses
+	Empires   Empires
+	Alliances Alliances
+	Seeds     Seeds
+	Completer appeconomy.Completer
 }
 
 // DiaryLength is how many decisions an inspection brings back.
@@ -172,7 +175,9 @@ func (s Service) create(ctx context.Context, request Request) (Profile, error) {
 	first := domainai.NextThink(now, profile.Interval, seed, 0)
 	created, err := s.Repository.CreateProfile(ctx, accountID, profile, first, now)
 	if err != nil {
-		_ = s.Repository.DisableAccount(ctx, accountID, now)
+		// The empire is founded and stands on the map; disabling the account
+		// here would strand it there for good, owned by a player that can never
+		// think. It is left as it is, and the reconciler finishes the birth.
 		return Profile{}, err
 	}
 	return created, nil
@@ -201,6 +206,26 @@ func (s Service) List(ctx context.Context, principal appauth.Principal) ([]Profi
 		}
 	}
 	return s.Repository.List(ctx, s.Clock.Now().UTC())
+}
+
+// Configured is the population the ruleset ordered. Beside the list of players
+// it is what tells an administrator whether the universe is still filling up or
+// has already settled, which the list alone cannot say.
+func (s Service) Configured(ctx context.Context, principal appauth.Principal) (int, error) {
+	if err := s.validate(principal); err != nil {
+		return 0, err
+	}
+	if s.Census == nil {
+		return 0, nil
+	}
+	census, err := s.Census.Census(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if !census.Running {
+		return 0, nil
+	}
+	return PopulationFrom(census.Rules).Total, nil
 }
 
 // Inspect opens the diary of one artificial player. It is the omniscient view,

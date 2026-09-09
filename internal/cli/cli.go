@@ -356,6 +356,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	artificials := appai.Service{
 		Clock:      clock,
 		Repository: aiRepository,
+		Census:     aiRepository,
 		Empires:    economy,
 		Alliances:  alliance,
 		Seeds:      seeds.NewSeedGenerator(cryptorand.Reader),

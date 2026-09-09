@@ -116,3 +116,36 @@ func (r *AIRepository) Teams(ctx context.Context, tags []string, spares int) ([]
 	}
 	return strengths, unallied, nil
 }
+
+// Unfinished lists births that stopped between the empire and the character:
+// an artificial account whose player owns its world and carries no profile, so
+// nothing has ever thought for it. Only accounts still in use are offered, since
+// one that was disabled was put aside deliberately.
+func (r *AIRepository) Unfinished(ctx context.Context, limit int) ([]appai.Unfinished, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows, err := r.write.QueryContext(ctx, `
+		SELECT a.id, pl.display_name
+		FROM accounts a JOIN players pl ON pl.account_id = a.id
+		WHERE a.kind = 'ai' AND a.status = 'active'
+			AND NOT EXISTS (SELECT 1 FROM ai_profiles p WHERE p.account_id = a.id)
+		ORDER BY a.id LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("ai repository: read unfinished births: %w", err)
+	}
+	var births []appai.Unfinished
+	for rows.Next() {
+		var birth appai.Unfinished
+		if err := rows.Scan(&birth.AccountID, &birth.Name); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("ai repository: read unfinished birth: %w", err)
+		}
+		births = append(births, birth)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return nil, fmt.Errorf("ai repository: read unfinished births: %w", err)
+	}
+	return births, nil
+}

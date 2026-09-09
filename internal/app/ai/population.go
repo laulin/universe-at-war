@@ -86,9 +86,18 @@ type TeamCensus struct {
 	Members int
 }
 
+// Unfinished is a birth that stopped between the empire and the character: the
+// player owns its world and nothing has ever thought for it.
+type Unfinished struct {
+	AccountID int64
+	Name      string
+}
+
 // Censuses reads what the reconciler compares the standing order against.
 type Censuses interface {
 	Census(context.Context) (Census, error)
+	// Unfinished lists births that stopped after their empire was founded.
+	Unfinished(context.Context, int) ([]Unfinished, error)
 	// Teams reports the strength of the named alliances, one entry per tag and
 	// in the order asked for, along with active artificial players belonging to
 	// no alliance at all.
@@ -134,7 +143,24 @@ func (p Populating) Populate(ctx context.Context, limit int) (int, error) {
 			return 0, err
 		}
 	}
-	slot, created := census.Provisioned, 0
+	created := 0
+	// A birth that stopped between the empire and the character left a player
+	// owning a world that nothing thinks for. Its slot is already spent, so
+	// finishing it comes before founding anybody new.
+	stalled, err := p.Census.Unfinished(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	for _, birth := range stalled {
+		if created >= limit {
+			return created, nil
+		}
+		if err := p.finish(ctx, order, birth); err != nil {
+			return created, err
+		}
+		created++
+	}
+	slot := census.Provisioned
 	for created < limit {
 		team := shortTeam(order, teams)
 		// A player already there and belonging to nobody joins before one is
@@ -166,6 +192,32 @@ func (p Populating) Populate(ctx context.Context, limit int) (int, error) {
 		}
 	}
 	return created, nil
+}
+
+// finish gives a character to a player whose birth stopped once its empire was
+// founded. Everything the reflection needs comes from the standing order, and
+// the character follows from the account, so the same interrupted birth is
+// always finished the same way.
+func (p Populating) finish(ctx context.Context, order Population, birth Unfinished) error {
+	archetypes := domainai.Archetypes()
+	seed, err := p.Service.Seeds.Seed()
+	if err != nil {
+		return err
+	}
+	profile := domainai.Profile{
+		Name:      birth.Name,
+		Archetype: archetypes[int(birth.AccountID)%len(archetypes)],
+		Window:    order.Window,
+		Interval:  order.Interval,
+		Seed:      seed,
+	}
+	if err := profile.Validate(); err != nil {
+		return err
+	}
+	now := p.Clock.Now().UTC()
+	_, err = p.Service.Repository.CreateProfile(ctx, birth.AccountID, profile,
+		domainai.NextThink(now, profile.Interval, seed, 0), now)
+	return err
 }
 
 // born creates the player of one slot. Its name, its character and the corner

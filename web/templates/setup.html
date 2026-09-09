@@ -92,8 +92,11 @@
     </fieldset>
     {{else if eq .Step 8}}
     <fieldset><legend>Intelligence artificielle</legend>
+      <p class="muted">Le total décide de la population : les alliances sont pourvues d'abord,
+        et tout le reste joue seul. Le nombre d'indépendantes est le minimum que vous acceptez,
+        pas la part qui le sera.</p>
       <label>IA totales<input type="number" min="0" name="ai_total" value="{{.Rules.AI.Total}}" required></label>
-      <label>IA indépendantes<input type="number" min="0" name="ai_independent_count" value="{{.Rules.AI.IndependentCount}}" required></label>
+      <label>IA indépendantes (au moins)<input type="number" min="0" name="ai_independent_count" value="{{.Rules.AI.IndependentCount}}" required></label>
       <label>Alliances IA<input type="number" min="0" name="ai_alliance_count" value="{{.Rules.AI.AllianceCount}}" required></label>
       <label>Taille des alliances IA<input type="number" min="0" name="ai_alliance_size" value="{{.Rules.AI.AllianceSize}}" required></label>
       <label>Difficulté<select name="ai_difficulty"><option value="easy" {{if eq .Rules.AI.Difficulty "easy"}}selected{{end}}>Facile</option><option value="normal" {{if eq .Rules.AI.Difficulty "normal"}}selected{{end}}>Normale</option><option value="hard" {{if eq .Rules.AI.Difficulty "hard"}}selected{{end}}>Difficile</option></select></label>

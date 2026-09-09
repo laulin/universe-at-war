@@ -3,6 +3,10 @@
   <section class="panel-wide" aria-labelledby="ai-title">
     <p class="eyebrow">Administration</p>
     <h2 id="ai-title">Joueurs artificiels</h2>
+    {{if .Configured}}
+    <p class="muted">{{len .Players}} présents sur les {{.Configured}} que demande la configuration
+      {{if lt (len .Players) .Configured}}— l'univers se peuple encore, quelques joueurs à chaque passage.{{else}}— la population est au complet.{{end}}</p>
+    {{end}}
     {{if .Players}}
     <table class="bodies">
       <thead>

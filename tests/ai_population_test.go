@@ -348,3 +348,55 @@ func TestAnArtificialPlayerBornThisWayThinksLikeAnyOther(t *testing.T) {
 		t.Fatalf("players that wrote a decision = %d, want 3", decisions)
 	}
 }
+
+// TestABirthStoppedAfterItsEmpireIsFinishedRatherThanAbandoned covers the one
+// way a player could be left owning a world that nothing ever thought for: the
+// character failed to be written once the empire already stood. The slot is
+// spent, so nobody new is founded for it; the birth is completed instead.
+func TestABirthStoppedAfterItsEmpireIsFinishedRatherThanAbandoned(t *testing.T) {
+	ctx := context.Background()
+	universeWorld := populationWorld(t, ctx, 1, artificialPopulation(func(configured *rules.Ruleset) {
+		configured.AI.Total = 3
+		configured.AI.AllianceCount = 0
+	}))
+	settle(t, ctx, universeWorld)
+	accounts := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM accounts")
+	planets := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM planets")
+
+	// One birth is unwound to the state it would have been left in.
+	var stranded int64
+	if err := universeWorld.Database.Write().QueryRowContext(ctx,
+		"SELECT account_id FROM ai_profiles ORDER BY player_id LIMIT 1").Scan(&stranded); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universeWorld.Database.Write().ExecContext(ctx,
+		"DELETE FROM ai_profiles WHERE account_id = ?", stranded); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universeWorld.Database.Write().ExecContext(ctx,
+		"DELETE FROM scheduled_events WHERE event_type = 'ai_think'"); err != nil {
+		t.Fatal(err)
+	}
+
+	settle(t, ctx, universeWorld)
+
+	if total := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM ai_profiles"); total != 3 {
+		t.Fatalf("artificial profiles = %d, want the same 3", total)
+	}
+	if back := count(t, ctx, universeWorld,
+		"SELECT COUNT(*) FROM ai_profiles WHERE account_id = ?", stranded); back != 1 {
+		t.Fatalf("the stranded player was never given a character")
+	}
+	// Nothing new was founded for it: the slot it had spent stayed spent.
+	if now := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM accounts"); now != accounts {
+		t.Fatalf("accounts = %d, want %d", now, accounts)
+	}
+	if now := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM planets"); now != planets {
+		t.Fatalf("planets = %d, want %d", now, planets)
+	}
+	// And it owes a reflection like anybody else.
+	if armed := count(t, ctx, universeWorld,
+		"SELECT COUNT(*) FROM scheduled_events WHERE event_type = 'ai_think' AND state = 'pending'"); armed != 1 {
+		t.Fatalf("reflections armed for the finished birth = %d, want 1", armed)
+	}
+}
