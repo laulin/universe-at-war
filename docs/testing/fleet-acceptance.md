@@ -23,6 +23,12 @@
     correspond au carburant des missions.
 11. Le parcours web complet : page flotte, assistant, aperçu chiffré,
     confirmation, lancement, rappel, avec CSRF et clé d'idempotence.
+12. Le chargement : l'assistant énonce la soute de la composition et borne
+    chaque champ de cargo par les stocks ; la confirmation énonce la capacité
+    que le carburant laisse, accepte un cargo modifié, refuse celui qui dépasse,
+    et distingue une confirmation périmée d'une mission refusée.
+13. La confirmation ne porte qu'un formulaire : le lancement, l'attaque groupée
+    et le retour à l'assistant partent du même cargo, avec des clés distinctes.
 
 ## Contrôles
 
