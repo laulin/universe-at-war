@@ -11,6 +11,7 @@ import (
 	appclock "universeatwar/internal/clock"
 	domainai "universeatwar/internal/domain/ai"
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/rules"
 	"universeatwar/internal/domain/universe"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
@@ -139,6 +140,9 @@ func alliedArtificials(t *testing.T) (*storagesqlite.Database, *world, appauth.P
 	ctx := context.Background()
 	clock := appclock.NewFake(time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
 	database := economyDatabase(t, ctx, 1)
+	// These fixtures are about machines acting as one, so the universe has to
+	// ask them to: at the default degree they answer only some of the calls.
+	setRules(t, ctx, database, func(configured *rules.Ruleset) { configured.AI.Coordination = 1 })
 	universeWorld := newWorld(t, database, clock)
 	if _, err := universeWorld.Economy.CreateEmpire(ctx, appauth.Principal{AccountID: 1}, "Alice"); err != nil {
 		t.Fatalf("CreateEmpire() error = %v", err)

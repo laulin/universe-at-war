@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"universeatwar/internal/domain/rules"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 
@@ -82,4 +83,29 @@ func freshDatabase(t testing.TB, ctx context.Context, name string) *storagesqlit
 		t.Fatalf("Migrate() error = %v", err)
 	}
 	return database
+}
+
+// setRules rewrites the ruleset a test universe runs under. A fixture that
+// depends on a setting is better off naming it than inheriting whatever the
+// defaults happen to say today.
+func setRules(t testing.TB, ctx context.Context, database *storagesqlite.Database, mutate func(*rules.Ruleset)) {
+	t.Helper()
+	var document string
+	if err := database.Read().QueryRowContext(ctx,
+		"SELECT document FROM ruleset_versions WHERE status = 'active' ORDER BY version DESC LIMIT 1").Scan(&document); err != nil {
+		t.Fatalf("read active ruleset: %v", err)
+	}
+	configured, err := rules.Decode([]byte(document))
+	if err != nil {
+		t.Fatalf("decode active ruleset: %v", err)
+	}
+	mutate(&configured)
+	encoded, err := rules.Encode(configured)
+	if err != nil {
+		t.Fatalf("encode ruleset: %v", err)
+	}
+	if _, err := database.Write().ExecContext(ctx,
+		"UPDATE ruleset_versions SET document = ? WHERE status = 'active'", string(encoded)); err != nil {
+		t.Fatalf("write ruleset: %v", err)
+	}
 }

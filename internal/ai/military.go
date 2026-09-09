@@ -54,9 +54,14 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 	if profile.Window.LastBefore(now, profile.Interval) {
 		return []domainai.Decision{b.fleetsave(ctx, principal, profile, planets, overview)}
 	}
-	// What the alliance asks comes before what one would do alone.
-	if decision, taken := b.serve(ctx, principal, profile, home, overview, plan); taken {
-		return []domainai.Decision{decision}
+	// What the alliance asks comes before what one would do alone, as often as
+	// the universe asked its members to act as one. A member sitting this call
+	// out still leaves the target of the alliance alone: not marching is not the
+	// same as getting in the way.
+	if domainai.Cooperates(profile.Seed, profile.Tick, home.Rules.AI.Coordination) {
+		if decision, taken := b.serve(ctx, principal, profile, home, overview, plan); taken {
+			return []domainai.Decision{decision}
+		}
 	}
 	targets, memories := b.survey(profile, home, observations)
 	if len(memories) > 0 && b.Thinking != nil {
