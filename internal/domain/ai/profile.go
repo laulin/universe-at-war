@@ -9,11 +9,15 @@ type Profile struct {
 	AccountID int64
 	Name      string
 	Archetype Archetype
-	Window    Window
-	Interval  time.Duration
-	Seed      int64
-	Tick      int64
-	Retired   bool
+	// Difficulty is the competence its universe asked of it. An empty setting
+	// plays as normal, which is what an artificial player made before a universe
+	// had an opinion on the matter has always done.
+	Difficulty Difficulty
+	Window     Window
+	Interval   time.Duration
+	Seed       int64
+	Tick       int64
+	Retired    bool
 }
 
 // Validate refuses a profile this build could not run faithfully.
@@ -32,5 +36,5 @@ func (p Profile) Validate() error {
 
 // Preferences is a shortcut to the weights of the character.
 func (p Profile) Preferences() Preferences {
-	return p.Archetype.Preferences()
+	return p.Archetype.Preferences().At(p.Difficulty)
 }

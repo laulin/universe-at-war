@@ -295,6 +295,7 @@ func (r *AIRepository) Due(ctx context.Context, now time.Time, limit int) ([]dom
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("ai repository: iterate due: %w", err)
 	}
+	difficulty := artificialDifficulty(ctx, r.write)
 	profiles := make([]domainai.Profile, 0, len(identifiers))
 	for _, playerID := range identifiers {
 		row, found, err := profileRow(ctx, r.write, playerID)
@@ -304,7 +305,9 @@ func (r *AIRepository) Due(ctx context.Context, now time.Time, limit int) ([]dom
 		if !found {
 			continue
 		}
-		profiles = append(profiles, row.profile())
+		profile := row.profile()
+		profile.Difficulty = difficulty
+		profiles = append(profiles, profile)
 	}
 	return profiles, nil
 }
@@ -372,6 +375,28 @@ func (row aiProfileRow) profile() domainai.Profile {
 	}
 }
 
+// artificialDifficulty is the competence the universe currently asks of its
+// server-driven players. It is read rather than stored, so an administrator who
+// changes the ruleset changes how every artificial player behaves from its next
+// reflection on, instead of only the ones created afterwards. A universe with no
+// ruleset yet asks for nothing in particular, which plays as normal.
+func artificialDifficulty(ctx context.Context, database *sql.DB) domainai.Difficulty {
+	configured, err := activeRulesetFrom(ctx, database)
+	if err != nil {
+		return domainai.Normal
+	}
+	return domainai.Difficulty(configured.AI.Difficulty)
+}
+
+// artificialDifficultyIn answers the same question from inside a transaction.
+func artificialDifficultyIn(ctx context.Context, tx *sql.Tx) domainai.Difficulty {
+	configured, _, err := activeRuleset(ctx, tx)
+	if err != nil {
+		return domainai.Normal
+	}
+	return domainai.Difficulty(configured.AI.Difficulty)
+}
+
 // rowQuerier reads one row, from a transaction or straight from the pool.
 type rowQuerier interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
@@ -432,6 +457,7 @@ func loadAIProfile(ctx context.Context, tx *sql.Tx, playerID int64, diary int, n
 		NextThinkAt: row.nextThinkAt, LastThinkAt: row.lastThinkAt,
 		Awake: row.window.Awake(now),
 	}
+	profile.Difficulty = artificialDifficultyIn(ctx, tx)
 	if err := tx.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM planets WHERE owner_player_id = ?", playerID).Scan(&profile.Bodies); err != nil {
 		return appai.Profile{}, fmt.Errorf("ai repository: count bodies: %w", err)
