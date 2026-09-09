@@ -126,10 +126,14 @@ les flottes survivantes selon la place qui leur reste. Une flotte envoyée en
 défense alliée attend sur place jusqu'à la fin de sa garde, se bat pour la
 planète, puis rentre.
 
-L'univers peut être peuplé de joueurs contrôlés par le serveur. Un
-administrateur les ajoute depuis la page Administration, leur donne un archétype
-et des horaires, puis suit leur santé, leur prochaine réflexion et le journal de
-leurs décisions. Une intelligence artificielle possède un compte sans mot de
+L'univers est peuplé des joueurs contrôlés par le serveur que sa configuration
+commande. Le nombre, les alliances, les horaires et la fréquence de réflexion se
+règlent à l'étape 8 de l'assistant ; le serveur comble ensuite l'écart entre ce
+qui a été demandé et ce qui existe, quelques joueurs à chaque passage, et une
+partie déjà lancée se remplit de la même façon. Un administrateur en ajoute à la
+main depuis la page Administration, retire ceux dont il ne veut plus — un retrait
+est définitif, personne ne renaît à sa place — et suit leur santé, leur prochaine
+réflexion et le journal de leurs décisions. Une intelligence artificielle possède un compte sans mot de
 passe, fonde son empire, paie ses constructions, attend ses files, espionne
 avant d'attaquer, perd ses flottes et dort en dehors de ses heures. Elle passe
 par les mêmes cas d'usage que vous : un test structurel garantit qu'elle

@@ -107,8 +107,5 @@ d'acceptation ; la matrice de traçabilité vers les tests et les écrans est da
 - **Pas de canal temps réel.** Les pages affichent des horodatages serveur
   autoritatifs et demandent un rechargement ciblé quand une échéance passe.
   Sans JavaScript tout reste correct. Un flux SSE reste possible plus tard.
-- **Pas de peuplement automatique en IA au démarrage.** La section `ai` du
-  ruleset porte les valeurs recommandées ; un administrateur crée les joueurs
-  artificiels depuis `/admin/ai`.
 - **Pas de TLS intégré.** Servez derrière un reverse proxy pour exposer la
   partie hors de la machine.
