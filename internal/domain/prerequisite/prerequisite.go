@@ -72,6 +72,33 @@ func Unmet(requirements []Requirement, state State) []Requirement {
 	return missing
 }
 
+// Resolved is a requirement together with the level the actor has reached, which
+// is what tells one level short from not started. Unmet answers whether a gap
+// exists; only the level reached says how wide it is.
+type Resolved struct {
+	Requirement
+	Reached int
+}
+
+// Met reports a requirement the actor already satisfies.
+func (r Resolved) Met() bool { return r.Reached >= r.Level }
+
+// Resolve pairs every requirement with the level the actor has reached, in
+// catalogue order, so an interface always presents them the same way.
+func Resolve(requirements []Requirement, state State) []Resolved {
+	if len(requirements) == 0 {
+		return nil
+	}
+	resolved := make([]Resolved, 0, len(requirements))
+	for _, requirement := range requirements {
+		resolved = append(resolved, Resolved{
+			Requirement: requirement,
+			Reached:     state.Level(requirement.Kind, requirement.ID),
+		})
+	}
+	return resolved
+}
+
 // Check reports the first unmet requirement, if any.
 func Check(requirements []Requirement, state State) error {
 	missing := Unmet(requirements, state)

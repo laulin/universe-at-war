@@ -979,7 +979,7 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 }
 
 // requirementViews translates the dependencies of one entry for the card.
-func requirementViews(requirements []appeconomy.Requirement) []requirementView {
+func requirementViews(requirements []prerequisite.Resolved) []requirementView {
 	if len(requirements) == 0 {
 		return nil
 	}

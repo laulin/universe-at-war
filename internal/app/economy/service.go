@@ -114,17 +114,6 @@ func (p Planet) ProjectedLevels() building.Levels {
 // only consumed at completion, so a queue would otherwise overrun the body.
 func (p Planet) BookedFields() int { return p.UsedFields + len(p.Queue) }
 
-// Requirement is one prerequisite of an entry together with the level the body
-// actually reaches, so a locked card can show what is done as well as what is
-// left instead of naming only the gap.
-type Requirement struct {
-	prerequisite.Requirement
-	Reached int
-}
-
-// Met reports a requirement the body already satisfies.
-func (r Requirement) Met() bool { return r.Reached >= r.Level }
-
 // BuildingChoice is one catalogue entry enriched for a planet.
 type BuildingChoice struct {
 	Definition building.Definition
@@ -134,7 +123,7 @@ type BuildingChoice struct {
 	Affordable bool
 	// Requirements lists every prerequisite of the entry, met or not, against
 	// the levels the queue is going to reach.
-	Requirements []Requirement
+	Requirements []prerequisite.Resolved
 	// Missing names the prerequisites the planet has not met, so the caller can
 	// say so in its own words instead of showing a raw error.
 	Missing []prerequisite.Requirement
@@ -242,7 +231,7 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 	}
 	for _, definition := range s.Catalogue.DefinitionsFor(planet.Kind) {
 		choice := BuildingChoice{Definition: definition, Level: planet.Levels[definition.ID]}
-		choice.Requirements = resolveRequirements(definition.Prerequisites, requirements)
+		choice.Requirements = prerequisite.Resolve(definition.Prerequisites, requirements)
 		choice.Missing = prerequisite.Unmet(definition.Prerequisites, requirements)
 		choice.FacilityBusy = busy(planet.BusyFacilities, definition.ID)
 		plan, planErr := s.Catalogue.Plan(definition.ID, planet.Kind, projected, planet.Researches.Generic(), planet.BookedFields(), planet.TotalFields, planet.Rules)
@@ -259,22 +248,6 @@ func (s Service) Buildings(ctx context.Context, principal appauth.Principal, pla
 		choices = append(choices, choice)
 	}
 	return planet, choices, nil
-}
-
-// resolveRequirements pairs every prerequisite with the level the body reaches,
-// which is what tells "one level short" from "not started".
-func resolveRequirements(prerequisites []prerequisite.Requirement, state prerequisite.State) []Requirement {
-	if len(prerequisites) == 0 {
-		return nil
-	}
-	resolved := make([]Requirement, 0, len(prerequisites))
-	for _, requirement := range prerequisites {
-		resolved = append(resolved, Requirement{
-			Requirement: requirement,
-			Reached:     state.Level(requirement.Kind, requirement.ID),
-		})
-	}
-	return resolved
 }
 
 func busy(facilities []building.ID, id building.ID) bool {
