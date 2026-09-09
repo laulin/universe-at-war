@@ -8,43 +8,58 @@
       <dt>Distance</dt><dd>{{.Plan.Distance}}</dd>
       <dt>Vitesse</dt><dd>{{.Form.Speed}} % — {{.Plan.Speed}}</dd>
       <dt>Carburant</dt><dd>{{.Plan.Fuel}} deutérium</dd>
-      <dt>Capacité restante</dt><dd>{{.Plan.Capacity}}</dd>
-      <dt>Cargo</dt><dd><span class="res-metal">M {{figure .Form.CargoMetal}}</span> · <span class="res-crystal">C {{figure .Form.Crystal}}</span> · <span class="res-deuterium">D {{figure .Form.Deuterium}}</span></dd>
+      <dt>Capacité restante</dt><dd>{{figure .Plan.Capacity}}</dd>
       <dt>Arrivée prévue</dt><dd>{{.Plan.ArrivesAt.Format "2006-01-02 15:04:05"}} UTC</dd>
       <dt>Retour prévu</dt><dd>{{if .Plan.ReturnsAt}}{{.Plan.ReturnsAt.Format "2006-01-02 15:04:05"}} UTC{{else}}aucun{{end}}</dd>
     </dl>
+    <!-- One form for the whole confirmation. Each button carries its own action
+         and its own idempotency key, and a button submits only its own name and
+         value: two keys stay two keys. Split in two, the cargo would exist in
+         two copies and a grouped attack would leave with the stale one. -->
     <form class="confirm" method="post" action="/planets/{{.Planet.ID}}/fleet/launch">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <input type="hidden" name="idempotency_key" value="{{.LaunchKey}}">
       <input type="hidden" name="galaxy" value="{{.Form.Galaxy}}">
       <input type="hidden" name="system" value="{{.Form.System}}">
       <input type="hidden" name="position" value="{{.Form.Position}}">
       <input type="hidden" name="mission" value="{{.Form.Mission}}">
       <input type="hidden" name="hold_until" value="{{.Form.HoldUntil}}">
       <input type="hidden" name="speed" value="{{.Form.Speed}}">
-      <input type="hidden" name="cargo_metal" value="{{.Form.CargoMetal}}">
-      <input type="hidden" name="cargo_crystal" value="{{.Form.Crystal}}">
-      <input type="hidden" name="cargo_deuterium" value="{{.Form.Deuterium}}">
       {{range $id, $quantity := .Form.Composition}}<input type="hidden" name="composition[{{$id}}]" value="{{$quantity}}">{{end}}
-      <button type="submit">Lancer la flotte</button>
+      <fieldset>
+        <legend>Cargo</legend>
+        <p class="hold" data-hold="{{.Plan.Capacity}}">
+          <span>Capacité après carburant <b data-hold-capacity>{{figure .Plan.Capacity}}</b></span>
+          <span>Chargé <b data-hold-loaded>{{figure .Loaded}}</b></span>
+          <span>Reste <b data-hold-free>{{figure .Free}}</b></span>
+        </p>
+        <label for="cargo_metal">Métal
+          <span class="field-row">
+            <input id="cargo_metal" name="cargo_metal" type="number" min="0" max="{{.MaxMetal}}" data-stock-max="{{.MaxMetal}}" data-load value="{{.Form.CargoMetal}}">
+            <button type="button" class="ghost" data-max-for="cargo_metal" aria-label="Charger le maximum de métal" hidden>max</button>
+          </span>
+        </label>
+        <label for="cargo_crystal">Cristal
+          <span class="field-row">
+            <input id="cargo_crystal" name="cargo_crystal" type="number" min="0" max="{{.MaxCrystal}}" data-stock-max="{{.MaxCrystal}}" data-load value="{{.Form.Crystal}}">
+            <button type="button" class="ghost" data-max-for="cargo_crystal" aria-label="Charger le maximum de cristal" hidden>max</button>
+          </span>
+        </label>
+        <label for="cargo_deuterium">Deutérium
+          <span class="field-row">
+            <input id="cargo_deuterium" name="cargo_deuterium" type="number" min="0" max="{{.MaxDeuterium}}" data-stock-max="{{.MaxDeuterium}}" data-load value="{{.Form.Deuterium}}">
+            <button type="button" class="ghost" data-max-for="cargo_deuterium" aria-label="Charger le maximum de deutérium" hidden>max</button>
+          </span>
+        </label>
+      </fieldset>
+      <!-- First in the document is what the Enter key submits: from a cargo
+           field, checking the loading is what a player means, not launching. -->
+      <button type="submit" class="ghost" formaction="/planets/{{.Planet.ID}}/fleet/preview">Vérifier le chargement</button>
+      <button type="submit" name="idempotency_key" value="{{.LaunchKey}}">Lancer la flotte</button>
+      {{if .GroupedAttack}}
+      <button type="submit" class="ghost" name="idempotency_key" value="{{.OperationKey}}" formaction="/planets/{{.Planet.ID}}/fleet/operation">Ouvrir une attaque groupée</button>
+      <p class="muted">Vos alliés pourront rejoindre l'opération jusqu'à son arrivée.</p>
+      {{end}}
+      <button type="submit" class="ghost" formaction="/planets/{{.Planet.ID}}/fleet/send">Modifier la mission</button>
     </form>
-    {{if .GroupedAttack}}
-    <form class="confirm" method="post" action="/planets/{{.Planet.ID}}/fleet/operation">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <input type="hidden" name="idempotency_key" value="{{.OperationKey}}">
-      <input type="hidden" name="galaxy" value="{{.Form.Galaxy}}">
-      <input type="hidden" name="system" value="{{.Form.System}}">
-      <input type="hidden" name="position" value="{{.Form.Position}}">
-      <input type="hidden" name="mission" value="{{.Form.Mission}}">
-      <input type="hidden" name="speed" value="{{.Form.Speed}}">
-      <input type="hidden" name="cargo_metal" value="{{.Form.CargoMetal}}">
-      <input type="hidden" name="cargo_crystal" value="{{.Form.Crystal}}">
-      <input type="hidden" name="cargo_deuterium" value="{{.Form.Deuterium}}">
-      {{range $id, $quantity := .Form.Composition}}<input type="hidden" name="composition[{{$id}}]" value="{{$quantity}}">{{end}}
-      <button type="submit">Ouvrir une attaque groupée</button>
-    </form>
-    <p class="muted">Vos alliés pourront rejoindre l'opération jusqu'à son arrivée.</p>
-    {{end}}
-    <p><a href="/planets/{{.Planet.ID}}/fleet/send">Modifier la mission</a></p>
   </section>
 {{end}}

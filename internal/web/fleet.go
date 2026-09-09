@@ -101,12 +101,20 @@ func missionChoices() []fleetPageMissionChoice {
 
 type fleetConfirmPageData struct {
 	pageShell
-	Planet        appeconomy.Planet
-	Form          fleetForm
-	Plan          domainfleet.Plan
-	ArrivesISO    string
-	ReturnsISO    string
-	MissionName   string
+	Planet      appeconomy.Planet
+	Form        fleetForm
+	Plan        domainfleet.Plan
+	ArrivesISO  string
+	ReturnsISO  string
+	MissionName string
+	// MaxMetal, MaxCrystal and MaxDeuterium bound each cargo field here, where
+	// the fuel is known at last: what the stores hold, never more than the hold
+	// the fuel leaves, and the deuterium short of the fuel it must also pay.
+	MaxMetal      int64
+	MaxCrystal    int64
+	MaxDeuterium  int64
+	Loaded        int64
+	Free          int64
 	LaunchKey     string
 	OperationKey  string
 	GroupedAttack bool
@@ -219,6 +227,32 @@ func (h *Handler) renderFleetSend(response http.ResponseWriter, request *http.Re
 	})
 }
 
+// editFleetSend takes a confirmation back to the form that composed it. The
+// confirmation already reposts every field the wizard reads, so the mission
+// comes back whole instead of the form reopening empty.
+func (h *Handler) editFleetSend(response http.ResponseWriter, request *http.Request) {
+	principal, _, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if !h.validCSRF(response, request) {
+		return
+	}
+	planetID, ok := h.planetParameter(response, request)
+	if !ok || h.fleet == nil {
+		if ok {
+			http.NotFound(response, request)
+		}
+		return
+	}
+	form, err := parseFleetForm(request)
+	if err != nil {
+		h.renderFleetSend(response, request, http.StatusBadRequest, principal, planetID, form, "Formulaire invalide.")
+		return
+	}
+	h.renderFleetSend(response, request, http.StatusOK, principal, planetID, form, "")
+}
+
 // previewFleet validates the wizard and shows the exact mission before it is
 // committed. Nothing is written at this point.
 func (h *Handler) previewFleet(response http.ResponseWriter, request *http.Request) {
@@ -281,10 +315,16 @@ func (h *Handler) previewFleet(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	shell := h.gameShell(request.Context(), token, principal, "fleet", planets, planetID)
+	stock := overview.Planet.Stock
 	data := fleetConfirmPageData{
 		pageShell: shell, Planet: overview.Planet, Form: form, Plan: plan,
 		ArrivesISO: plan.ArrivesAt.Format(time.RFC3339), MissionName: missionName(domainfleet.Mission(form.Mission)),
-		LaunchKey: launchKey, OperationKey: operationKey,
+		MaxMetal:     smallest(plan.Capacity, stock.Metal),
+		MaxCrystal:   smallest(plan.Capacity, stock.Crystal),
+		MaxDeuterium: smallest(plan.Capacity, stock.Deuterium-plan.Fuel),
+		Loaded:       form.CargoMetal + form.Crystal + form.Deuterium,
+		Free:         plan.Capacity - (form.CargoMetal + form.Crystal + form.Deuterium),
+		LaunchKey:    launchKey, OperationKey: operationKey,
 	}
 	if plan.ReturnsAt != nil {
 		data.ReturnsISO = plan.ReturnsAt.Format(time.RFC3339)
@@ -465,6 +505,19 @@ func sortedUnitIDs(composition map[unit.ID]int64) []unit.ID {
 }
 
 // stationedShips lists the ships a planet may send, in catalogue order.
+// smallest bounds a cargo field, never below nothing: the fuel can take more
+// deuterium than the stores hold beside it, and a negative ceiling would let a
+// browser refuse a zero the server accepts.
+func smallest(first, second int64) int64 {
+	if second < first {
+		first = second
+	}
+	if first < 0 {
+		return 0
+	}
+	return first
+}
+
 // composedHold adds up the holds of a composition. It is fleet.Capacity without
 // its validation: a form is composed one field at a time and passes through
 // states the domain would refuse, and a page that showed nothing until the
@@ -581,6 +634,12 @@ func fleetError(err error) string {
 		return "Mission ou composition invalide."
 	case errors.Is(err, appfleet.ErrNotRecallable):
 		return "Cette flotte ne peut plus être rappelée."
+	case errors.Is(err, appfleet.ErrInvalidRequest):
+		// The key of a confirmation is signed with the cargo it was rendered
+		// with. Now that the cargo can be changed there, a step backwards can
+		// present a key that belongs to another loading, and it must be told
+		// apart from a mission the domain refused.
+		return "Cette confirmation n'est plus valable : vérifiez le chargement pour en obtenir une neuve."
 	default:
 		return "La flotte ne peut pas partir."
 	}

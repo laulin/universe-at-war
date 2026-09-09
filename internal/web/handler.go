@@ -323,6 +323,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /planets/{planet}/defense", handler.defensePage)
 	handler.mux.HandleFunc("GET /planets/{planet}/fleet", handler.fleetPage)
 	handler.mux.HandleFunc("GET /planets/{planet}/fleet/send", handler.fleetSendPage)
+	handler.mux.HandleFunc("POST /planets/{planet}/fleet/send", handler.editFleetSend)
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/preview", handler.previewFleet)
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/launch", handler.launchFleet)
 	handler.mux.HandleFunc("POST /fleets/{fleet}/recall", handler.recallFleet)
