@@ -946,6 +946,15 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	}
 	views := make([]buildingPageChoice, 0, len(choices))
 	for _, choice := range choices {
+		// One key per rendered card. A key derived from what the card asks for
+		// collided between two bodies of one account: the store holds the key per
+		// account, so a colony ordering the mine at a level the homeworld had
+		// already reached presented a key taken by another body, and its order
+		// was refused as an invalid request.
+		key, keyOK := h.formKey(response, "build")
+		if !keyOK {
+			return
+		}
 		reason := choiceReason(choice.Missing, planRefusal(choice.Refusal),
 			len(planet.Queue) >= planet.Rules.Progression.QueueLength, choice.Available && !choice.Affordable)
 		// A prerequisite that is still missing outranks an installation that is
@@ -967,7 +976,7 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 			Role:         buildingRole(choice.Definition.ID),
 			Requirements: requirementViews(choice.Requirements),
 			Offered:      choice.Available, AwaitingResources: choice.Available && !choice.Affordable,
-			Reason: reason, IdempotencyKey: fmt.Sprintf("%s:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
+			Reason: reason, IdempotencyKey: key,
 		})
 	}
 	shell := h.gameShell(request.Context(), token, principal, "planet", planets, planet.ID)

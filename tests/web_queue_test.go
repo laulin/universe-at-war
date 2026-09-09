@@ -208,8 +208,10 @@ func TestOrderingTheSameBuildingTwiceQueuesTwoLevels(t *testing.T) {
 			t.Fatalf("the queue does not show %q: %q", level, page)
 		}
 	}
-	// The card now offers the level after the queue, at its own price.
-	if !strings.Contains(page, `value="csrf-token:metal_mine:4"`) {
+	// The card now offers the level after the queue, at its own price. Its key
+	// says nothing about the level any more, so the level it announces is what
+	// holds it to the queue.
+	if !strings.Contains(page, `<h3 class="card__title">Mine de métal <span class="muted">niveau 4</span></h3>`) {
 		t.Fatalf("the card still offers a level the queue already reaches: %q", page)
 	}
 }
@@ -359,5 +361,75 @@ func TestOrderingTheSameBatchAgainAfterItFinishedIsANewOrder(t *testing.T) {
 	}
 	if second.Queue[0].ID == first.Queue[0].ID {
 		t.Fatalf("the second order is the first one over again: %#v", second.Queue[0])
+	}
+}
+
+// A key that describes what the form asks for collides between two bodies of one
+// account. The store holds the key per account, and two worlds ordering the same
+// building at the same level describe the same request under different
+// coordinates. The second order was refused as invalid, so a colony could not
+// raise a mine to a level the homeworld had already reached.
+func TestOrderingTheSameBuildingOnTwoBodiesQueuesBoth(t *testing.T) {
+	ctx := context.Background()
+	handler, universeWorld, principal, session, csrf := queuedWeb(t)
+	colony := insertPlanet(t, ctx, universeWorld.Database, 1, "Colonie", 1, 1, 3)
+	setResources(t, ctx, universeWorld.Database, colony, 5_000_000, 5_000_000, 5_000_000)
+
+	for _, planetID := range []int64{1, colony} {
+		action := fmt.Sprintf("/planets/%d/buildings/metal_mine", planetID)
+		page := getPage(t, handler, fmt.Sprintf("/planets/%d", planetID), session, csrf)
+		key := formValue(t, page, `action="`+action+`"`, "idempotency_key")
+		request := postFormRequest(action,
+			url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {key}})
+		request.AddCookie(session)
+		request.AddCookie(csrf)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusSeeOther {
+			t.Fatalf("the mine of body %d = %d %q", planetID, recorder.Code, recorder.Body.String())
+		}
+	}
+
+	for _, planetID := range []int64{1, colony} {
+		planet, err := universeWorld.Economy.Planet(ctx, principal, planetID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(planet.Queue) != 1 {
+			t.Fatalf("body %d holds %d orders, want the one mine it ordered", planetID, len(planet.Queue))
+		}
+		if planet.Queue[0].Building != building.MetalMine {
+			t.Fatalf("body %d queued %q instead of the mine", planetID, planet.Queue[0].Building)
+		}
+	}
+}
+
+// The key no longer describes the order, so this is what still holds the double
+// click: one rendered form carries one key, and posting that key twice must
+// leave one order rather than two.
+func TestPostingOneKeyTwiceLeavesOneOrder(t *testing.T) {
+	ctx := context.Background()
+	handler, universeWorld, principal, session, csrf := queuedWeb(t)
+	page := getPage(t, handler, "/planets/1", session, csrf)
+	key := formValue(t, page, `action="/planets/1/buildings/metal_mine"`, "idempotency_key")
+
+	for attempt := range 2 {
+		request := postFormRequest("/planets/1/buildings/metal_mine",
+			url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {key}})
+		request.AddCookie(session)
+		request.AddCookie(csrf)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusSeeOther {
+			t.Fatalf("post %d = %d %q", attempt, recorder.Code, recorder.Body.String())
+		}
+	}
+
+	planet, err := universeWorld.Economy.Planet(ctx, principal, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(planet.Queue) != 1 {
+		t.Fatalf("the same key twice left %d orders, want the one it paid for", len(planet.Queue))
 	}
 }
