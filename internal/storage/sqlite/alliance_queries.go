@@ -172,6 +172,10 @@ func loadProfile(ctx context.Context, tx *sql.Tx, allianceID int64, now time.Tim
 	if err != nil {
 		return appalliance.Profile{}, err
 	}
+	profile.Received, err = loadReceivedRelations(ctx, tx, allianceID)
+	if err != nil {
+		return appalliance.Profile{}, err
+	}
 	profile.History, err = loadHistory(ctx, tx, allianceID)
 	if err != nil {
 		return appalliance.Profile{}, err
@@ -239,13 +243,30 @@ func pendingInvitations(ctx context.Context, tx *sql.Tx, condition string, argum
 	return invitations, rows.Err()
 }
 
+// loadRelations reads what an alliance has declared about others.
 func loadRelations(ctx context.Context, tx *sql.Tx, allianceID int64) ([]appalliance.Relation, error) {
-	rows, err := tx.QueryContext(ctx, `
+	return readRelations(ctx, tx, `
 		SELECT r.other_alliance_id, a.name, a.tag, r.relation, r.declared_at
 		FROM alliance_relations r JOIN alliances a ON a.id = r.other_alliance_id
 		WHERE r.alliance_id = ?
 		ORDER BY a.tag
 	`, allianceID)
+}
+
+// loadReceivedRelations reads what others have declared about this alliance.
+// Being told is legitimate knowledge: a declaration is an announcement, and
+// answering one is the whole of what diplomacy between alliances rests on.
+func loadReceivedRelations(ctx context.Context, tx *sql.Tx, allianceID int64) ([]appalliance.Relation, error) {
+	return readRelations(ctx, tx, `
+		SELECT r.alliance_id, a.name, a.tag, r.relation, r.declared_at
+		FROM alliance_relations r JOIN alliances a ON a.id = r.alliance_id
+		WHERE r.other_alliance_id = ?
+		ORDER BY a.tag
+	`, allianceID)
+}
+
+func readRelations(ctx context.Context, tx *sql.Tx, query string, allianceID int64) ([]appalliance.Relation, error) {
+	rows, err := tx.QueryContext(ctx, query, allianceID)
 	if err != nil {
 		return nil, fmt.Errorf("alliance repository: read relations: %w", err)
 	}

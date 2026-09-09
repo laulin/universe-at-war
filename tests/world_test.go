@@ -138,7 +138,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Brain: &ai.Brain{
 			Clock: clock, Thinking: thinking, Economy: economy, Research: research, Shipyard: shipyard,
 			Fleet: fleetService, Reports: reportsService, Galaxy: galaxyService,
-			Teamwork: appai.Teamwork{Shared: aiRepository}, Operations: operations,
+			Teamwork: appai.Teamwork{Shared: aiRepository}, Diplomacy: alliance, Operations: operations,
 			Catalogues: catalogues,
 		},
 	}

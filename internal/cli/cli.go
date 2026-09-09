@@ -394,6 +394,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Reports:    reports,
 		Galaxy:     galaxy,
 		Teamwork:   appai.Teamwork{Shared: aiRepository},
+		Diplomacy:  alliance,
 		Operations: operations,
 		Catalogues: catalogues,
 		Logger:     logger,

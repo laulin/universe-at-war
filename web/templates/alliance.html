@@ -74,6 +74,13 @@
       {{range .Profile.Relations}}<li>{{.OtherName}} [{{.OtherTag}}] — {{.Kind}} depuis le {{.DeclaredAt.Format "2006-01-02"}}</li>{{end}}
     </ul>
     {{else}}<p class="muted">Aucune relation déclarée.</p>{{end}}
+
+    <h4>Déclarations reçues</h4>
+    {{if .Profile.Received}}
+    <ul>
+      {{range .Profile.Received}}<li>{{.OtherName}} [{{.OtherTag}}] — {{.Kind}} depuis le {{.DeclaredAt.Format "2006-01-02"}}</li>{{end}}
+    </ul>
+    {{else}}<p class="muted">Aucune alliance ne s'est déclarée à votre égard.</p>{{end}}
     {{if .CanDiplomacy}}
     <form method="post" action="/alliance/diplomacy" aria-labelledby="diplomacy-title">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

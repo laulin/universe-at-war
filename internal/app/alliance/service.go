@@ -76,6 +76,9 @@ type Profile struct {
 	Members     []Member
 	Invitations []Invitation
 	Relations   []Relation
+	// Received is what other alliances have declared about this one. A relation
+	// announces, and an announcement nobody can hear announces nothing.
+	Received    []Relation
 	History     []Entry
 	MaximumSize int
 	Diplomacy   bool
