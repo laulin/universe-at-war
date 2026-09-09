@@ -76,6 +76,11 @@ type Request struct {
 	Archetype domainai.Archetype
 	Window    domainai.Window
 	Interval  time.Duration
+	// Home is the corner of the map the empire aims for, and settles at the
+	// first free position from there. A coordinate that names nothing takes the
+	// first free position of the universe, which is what the administration
+	// form asks for.
+	Home universe.Coordinate
 }
 
 // Seeds hands out the unpredictable seed each artificial player keeps for life.
@@ -86,7 +91,7 @@ type Seeds interface {
 // Empires creates the empire of a new artificial player through the same use
 // case a human goes through.
 type Empires interface {
-	CreateEmpire(context.Context, appauth.Principal, string) (appeconomy.Planet, error)
+	CreateEmpireNear(context.Context, appauth.Principal, string, universe.Coordinate) (appeconomy.Planet, error)
 }
 
 // Repository is the atomic persistence boundary of the artificial players.
@@ -113,17 +118,29 @@ type Service struct {
 // DiaryLength is how many decisions an inspection brings back.
 const DiaryLength = 25
 
-// Create adds an artificial player: an account without any credential, an
-// empire founded like any other, and a character.
+// Create adds an artificial player at the request of an administrator: an
+// account without any credential, an empire founded like any other, and a
+// character.
 func (s Service) Create(ctx context.Context, principal appauth.Principal, request Request) (Profile, error) {
 	if err := s.validate(principal); err != nil {
 		return Profile{}, err
 	}
+	return s.create(ctx, request)
+}
+
+// create is the birth itself, held apart from the question of who asked for it.
+// Two callers reach it: the administration form, which asks in the name of a
+// logged-in administrator, and the population the ruleset ordered, which nobody
+// is logged in for. Both are administration, neither is play, and the player
+// that comes out of either has exactly the privileges of a human — none.
+func (s Service) create(ctx context.Context, request Request) (Profile, error) {
 	name := strings.TrimSpace(request.Name)
 	if len(name) < 3 || len(name) > 32 {
 		return Profile{}, ErrInvalidRequest
 	}
-	if s.Seeds == nil || s.Empires == nil {
+	// The clock and the repository are checked here rather than only where a
+	// principal is, because a caller that needs no principal still needs them.
+	if s.Clock == nil || s.Repository == nil || s.Seeds == nil || s.Empires == nil {
 		return Profile{}, errors.New("ai: incomplete service dependencies")
 	}
 	seed, err := s.Seeds.Seed()
@@ -146,7 +163,7 @@ func (s Service) Create(ctx context.Context, principal appauth.Principal, reques
 		return Profile{}, err
 	}
 	profile.AccountID = accountID
-	if _, err := s.Empires.CreateEmpire(ctx, appauth.Principal{AccountID: accountID}, name); err != nil {
+	if _, err := s.Empires.CreateEmpireNear(ctx, appauth.Principal{AccountID: accountID}, name, request.Home); err != nil {
 		// A player without a world would only ever record its own impotence.
 		_ = s.Repository.DisableAccount(ctx, accountID, now)
 		return Profile{}, err
@@ -234,6 +251,16 @@ type Enlistment struct {
 func (s Service) Enlist(ctx context.Context, principal appauth.Principal, playerID int64, name, tag string) error {
 	if err := s.validate(principal); err != nil {
 		return err
+	}
+	return s.enlist(ctx, playerID, name, tag)
+}
+
+// enlist is the enrolment itself, held apart from who asked for it, exactly as
+// create is. It takes no shortcut either: the alliance is founded, or a member
+// who may invite invites and the recruit accepts.
+func (s Service) enlist(ctx context.Context, playerID int64, name, tag string) error {
+	if s.Repository == nil {
+		return errors.New("ai: incomplete service dependencies")
 	}
 	if playerID <= 0 || strings.TrimSpace(name) == "" || strings.TrimSpace(tag) == "" {
 		return ErrInvalidRequest
