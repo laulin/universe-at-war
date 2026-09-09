@@ -23,7 +23,11 @@ fournissait le prérequis.
 
 Le laboratoire ne s'améliore pas tant qu'une recherche est active ou en attente,
 et réciproquement une recherche ne démarre pas tant que le laboratoire est
-quelque part dans la file de construction de sa planète.
+quelque part dans la file de construction de sa planète. L'exclusion vaut dans
+les deux sens et porte sur les files entières, non sur l'ordre en cours. Elle est
+lue avec le corps, de sorte que l'écran qui propose une progression et la
+transaction qui l'accepte appliquent la même règle au même instant : un écran qui
+l'ignorerait proposerait un bouton dont le seul aboutissement est un refus.
 
 Le laboratoire de la planète de lancement détermine la durée. Le réseau de
 recherche intergalactique y ajoute les laboratoires des autres planètes du
@@ -131,8 +135,10 @@ vaut 4 et la durée tombe à 576 secondes. Astrophysique niveau 2 coûte
 ## Cas limites et invariants
 
 Le niveau cible vaut exactement le niveau courant plus un. Un prérequis manquant,
-une ressource manquante ou une énergie insuffisante refusent le démarrage sans
-aucune mutation. Deux recherches simultanées sont impossibles, y compris avec
+une ressource manquante, une énergie insuffisante ou un laboratoire en cours
+d'agrandissement refusent le démarrage sans aucune mutation. Chaque refus se
+distingue des autres et se dit dans la langue du joueur : un message unique
+devrait deviner, et une mauvaise devinette envoie chercher au mauvais endroit. Deux recherches simultanées sont impossibles, y compris avec
 plusieurs planètes. Un coût ou une durée non représentable est refusé, jamais
 saturé silencieusement. Le graphe de prérequis est acyclique et validé à
 l'activation d'un ruleset.
@@ -144,4 +150,5 @@ exclusion d'un laboratoire distant trop faible ; refus d'un cycle et d'un
 prérequis manquant ; impossibilité de deux recherches concurrentes ; double
 dépense et double soumission ; achèvement exactement une fois après redélivrance
 simulée ; conservation des horaires d'une recherche en cours après changement de
-ruleset ; fuzz des formules de coût.
+ruleset ; fuzz des formules de coût ; laboratoire en file de construction :
+aucun formulaire proposé, et refus nommé si un ordre part quand même.
