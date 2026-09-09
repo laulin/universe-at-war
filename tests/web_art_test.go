@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/unit"
 	webhandler "universeatwar/internal/web"
 	webassets "universeatwar/web"
@@ -40,15 +41,54 @@ func TestArtSlotsAlwaysRenderAnImage(t *testing.T) {
 // A slot no artwork has reached yet still answers, with a placeholder cached for
 // a day rather than for a year: the next build may fill it.
 func TestArtDrawsAPlaceholderForAnEmptySlot(t *testing.T) {
-	recorder := fetch(artHandler(t), "/art/building/metal_mine")
+	recorder := fetch(artHandler(t), "/art/building/test_placeholder")
 	if recorder.Code != http.StatusOK {
-		t.Fatalf("GET /art/building/metal_mine = %d", recorder.Code)
+		t.Fatalf("GET /art/building/test_placeholder = %d", recorder.Code)
 	}
 	if body := recorder.Body.String(); !strings.HasPrefix(body, "<svg") {
 		t.Fatalf("an empty slot did not draw a placeholder: %q", body)
 	}
 	if cache := recorder.Header().Get("Cache-Control"); cache != "public, max-age=86400" {
 		t.Fatalf("placeholder cache control = %q", cache)
+	}
+}
+
+// The resource page exposes every planetary building, so each of those slots
+// must contain real artwork. Lunar buildings may keep their placeholders until
+// their own masters arrive, but any embedded building picture must still name
+// an entry from the catalogue.
+func TestEveryPlanetBuildingOfTheCatalogueIsIllustrated(t *testing.T) {
+	handler := artHandler(t)
+	catalogue := building.DefaultCatalogue()
+	known := map[string]bool{}
+
+	for _, definition := range catalogue.Definitions() {
+		slug := string(definition.ID)
+		known[slug] = true
+		if definition.Placement != building.OnPlanet {
+			continue
+		}
+		recorder := fetch(handler, "/art/building/"+slug)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("GET /art/building/%s = %d", slug, recorder.Code)
+		}
+		if contentType := recorder.Header().Get("Content-Type"); contentType != "image/webp" {
+			t.Fatalf("/art/building/%s served %q: the slot has no artwork", slug, contentType)
+		}
+		if cache := recorder.Header().Get("Cache-Control"); !strings.Contains(cache, "immutable") {
+			t.Fatalf("/art/building/%s cache control = %q", slug, cache)
+		}
+	}
+
+	entries, err := fs.ReadDir(webassets.Files, "static/art/building")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		slug := strings.TrimSuffix(entry.Name(), path.Ext(entry.Name()))
+		if !known[slug] {
+			t.Fatalf("static/art/building/%s fills no slot of the catalogue", entry.Name())
+		}
 	}
 }
 
