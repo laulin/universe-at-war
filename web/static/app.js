@@ -1,6 +1,9 @@
-// Decorative countdowns, progress bars and stock counters only: the server
-// renders authoritative absolute times, a correct bar value and the stock it
-// vouched for, and every page stays correct without JavaScript.
+// Decorative countdowns, bars, counters and conveniences only: the server
+// renders authoritative absolute times, a correct bar value, the stock it
+// vouched for and every figure a form is bounded by, and every page stays
+// correct without JavaScript. A control that only works with a script is
+// rendered away and revealed here, so a page without one is never offered a
+// button that does nothing.
 (() => {
   "use strict";
 
@@ -42,6 +45,86 @@
   const counters = Array.from(document.querySelectorAll("[data-stock]"));
   // A form the server disabled for want of resources, and the price it waits for.
   const awaiting = Array.from(document.querySelectorAll("form[data-cost-metal]"));
+
+  // Everything below this point is wired before the guard that follows it: what
+  // comes after that guard only runs on a page that ticks, and a form is not
+  // that kind of page.
+
+  // The server writes the ceiling of a field on the field itself, so a button
+  // that fills it to the brim needs no figure of its own. It is rendered away
+  // and revealed here: without a script there is no button rather than a dead
+  // one. A field the server disabled arrives disabled too, and is freed with
+  // its field once the stock is there — never before, or it would fill in the
+  // ceiling of a batch nobody can pay for yet.
+  for (const button of document.querySelectorAll("button[data-max-for]")) {
+    const field = document.getElementById(button.dataset.maxFor);
+    if (!field) {
+      continue;
+    }
+    button.hidden = false;
+    button.addEventListener("click", () => {
+      field.value = field.max;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  // How much a fleet can still carry. On the send form the hold is the sum of
+  // what the chosen ships hold, which is the very arithmetic the domain uses;
+  // on the confirmation the server has already taken the fuel out of it and
+  // says so in one figure. Either way the loading is the player's own three
+  // numbers, so the remainder is arithmetic and never a rule.
+  const hold = document.querySelector("[data-hold]");
+  if (hold) {
+    const holds = Array.from(document.querySelectorAll("[data-cargo]"));
+    const loads = Array.from(document.querySelectorAll("[data-load]"));
+    const shown = (name) => hold.querySelector(`[data-hold-${name}]`);
+    const measure = () => {
+      const fixed = Number(hold.dataset.hold);
+      const capacity = Number.isFinite(fixed) && hold.dataset.hold !== ""
+        ? fixed
+        : holds.reduce((total, ship) => total + Number(ship.dataset.cargo || 0) * Number(ship.value || 0), 0);
+      const loaded = loads.reduce((total, field) => total + Number(field.value || 0), 0);
+      const free = capacity - loaded;
+      for (const [name, value] of [["capacity", capacity], ["loaded", loaded], ["free", free]]) {
+        const node = shown(name);
+        if (node) {
+          node.textContent = figure(value);
+        }
+      }
+      hold.classList.toggle("is-over", free < 0);
+      // The ceiling of one field is what the stores hold, lowered by the room
+      // the other two have already taken. The server's figure is only ever
+      // lowered here: it is a floor the page has no business raising.
+      for (const field of loads) {
+        const stock = Number(field.dataset.stockMax);
+        if (!Number.isFinite(stock)) {
+          continue;
+        }
+        const room = capacity - (loaded - Number(field.value || 0));
+        field.max = String(Math.max(0, Math.min(stock, room)));
+      }
+    };
+    for (const field of holds.concat(loads)) {
+      field.addEventListener("input", measure);
+    }
+    measure();
+  }
+
+  // A holding time belongs to one mission out of eight, and shown beside the
+  // seven it means nothing to it reads like a field the player forgot. The
+  // server is unmoved either way: it asks for the time when the mission needs
+  // one and ignores it otherwise, so a page without JavaScript merely shows a
+  // field too many.
+  const missionField = document.getElementById("mission");
+  const holdField = document.getElementById("hold-field");
+  if (missionField && holdField) {
+    const showHold = () => {
+      holdField.hidden = missionField.value !== "hold";
+    };
+    missionField.addEventListener("change", showHold);
+    showHold();
+  }
+
   if (countdowns.length === 0 && bars.length === 0 && counters.length === 0 && awaiting.length === 0) {
     return;
   }
@@ -155,21 +238,6 @@
       askForRefresh();
     }
   };
-
-  // A holding time belongs to one mission out of eight, and shown beside the
-  // seven it means nothing to it reads like a field the player forgot. The
-  // server is unmoved either way: it asks for the time when the mission needs
-  // one and ignores it otherwise, so a page without JavaScript merely shows a
-  // field too many.
-  const missionField = document.getElementById("mission");
-  const holdField = document.getElementById("hold-field");
-  if (missionField && holdField) {
-    const showHold = () => {
-      holdField.hidden = missionField.value !== "hold";
-    };
-    missionField.addEventListener("change", showHold);
-    showHold();
-  }
 
   tick();
   window.setInterval(tick, 1000);

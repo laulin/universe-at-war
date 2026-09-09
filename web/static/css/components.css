@@ -366,6 +366,13 @@ label { display: grid; gap: var(--space-1); font-size: var(--text-sm); }
 /* The rule above outranks the browser's own rule for [hidden], so a label the
    page puts away has to be told a second time. */
 label[hidden] { display: none; }
+/* A field and the button that fills it to its ceiling belong on one line. The
+   button is put away by the server and revealed by the script, so the rule
+   above applies to it too: it is told a second time to go away. */
+.field-row { display: flex; align-items: center; gap: var(--space-2); }
+.field-row > input { flex: 1 1 auto; min-width: 0; }
+.field-row > button { flex: 0 0 auto; padding: var(--space-2) var(--space-3); }
+.field-row > button[hidden] { display: none; }
 input, select, textarea {
   min-height: 2.35rem;
   padding: var(--space-2) var(--space-3);

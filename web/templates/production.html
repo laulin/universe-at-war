@@ -40,9 +40,13 @@
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
             <label for="quantity-{{.ID}}">Quantité{{if not .AwaitingResources}} (max {{figure .Maximum}}){{end}}</label>
-            <input id="quantity-{{.ID}}" name="quantity" type="number" min="1"
-                   max="{{if .AwaitingResources}}{{.OrderCeiling}}{{else}}{{.Maximum}}{{end}}"
-                   value="1" required{{if .AwaitingResources}} disabled{{end}}>
+            <span class="field-row">
+              <input id="quantity-{{.ID}}" name="quantity" type="number" min="1"
+                     max="{{if .AwaitingResources}}{{.OrderCeiling}}{{else}}{{.Maximum}}{{end}}"
+                     value="1" required{{if .AwaitingResources}} disabled{{end}}>
+              <button type="button" class="ghost" data-max-for="quantity-{{.ID}}"
+                      aria-label="Quantité maximale de {{.Name}}" hidden{{if .AwaitingResources}} disabled{{end}}>max</button>
+            </span>
             <button type="submit"{{if .AwaitingResources}} disabled{{end}}>Produire</button>
           </form>
           {{else}}<p class="muted">{{.Reason}}</p>{{end}}
