@@ -10,6 +10,8 @@ migrations et une horloge factice. Ils couvrent :
 - unicité de position et contraintes de soldes non négatifs en base ;
 - création d'empire atomique ;
 - double soumission avec la même clé d'idempotence ;
+- une clé par carte rendue : deux corps d'un même compte commandant le même
+  bâtiment au même niveau cible mettent chacun le leur en file ;
 - deux constructions concurrentes tentant de dépenser le même stock ;
 - mise en file de plusieurs constructions, chacune débitée à la commande ;
 - démarrage sans temps mort de l'ordre suivant, à la vitesse des usines du

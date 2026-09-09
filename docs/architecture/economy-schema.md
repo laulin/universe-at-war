@@ -42,6 +42,16 @@ planifié, avec la clé d'idempotence et le journal, avant un commit unique. Un
 ordre entré dans la file est donc toujours financé : il ne peut jamais caler
 faute de ressources.
 
+La clé d'idempotence qu'un formulaire porte appartient au formulaire rendu, et
+non à ce qu'il demande. Le magasin la retient par compte et non par corps : une
+clé décrivant la requête — le bâtiment et le niveau visé — était donc présentée à
+l'identique par deux mondes d'un même joueur, et le second ordre était refusé
+comme une requête ne correspondant pas à sa clé. Chaque carte reçoit désormais
+une clé tirée au hasard. Ce qui retient le double clic n'est pas ce que la clé
+dit, mais le fait qu'un formulaire rendu n'en porte qu'une, que le magasin
+reconnaît au second envoi. La même règle vaut pour la recherche, dont les niveaux
+appartiennent au joueur, et pour le chantier.
+
 L'achèvement règle d'abord la production à `due_at` avec les anciens niveaux,
 applique le nouveau niveau, consomme une case, ferme file et événement, écrit
 `building_completed`, puis **promeut la ligne suivante dans la même

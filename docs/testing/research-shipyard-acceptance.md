@@ -40,6 +40,10 @@
     pages répondent avec un état vide.
 16. Une progression complète mène d'un empire nu au laboratoire, à une
     technologie, au chantier spatial, puis à des vaisseaux et des défenses.
+17. Une clé de formulaire n'appartient qu'à la carte qui la porte : deux corps
+    d'un même compte commandent chacun leur lot de chasseurs, et les pages de
+    recherche de deux corps offrent une même technologie sous deux clés
+    distinctes.
 
 ## Contrôles
 
