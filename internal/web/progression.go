@@ -151,6 +151,14 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 	}
 	choices := make([]researchPageChoice, 0, len(overview.Choices))
 	for _, choice := range overview.Choices {
+		// One key per rendered card. Levels belong to the player, so every body
+		// offers the same next level at the same moment: a key naming that level
+		// was handed out by two pages at once, and the store holds it per account,
+		// so whichever body posted second was refused as an invalid request.
+		key, keyOK := h.formKey(response, "research")
+		if !keyOK {
+			return
+		}
 		view := researchPageChoice{
 			ID: choice.Definition.ID, Name: researchName(choice.Definition.ID), Level: choice.Level,
 			TargetLevel: choice.Plan.TargetLevel, CostMetal: choice.Plan.Cost.Metal,
@@ -164,7 +172,7 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 			Requirements:      requirementViews(choice.Requirements),
 			Reason: researchChoiceReason(choice,
 				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength),
-			IdempotencyKey: fmt.Sprintf("%s:research:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
+			IdempotencyKey: key,
 		}
 		choices = append(choices, view)
 	}
@@ -283,6 +291,14 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 	catalogue := unit.DefaultCatalogue()
 	choices := make([]unitPageChoice, 0, len(overview.Choices))
 	for _, choice := range overview.Choices {
+		// One key per rendered card. Counting what the body had ever ordered told
+		// two batches apart on one world, but two worlds that had ordered nothing
+		// both stood at zero, and the store holds the key per account: the second
+		// body's batch was refused as an invalid request.
+		key, keyOK := h.formKey(response, "unit")
+		if !keyOK {
+			return
+		}
 		view := unitPageChoice{
 			ID: choice.Definition.ID, Name: unitName(choice.Definition.ID), Owned: choice.Owned,
 			CostMetal: choice.UnitCost.Metal, CostCrystal: choice.UnitCost.Crystal,
@@ -294,11 +310,7 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 			Reason: choiceReason(choice.Missing, choice.Reason,
 				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength,
 				choice.Available && choice.MaximumAffordable == 0),
-			// What the planet has ever ordered joins the key so that a second
-			// identical batch is a new order rather than a replay of the first.
-			// It only grows, unlike the length of the queue, which would come
-			// back round to a value a live order still holds.
-			IdempotencyKey: fmt.Sprintf("%s:unit:%s:%d", token, choice.Definition.ID, overview.Ordered[choice.Definition.ID]),
+			IdempotencyKey: key,
 			Weapon:         choice.Definition.Weapon,
 			Shield:         choice.Definition.Shield,
 			Hull:           choice.Definition.Hull(),

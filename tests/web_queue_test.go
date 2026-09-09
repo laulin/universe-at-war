@@ -433,3 +433,61 @@ func TestPostingOneKeyTwiceLeavesOneOrder(t *testing.T) {
 		t.Fatalf("the same key twice left %d orders, want the one it paid for", len(planet.Queue))
 	}
 }
+
+// The same collision reaches the yard, where the key names what the body has
+// ever ordered. Two worlds that have ordered nothing both stand at zero, so the
+// second one's batch presented a key the first had taken and was refused.
+func TestOrderingTheSameBatchOnTwoBodiesQueuesBoth(t *testing.T) {
+	ctx := context.Background()
+	handler, universeWorld, principal, session, csrf := queuedWeb(t)
+	colony := insertPlanet(t, ctx, universeWorld.Database, 1, "Colonie", 1, 1, 3)
+	for _, store := range []string{"metal_storage", "crystal_storage", "deuterium_tank"} {
+		setBuilding(t, ctx, universeWorld.Database, colony, store, 10)
+	}
+	setBuilding(t, ctx, universeWorld.Database, colony, "shipyard", 2)
+	setResources(t, ctx, universeWorld.Database, colony, 5_000_000, 5_000_000, 5_000_000)
+
+	for _, planetID := range []int64{1, colony} {
+		action := fmt.Sprintf("/planets/%d/shipyard/light_fighter", planetID)
+		page := getPage(t, handler, fmt.Sprintf("/planets/%d/shipyard", planetID), session, csrf)
+		key := formValue(t, page, `action="`+action+`"`, "idempotency_key")
+		request := postFormRequest(action,
+			url.Values{"csrf_token": {"csrf-token"}, "idempotency_key": {key}, "quantity": {"2"}})
+		request.AddCookie(session)
+		request.AddCookie(csrf)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusSeeOther {
+			t.Fatalf("the batch of body %d = %d %q", planetID, recorder.Code, recorder.Body.String())
+		}
+	}
+
+	for _, planetID := range []int64{1, colony} {
+		yard, err := universeWorld.Shipyard.Ships(ctx, principal, planetID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(yard.Queue) != 1 {
+			t.Fatalf("body %d holds %d batches, want the one it ordered", planetID, len(yard.Queue))
+		}
+	}
+}
+
+// Research levels belong to the player, so every body offers the same next level
+// at the same moment. A key that named that level and not the body was therefore
+// handed out twice, and whichever body posted second was refused.
+func TestTheResearchPagesOfTwoBodiesOfferDistinctKeys(t *testing.T) {
+	ctx := context.Background()
+	handler, universeWorld, _, session, csrf := queuedWeb(t)
+	colony := insertPlanet(t, ctx, universeWorld.Database, 1, "Colonie", 1, 1, 3)
+	setBuilding(t, ctx, universeWorld.Database, colony, "research_lab", 4)
+	setResources(t, ctx, universeWorld.Database, colony, 5_000_000, 5_000_000, 5_000_000)
+
+	homeKey := formValue(t, getPage(t, handler, "/planets/1/research", session, csrf),
+		`action="/planets/1/research/energy_technology"`, "idempotency_key")
+	colonyKey := formValue(t, getPage(t, handler, fmt.Sprintf("/planets/%d/research", colony), session, csrf),
+		fmt.Sprintf(`action="/planets/%d/research/energy_technology"`, colony), "idempotency_key")
+	if homeKey == colonyKey {
+		t.Fatalf("both bodies offer the research under one key %q", homeKey)
+	}
+}
