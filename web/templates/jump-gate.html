@@ -22,10 +22,11 @@
       <input type="hidden" name="idempotency_key" value="{{.CSRFToken}}:jump:{{.Moon.ID}}:{{.ReadyISO}}">
       <fieldset>
         <legend>Destination</legend>
-        <label for="destination">Lune</label>
-        <select id="destination" name="destination">
-          {{range .Destinations}}<option value="{{.MoonID}}"{{if not .Ready}} disabled{{end}}>{{.Name}} [{{.Coordinate}}]{{if not .Ready}} — en recharge{{end}}</option>{{end}}
-        </select>
+        <label for="destination">Lune
+          <select id="destination" name="destination">
+            {{range .Destinations}}<option value="{{.MoonID}}"{{if not .Ready}} disabled{{end}}>{{.Name}} [{{.Coordinate}}]{{if not .Ready}} — en recharge{{end}}</option>{{end}}
+          </select>
+        </label>
       </fieldset>
       <fieldset>
         <legend>Vaisseaux</legend>

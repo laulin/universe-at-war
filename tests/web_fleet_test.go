@@ -227,6 +227,49 @@ func TestWebFleetConfirmationRepostsEveryFieldTheLaunchReads(t *testing.T) {
 	}
 }
 
+// Every field sits inside the label that names it: two loose siblings in the
+// fieldset grid put the caption in one row and its box in the next. And a
+// refused mission comes back with the choices the player made, since a form
+// that quietly resets itself reads like a button that did nothing.
+func TestWebFleetSendFormKeepsItsFieldsAndItsChoices(t *testing.T) {
+	handler, database, session, csrfCookie := fleetHandler(t)
+	ctx := context.Background()
+	setUnits(t, ctx, database, 1, "small_cargo", 2)
+	setResources(t, ctx, database, 1, 5000, 500, 200)
+
+	send := getPage(t, handler, "/planets/1/fleet/send", session, csrfCookie)
+	for _, field := range []string{"galaxy", "system", "position", "mission", "hold_until", "speed",
+		"cargo_metal", "cargo_crystal", "cargo_deuterium"} {
+		label := betweenMarkers(send, `<label for="`+field+`"`, "</label>")
+		if !strings.Contains(label, ` id="`+field+`"`) {
+			t.Fatalf("the field %q sits outside the label that names it: %q", field, label)
+		}
+	}
+
+	// Probes only, says the domain, so a cargo ship on an espionage is refused
+	// well after the form itself was read: the page comes back with the choices.
+	refused := transportMission()
+	refused.Set("mission", "espionage")
+	refused.Set("speed", "50")
+	request := postFormRequest("/planets/1/fleet/preview", refused)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("POST an impossible preview = %d %q", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, kept := range []string{`value="espionage" selected`, `value="50" selected`} {
+		if !strings.Contains(body, kept) {
+			t.Fatalf("the refused form dropped %s: %q", kept, body)
+		}
+	}
+	if quantity := betweenMarkers(body, `id="ship-small_cargo"`, ">"); !strings.Contains(quantity, `value="2"`) {
+		t.Fatalf("the refused form dropped the quantity: %q", quantity)
+	}
+}
+
 func transportMission() url.Values {
 	return url.Values{
 		"csrf_token": {"csrf-token"}, "galaxy": {"1"}, "system": {"1"}, "position": {"1"},

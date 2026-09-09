@@ -355,7 +355,13 @@ input, select, textarea {
   font: inherit;
 }
 fieldset { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: var(--space-4); border: 0; padding: 0; }
-legend { grid-column: 1 / -1; font-size: var(--text-xl); font-weight: 700; margin-bottom: var(--space-4); }
+/* A caption of a fieldset names a part of a panel, so it reads like the panel's
+   own subsections rather than louder than the panel's title. The fieldset gap
+   already spaces it from the first field. */
+legend { grid-column: 1 / -1; color: var(--accent); font-size: var(--text-md); font-weight: 700; margin-bottom: var(--space-2); }
+/* Successive fieldsets are successive steps of one form, and a rule between them
+   says so where four stacked grids on their own do not. */
+fieldset + fieldset { border-top: 1px solid var(--border); padding-top: var(--space-4); }
 .check { display: flex; align-items: center; gap: var(--space-3); }
 
 /* One ship of a composition: its picture, its name and its quantity. The

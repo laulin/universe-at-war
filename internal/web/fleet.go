@@ -51,9 +51,38 @@ type fleetPageData struct {
 
 type fleetSendPageData struct {
 	pageShell
-	Planet appeconomy.Planet
-	Ships  []fleetPageShip
-	Form   fleetForm
+	Planet   appeconomy.Planet
+	Ships    []fleetPageShip
+	Missions []fleetPageMissionChoice
+	Speeds   []int
+	Form     fleetForm
+}
+
+// fleetPageMissionChoice is one entry of the mission list of the send form.
+type fleetPageMissionChoice struct {
+	ID   string
+	Name string
+}
+
+// sendableMissions are the missions the send form offers, in the order it shows
+// them. A jump belongs to a gate rather than to a flight, so it is not among
+// them, and the domain does not hold it valid here either.
+var sendableMissions = []domainfleet.Mission{
+	domainfleet.MissionTransport, domainfleet.MissionDeploy, domainfleet.MissionHold,
+	domainfleet.MissionAttack, domainfleet.MissionEspionage, domainfleet.MissionRecycle,
+	domainfleet.MissionColonize, domainfleet.MissionExpedition,
+}
+
+// fleetSpeeds are the shares of full speed a mission may fly at.
+var fleetSpeeds = []int{100, 90, 80, 70, 60, 50, 40, 30, 20, 10}
+
+// missionChoices names every sendable mission for the form.
+func missionChoices() []fleetPageMissionChoice {
+	choices := make([]fleetPageMissionChoice, 0, len(sendableMissions))
+	for _, mission := range sendableMissions {
+		choices = append(choices, fleetPageMissionChoice{ID: string(mission), Name: missionName(mission)})
+	}
+	return choices
 }
 
 type fleetConfirmPageData struct {
@@ -168,7 +197,8 @@ func (h *Handler) renderFleetSend(response http.ResponseWriter, request *http.Re
 	shell.Error = message
 	h.render(response, status, "fleet-send", fleetSendPageData{
 		pageShell: shell, Planet: overview.Planet,
-		Ships: stationedShips(overview.Stationed, h.shipCatalogue()), Form: form,
+		Ships:    stationedShips(overview.Stationed, h.shipCatalogue()),
+		Missions: missionChoices(), Speeds: fleetSpeeds, Form: form,
 	})
 }
 

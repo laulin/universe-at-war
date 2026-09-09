@@ -73,8 +73,9 @@
       <fieldset>
         <legend>Composition</legend>
         {{range $.Ships}}
-        <label for="ship-{{.ID}}">{{.Name}} (max {{figure .Owned}})</label>
-        <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="{{index $.Form.Composition .ID}}">
+        <label for="ship-{{.ID}}">{{.Name}} (max {{figure .Owned}})
+          <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="{{index $.Form.Composition .ID}}">
+        </label>
         {{end}}
       </fieldset>
       <button type="submit">{{if $.Preview}}Confirmer l'engagement{{else}}Calculer l'impact{{end}}</button>

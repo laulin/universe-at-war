@@ -12,58 +12,52 @@
         <div class="ship-picker">
           <img src="/art/ship/{{.ID}}" alt="" width="64" height="48" loading="lazy">
           <label for="ship-{{.ID}}">{{.Name}} (max {{figure .Owned}})</label>
-          <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="0">
+          <input id="ship-{{.ID}}" name="composition[{{.ID}}]" type="number" min="0" max="{{.Owned}}" value="{{index $.Form.Composition .ID}}">
         </div>
         {{end}}
       </fieldset>
       <fieldset>
         <legend>Destination</legend>
-        <label for="galaxy">Galaxie</label>
-        <input id="galaxy" name="galaxy" type="number" min="1" value="{{if .Form.Galaxy}}{{.Form.Galaxy}}{{else}}{{.Planet.Coordinate.Galaxy}}{{end}}" required>
-        <label for="system">Système</label>
-        <input id="system" name="system" type="number" min="1" value="{{if .Form.System}}{{.Form.System}}{{else}}{{.Planet.Coordinate.System}}{{end}}" required>
-        <label for="position">Position</label>
-        <input id="position" name="position" type="number" min="1" value="{{if .Form.Position}}{{.Form.Position}}{{else}}1{{end}}" required>
+        <label for="galaxy">Galaxie
+          <input id="galaxy" name="galaxy" type="number" min="1" value="{{if .Form.Galaxy}}{{.Form.Galaxy}}{{else}}{{.Planet.Coordinate.Galaxy}}{{end}}" required>
+        </label>
+        <label for="system">Système
+          <input id="system" name="system" type="number" min="1" value="{{if .Form.System}}{{.Form.System}}{{else}}{{.Planet.Coordinate.System}}{{end}}" required>
+        </label>
+        <label for="position">Position
+          <input id="position" name="position" type="number" min="1" value="{{if .Form.Position}}{{.Form.Position}}{{else}}1{{end}}" required>
+        </label>
       </fieldset>
       <fieldset>
         <legend>Mission</legend>
-        <label for="mission">Type</label>
-        <select id="mission" name="mission">
-          <option value="transport">Transport</option>
-          <option value="deploy">Déploiement</option>
-          <option value="hold">Défense alliée</option>
-          <option value="attack">Attaque</option>
-          <option value="espionage">Espionnage</option>
-          <option value="recycle">Recyclage</option>
-          <option value="colonize">Colonisation</option>
-          <option value="expedition">Expédition</option>
-        </select>
-        <label for="hold_until">Fin de garde (défense alliée)</label>
-        <input id="hold_until" name="hold_until" type="datetime-local" value="{{.Form.HoldUntil}}">
-        <label for="speed">Vitesse</label>
-        <select id="speed" name="speed">
-          <option value="100" selected>100 %</option>
-          <option value="90">90 %</option>
-          <option value="80">80 %</option>
-          <option value="70">70 %</option>
-          <option value="60">60 %</option>
-          <option value="50">50 %</option>
-          <option value="40">40 %</option>
-          <option value="30">30 %</option>
-          <option value="20">20 %</option>
-          <option value="10">10 %</option>
-        </select>
+        <label for="mission">Type
+          <select id="mission" name="mission">
+            {{range $.Missions}}<option value="{{.ID}}"{{if eq $.Form.Mission .ID}} selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+        </label>
+        <label for="hold_until" id="hold-field">Fin de garde (défense alliée)
+          <input id="hold_until" name="hold_until" type="datetime-local" value="{{.Form.HoldUntil}}">
+        </label>
+        <label for="speed">Vitesse
+          <select id="speed" name="speed">
+            {{range $.Speeds}}<option value="{{.}}"{{if eq $.Form.Speed .}} selected{{end}}>{{.}} %</option>{{end}}
+          </select>
+        </label>
       </fieldset>
       <fieldset>
         <legend>Cargo</legend>
-        <label for="cargo_metal">Métal</label>
-        <input id="cargo_metal" name="cargo_metal" type="number" min="0" value="{{.Form.CargoMetal}}">
-        <label for="cargo_crystal">Cristal</label>
-        <input id="cargo_crystal" name="cargo_crystal" type="number" min="0" value="{{.Form.Crystal}}">
-        <label for="cargo_deuterium">Deutérium</label>
-        <input id="cargo_deuterium" name="cargo_deuterium" type="number" min="0" value="{{.Form.Deuterium}}">
+        <label for="cargo_metal">Métal
+          <input id="cargo_metal" name="cargo_metal" type="number" min="0" value="{{.Form.CargoMetal}}">
+        </label>
+        <label for="cargo_crystal">Cristal
+          <input id="cargo_crystal" name="cargo_crystal" type="number" min="0" value="{{.Form.Crystal}}">
+        </label>
+        <label for="cargo_deuterium">Deutérium
+          <input id="cargo_deuterium" name="cargo_deuterium" type="number" min="0" value="{{.Form.Deuterium}}">
+        </label>
       </fieldset>
       <button type="submit">Calculer la mission</button>
+      <p class="muted">Vous verrez la distance, le carburant et l'heure d'arrivée avant de confirmer.</p>
     </form>
     {{else}}<p class="muted">Aucun vaisseau disponible sur cette planète.</p>{{end}}
   </section>
