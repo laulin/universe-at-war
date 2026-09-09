@@ -368,8 +368,16 @@ label { display: grid; gap: var(--space-1); font-size: var(--text-sm); }
 label[hidden] { display: none; }
 /* A field and the button that fills it to its ceiling belong on one line. The
    button is put away by the server and revealed by the script, so the rule
-   above applies to it too: it is told a second time to go away. */
-.field-row { display: flex; align-items: center; gap: var(--space-2); }
+   above applies to it too: it is told a second time to go away.
+
+   The row is allowed to be narrower than its field would like to be. A number
+   field is as wide as the longest value its ceiling admits, and the row sits in
+   a form laid out as a grid, whose automatic column refuses to shrink below what
+   it holds: a ceiling of a million therefore widened the column past the card
+   and pushed the button over the edge, into the card beside it. That happens on
+   any card whose ceiling has enough digits, not only on one the player cannot
+   pay for yet. The field shrinks into the row instead. */
+.field-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .field-row > input { flex: 1 1 auto; min-width: 0; }
 .field-row > button { flex: 0 0 auto; padding: var(--space-2) var(--space-3); }
 .field-row > button[hidden] { display: none; }

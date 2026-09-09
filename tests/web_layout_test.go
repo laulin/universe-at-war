@@ -143,3 +143,28 @@ func TestVisitingABodyRemembersIt(t *testing.T) {
 	}
 	t.Fatalf("visiting a body did not remember it: %v", recorder.Result().Cookies())
 }
+
+// A number field is as wide as the longest value its ceiling admits, and the row
+// that carries it beside its "max" button sits in a form laid out as a grid. An
+// automatic grid column does not shrink below what it holds, so an order ceiling
+// of a million widened the column past the card and pushed the button over the
+// edge, into the card beside it. Only a browser measures that; what a test holds
+// is the rule that lets the row be narrower than its field wants to be.
+func TestTheFieldRowMayBeNarrowerThanItsField(t *testing.T) {
+	handler, _, _ := playableHandler(t)
+	assets := httptest.NewRecorder()
+	handler.ServeHTTP(assets, httptest.NewRequest(http.MethodGet, "/static/css/components.css", nil))
+	if assets.Code != http.StatusOK {
+		t.Fatalf("GET /static/css/components.css = %d", assets.Code)
+	}
+	sheet := assets.Body.String()
+	at := strings.Index(sheet, "\n.field-row {")
+	if at < 0 {
+		t.Fatalf("the stylesheet carries no .field-row rule")
+	}
+	rule := sheet[at+1:]
+	rule = rule[:strings.Index(rule, "}")+1]
+	if !strings.Contains(rule, "min-width: 0") {
+		t.Fatalf("the row is held to the natural width of its field: %q", rule)
+	}
+}
