@@ -39,7 +39,11 @@ func (r *EconomyRepository) RegisterHandlers(processor *EventProcessor) {
 	})
 }
 
-func (r *EconomyRepository) CreateEmpire(ctx context.Context, accountID int64, name string, now time.Time) (appeconomy.Planet, error) {
+// CreateEmpireNear founds an empire whose home world is the first free
+// position at or after `near`, wrapping around the map. A coordinate that names
+// nothing starts the walk at the beginning of the universe, which is what a
+// registration has always asked for.
+func (r *EconomyRepository) CreateEmpireNear(ctx context.Context, accountID int64, name string, near universe.Coordinate, now time.Time) (appeconomy.Planet, error) {
 	tx, err := r.write.BeginTx(ctx, nil)
 	if err != nil {
 		return appeconomy.Planet{}, fmt.Errorf("economy repository: begin empire: %w", err)
@@ -57,7 +61,7 @@ func (r *EconomyRepository) CreateEmpire(ctx context.Context, accountID int64, n
 	if err != nil {
 		return appeconomy.Planet{}, err
 	}
-	coordinate, err := firstFreeCoordinate(ctx, tx, configured)
+	coordinate, err := freeCoordinateFrom(ctx, tx, configured, near)
 	if err != nil {
 		return appeconomy.Planet{}, err
 	}
@@ -65,6 +69,13 @@ func (r *EconomyRepository) CreateEmpire(ctx context.Context, accountID int64, n
 	result, err := tx.ExecContext(ctx, "INSERT INTO players(account_id, display_name, created_at) VALUES (?, ?, ?)", accountID, name, timestamp(now))
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
+			// The insert trips either on the account, which already owns an
+			// empire, or on the display name, which somebody else wears. A
+			// population founded from a list of names has to tell the two
+			// apart, so it can step over a name instead of giving up.
+			if strings.Contains(err.Error(), "display_name") {
+				return appeconomy.Planet{}, appeconomy.ErrNameTaken
+			}
 			return appeconomy.Planet{}, appeconomy.ErrEmpireExists
 		}
 		return appeconomy.Planet{}, fmt.Errorf("economy repository: create player: %w", err)
@@ -109,29 +120,67 @@ func (r *EconomyRepository) CreateEmpire(ctx context.Context, accountID int64, n
 	return planet, nil
 }
 
-func firstFreeCoordinate(ctx context.Context, tx *sql.Tx, configured rules.Ruleset) (universe.Coordinate, error) {
-	preferred := (configured.Topology.PositionsPerSystem + 1) / 2
-	for galaxy := 1; galaxy <= configured.Topology.Galaxies; galaxy++ {
-		for system := 1; system <= configured.Topology.SystemsPerGalaxy; system++ {
-			positions := make([]int, 0, configured.Topology.PositionsPerSystem)
-			positions = append(positions, preferred)
-			for position := 1; position <= configured.Topology.PositionsPerSystem; position++ {
-				if position != preferred {
-					positions = append(positions, position)
-				}
-			}
-			for _, position := range positions {
-				var occupied int
-				if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM planets WHERE galaxy = ? AND system = ? AND position = ?)", galaxy, system, position).Scan(&occupied); err != nil {
-					return universe.Coordinate{}, fmt.Errorf("economy repository: inspect position: %w", err)
-				}
-				if occupied == 0 {
-					return universe.Coordinate{Galaxy: galaxy, System: system, Position: position}, nil
-				}
+// freeCoordinateFrom walks the map from `from`, wrapping around its end, and
+// returns the first position no body occupies. A coordinate that names nothing
+// starts the walk at the first system and prefers the temperate middle
+// position, which is where every empire was founded before a whole population
+// had to be spread out.
+func freeCoordinateFrom(ctx context.Context, tx *sql.Tx, configured rules.Ruleset, from universe.Coordinate) (universe.Coordinate, error) {
+	limits := universe.Limits{
+		Galaxies:  configured.Topology.Galaxies,
+		Systems:   configured.Topology.SystemsPerGalaxy,
+		Positions: configured.Topology.PositionsPerSystem,
+	}
+	start := from
+	if start.Validate(limits) != nil {
+		start = universe.Coordinate{Galaxy: 1, System: 1, Position: (limits.Positions + 1) / 2}
+	}
+	order := make([]int, 0, limits.Positions)
+	order = append(order, start.Position)
+	for position := 1; position <= limits.Positions; position++ {
+		if position != start.Position {
+			order = append(order, position)
+		}
+	}
+	systems := limits.Galaxies * limits.Systems
+	offset := (start.Galaxy-1)*limits.Systems + start.System - 1
+	for step := range systems {
+		index := (offset + step) % systems
+		galaxy, system := index/limits.Systems+1, index%limits.Systems+1
+		taken, err := occupiedPositions(ctx, tx, galaxy, system)
+		if err != nil {
+			return universe.Coordinate{}, err
+		}
+		for _, position := range order {
+			if !taken[position] {
+				return universe.Coordinate{Galaxy: galaxy, System: system, Position: position}, nil
 			}
 		}
 	}
 	return universe.Coordinate{}, appeconomy.ErrUniverseFull
+}
+
+// occupiedPositions reads a whole system in one query. Asking position by
+// position cost a round trip per position, which a population founded in one go
+// pays again for every system it walks past.
+func occupiedPositions(ctx context.Context, tx *sql.Tx, galaxy, system int) (map[int]bool, error) {
+	rows, err := tx.QueryContext(ctx, "SELECT position FROM planets WHERE galaxy = ? AND system = ?", galaxy, system)
+	if err != nil {
+		return nil, fmt.Errorf("economy repository: inspect system: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	taken := make(map[int]bool)
+	for rows.Next() {
+		var position int
+		if err := rows.Scan(&position); err != nil {
+			return nil, fmt.Errorf("economy repository: inspect position: %w", err)
+		}
+		taken[position] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("economy repository: inspect system: %w", err)
+	}
+	return taken, nil
 }
 
 // Planet settles and returns one planet of the account. A zero identifier

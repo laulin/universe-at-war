@@ -21,6 +21,7 @@ import (
 var (
 	ErrForbidden      = errors.New("economy: authenticated account required")
 	ErrEmpireExists   = errors.New("economy: account already owns an empire")
+	ErrNameTaken      = errors.New("economy: this player name is already used")
 	ErrNoEmpire       = errors.New("economy: account has no empire")
 	ErrPlanetNotFound = errors.New("economy: planet does not belong to this account")
 	ErrUniverseFull   = errors.New("economy: universe has no free position")
@@ -124,7 +125,7 @@ type BuildingChoice struct {
 
 // Repository is the atomic persistence boundary for economic use cases.
 type Repository interface {
-	CreateEmpire(context.Context, int64, string, time.Time) (Planet, error)
+	CreateEmpireNear(context.Context, int64, string, universe.Coordinate, time.Time) (Planet, error)
 	Planet(context.Context, int64, int64, time.Time, building.Catalogue) (Planet, error)
 	Planets(context.Context, int64, time.Time, building.Catalogue) ([]Planet, error)
 	EnqueueBuilding(context.Context, int64, int64, building.ID, string, time.Time, building.Catalogue) (Queue, error)
@@ -145,7 +146,22 @@ type Service struct {
 	Wake       func()
 }
 
+// CreateEmpire founds the empire of an account at the first free position of
+// the universe, which is what a registration asks for.
 func (s Service) CreateEmpire(ctx context.Context, principal appauth.Principal, name string) (Planet, error) {
+	return s.createEmpire(ctx, principal, name, universe.Coordinate{})
+}
+
+// CreateEmpireNear founds an empire aiming at a given corner of the map, and
+// settles it at the first free position from there. It is how a population
+// founded in one go is spread out; a registration asks for no corner in
+// particular and takes the first free position of the universe, as it always
+// has.
+func (s Service) CreateEmpireNear(ctx context.Context, principal appauth.Principal, name string, near universe.Coordinate) (Planet, error) {
+	return s.createEmpire(ctx, principal, name, near)
+}
+
+func (s Service) createEmpire(ctx context.Context, principal appauth.Principal, name string, near universe.Coordinate) (Planet, error) {
 	if err := s.validatePrincipal(principal); err != nil {
 		return Planet{}, err
 	}
@@ -153,7 +169,7 @@ func (s Service) CreateEmpire(ctx context.Context, principal appauth.Principal, 
 	if length := len([]rune(name)); length < 3 || length > 32 {
 		return Planet{}, ErrInvalidName
 	}
-	return s.Repository.CreateEmpire(ctx, principal.AccountID, name, s.Clock.Now().UTC())
+	return s.Repository.CreateEmpireNear(ctx, principal.AccountID, name, near, s.Clock.Now().UTC())
 }
 
 // Planet returns one settled planet of the account. A zero identifier selects
