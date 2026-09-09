@@ -83,6 +83,31 @@ func researchName(id research.ID) string {
 	return string(id)
 }
 
+// researchRole says what a technology is for. A card that shows only a price
+// and a duration leaves a player to guess what they are buying, and a graph of
+// sixteen entries is exactly where guessing goes wrong.
+func researchRole(id research.ID) string {
+	roles := map[research.ID]string{
+		research.EnergyTechnology:             "Ouvre les technologies et les bâtiments avancés. Elle ne produit pas d'énergie par elle-même : c'est la centrale solaire qui en produit.",
+		research.LaserTechnology:              "Ouvre les artilleries laser et prépare les technologies à ions et à plasma.",
+		research.IonTechnology:                "Ouvre l'artillerie à ions et le croiseur, et réduit le coût de démantèlement.",
+		research.HyperspaceTechnology:         "Ouvre les vaisseaux et les défenses les plus lourds, ainsi que la porte de saut.",
+		research.PlasmaTechnology:             "Ouvre le lanceur de plasma et le bombardier, les armes les plus destructrices du jeu.",
+		research.CombustionDrive:              "Motorise les premiers vaisseaux et augmente de 10 % la vitesse de ceux qui l'utilisent à chaque niveau.",
+		research.ImpulseDrive:                 "Motorise les vaisseaux intermédiaires et augmente leur vitesse de 20 % par niveau.",
+		research.HyperspaceDrive:              "Motorise les vaisseaux lourds et augmente leur vitesse de 30 % par niveau.",
+		research.EspionageTechnology:          "Décide de ce qu'une sonde rapporte et de ce que les sondes adverses apprennent de vous. L'écart entre les deux niveaux fait tout.",
+		research.ComputerTechnology:           "Ajoute une flotte simultanée par niveau, et ouvre l'usine de nanites.",
+		research.Astrophysics:                 "Étend la portée des expéditions et le nombre de colonies que l'empire peut tenir.",
+		research.IntergalacticResearchNetwork: "Met les laboratoires des planètes en réseau : les meilleurs s'ajoutent à celui qui cherche.",
+		research.WeaponsTechnology:            "Augmente de 10 % par niveau la puissance de feu de tous les vaisseaux et de toutes les défenses.",
+		research.ShieldingTechnology:          "Augmente de 10 % par niveau la valeur de bouclier de tous les vaisseaux et de toutes les défenses.",
+		research.ArmourTechnology:             "Augmente de 10 % par niveau la coque de tous les vaisseaux et de toutes les défenses.",
+		research.GravitonTechnology:           "Ouvre l'étoile de la mort. Elle ne coûte aucune ressource mais exige une énergie disponible considérable au moment de la lancer.",
+	}
+	return roles[id]
+}
+
 func unitName(id unit.ID) string {
 	names := map[unit.ID]string{
 		unit.SmallCargo: "Petit transporteur", unit.LargeCargo: "Grand transporteur",

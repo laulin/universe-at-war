@@ -37,6 +37,9 @@ const (
 // researchLaboratory is the building whose level drives research duration.
 const researchLaboratory = "research_lab"
 
+// ErrUnknownResearch reports an identifier the catalogue does not carry.
+var ErrUnknownResearch = errors.New("research: unknown research")
+
 // Definition holds everything the generic progression algorithms need.
 type Definition struct {
 	ID            ID
@@ -180,7 +183,7 @@ func (c Catalogue) RequirementEdges() map[prerequisite.Node][]prerequisite.Node 
 func (c Catalogue) Cost(id ID, targetLevel int, multiplier float64) (economy.Resources, int64, error) {
 	definition, known := c.definitions[id]
 	if !known {
-		return economy.Resources{}, 0, errors.New("research: unknown research")
+		return economy.Resources{}, 0, ErrUnknownResearch
 	}
 	if targetLevel < 1 || (definition.MaximumLevel > 0 && targetLevel > definition.MaximumLevel) ||
 		multiplier <= 0 || math.IsNaN(multiplier) || math.IsInf(multiplier, 0) {
@@ -256,7 +259,7 @@ func (c Catalogue) Plan(id ID, state prerequisite.State, laboratories Laboratori
 	}
 	definition, known := c.definitions[id]
 	if !known {
-		return Plan{}, errors.New("research: unknown research")
+		return Plan{}, ErrUnknownResearch
 	}
 	if err := prerequisite.Check(definition.Prerequisites, state); err != nil {
 		return Plan{}, err
@@ -291,7 +294,7 @@ func (c Catalogue) Plan(id ID, state prerequisite.State, laboratories Laboratori
 func (c Catalogue) DurationFor(id ID, cost economy.Resources, laboratories Laboratories, configured rules.Ruleset) (time.Duration, int, error) {
 	definition, known := c.definitions[id]
 	if !known {
-		return 0, 0, errors.New("research: unknown research")
+		return 0, 0, ErrUnknownResearch
 	}
 	if !configured.Progression.ResearchNetworkEnabled {
 		laboratories.NetworkLevel = 0

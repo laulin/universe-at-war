@@ -9,6 +9,7 @@ import (
 
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
+	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/catalogue"
 	domainclock "universeatwar/internal/domain/clock"
 	"universeatwar/internal/domain/economy"
@@ -80,8 +81,18 @@ type Choice struct {
 	// EnergyShort separates the two ways of not affording a research. A store
 	// fills on its own and a page may wait for it; the energy balance does not.
 	EnergyShort bool
-	Missing     []prerequisite.Requirement
-	Reason      string
+	// Requirements lists every prerequisite of the entry, met or not, against
+	// the levels the queue is going to reach.
+	Requirements []prerequisite.Resolved
+	Missing      []prerequisite.Requirement
+	// LaboratoryBusy says the laboratory of this planet sits in its building
+	// queue. The order refuses a research while it does, so a page that ignored
+	// it would offer a button whose only outcome is a refusal.
+	LaboratoryBusy bool
+	// Refusal is why the plan could not be calculated at all, kept as the error
+	// it is rather than as its text: only the caller can say it in the player's
+	// language, and only from a value it can recognise.
+	Refusal error
 }
 
 // Overview is the research page projection.
@@ -130,21 +141,41 @@ func (s Service) Overview(ctx context.Context, principal appauth.Principal, plan
 		Researches: projected.Generic(),
 	}
 	available := len(state.Queue) < state.Planet.Rules.Progression.QueueLength
+	laboratoryBusy := laboratoryIsQueued(state.Planet)
 	for _, definition := range definitions {
 		choice := Choice{Definition: definition, Level: state.Levels[definition.ID]}
+		choice.Requirements = prerequisite.Resolve(definition.Prerequisites, requirements)
 		choice.Missing = prerequisite.Unmet(definition.Prerequisites, requirements)
+		choice.LaboratoryBusy = laboratoryBusy
 		plan, err := s.Catalogues.Research.Plan(definition.ID, requirements, state.Laboratories, state.Planet.Rules)
 		if err == nil {
 			choice.Plan = plan
-			choice.Available = available
+			// The order refuses every research while the laboratory is queued,
+			// so no card may offer one. The plan itself still stands: its price
+			// and its duration are what the research will ask once the
+			// laboratory is out of the queue.
+			choice.Available = available && !laboratoryBusy
 			choice.EnergyShort = availableEnergy(state.Planet) < plan.Energy
 			choice.Affordable = state.Planet.Stock.Covers(plan.Cost) && !choice.EnergyShort
 		} else if len(choice.Missing) == 0 {
-			choice.Reason = err.Error()
+			choice.Refusal = err
 		}
 		choices = append(choices, choice)
 	}
 	return Overview{State: state, Choices: choices}, nil
+}
+
+// laboratoryIsQueued reports the laboratory of the planet sitting anywhere in
+// its building queue, running or waiting, which is the exclusion the order
+// applies. The building queue travels with the planet, so the page reads the
+// same thing the transaction will.
+func laboratoryIsQueued(planet appeconomy.Planet) bool {
+	for _, entry := range planet.Queue {
+		if entry.Building == building.ResearchLab {
+			return true
+		}
+	}
+	return false
 }
 
 // EnqueueResearch adds one research at the end of the player's queue. Its cost

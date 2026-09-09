@@ -20,8 +20,12 @@ import (
 
 // researchPageChoice is one research prepared for display.
 type researchPageChoice struct {
-	ID                research.ID
-	Name              string
+	ID   research.ID
+	Name string
+	// Role says what the technology is for, and Requirements lists what it
+	// depends on, each with the level the empire reaches.
+	Role              string
+	Requirements      []requirementView
 	Level             int
 	TargetLevel       int
 	CostMetal         int64
@@ -156,9 +160,10 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 			// Energy never fills on its own, so a research short of it is not
 			// something the page may lift however long it waits.
 			AwaitingResources: choice.Available && !choice.Affordable && !choice.EnergyShort,
-			Reason: choiceReason(choice.Missing, choice.Reason,
-				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength,
-				choice.Available && !choice.Affordable),
+			Role:              researchRole(choice.Definition.ID),
+			Requirements:      requirementViews(choice.Requirements),
+			Reason: researchChoiceReason(choice,
+				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength),
 			IdempotencyKey: fmt.Sprintf("%s:research:%s:%d", token, choice.Definition.ID, choice.Plan.TargetLevel),
 		}
 		choices = append(choices, view)
@@ -358,6 +363,38 @@ func familyPath(family unit.Family) string {
 	return "shipyard"
 }
 
+// researchChoiceReason explains why a research cannot be started, in the order
+// that matters: what is missing outranks what is merely occupied, and a card
+// that lists its dependencies says nothing about them a second time. It is only
+// read by a card that offers no form, so a shortfall the page is waiting on has
+// no place here — that card carries a disabled button instead.
+func researchChoiceReason(choice appresearch.Choice, queueFull bool) string {
+	switch {
+	case len(choice.Missing) > 0:
+		return ""
+	case choice.LaboratoryBusy:
+		return "Le laboratoire est dans la file de construction : terminez-la ou annulez-la d'abord."
+	case queueFull:
+		return "Une autre progression est déjà en cours."
+	default:
+		return researchRefusal(choice.Refusal)
+	}
+}
+
+// researchRefusal says why a technology has no plan at all. Left untranslated
+// it would reach the player as the domain's own English, as the building page
+// let a full planet do.
+func researchRefusal(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, research.ErrUnknownResearch):
+		return "Cette technologie ne figure pas au catalogue."
+	default:
+		return "Cette recherche n'est pas disponible."
+	}
+}
+
 // choiceReason explains in French why an entry cannot be started.
 func choiceReason(missing []prerequisite.Requirement, fallback string, busy, poor bool) string {
 	if len(missing) > 0 {
@@ -398,13 +435,13 @@ func researchError(err error) string {
 	case errors.Is(err, appresearch.ErrQueueBusy):
 		return "La file de recherche vient de changer : réessayez."
 	case errors.Is(err, appresearch.ErrLaboratoryBusy):
-		return "Le laboratoire est dans la file de construction."
+		return "Le laboratoire est dans la file de construction : terminez-la ou annulez-la d'abord."
 	case errors.Is(err, appresearch.ErrInsufficientEnergy):
 		return "Énergie disponible insuffisante."
 	case errors.Is(err, domaineconomy.ErrInsufficientResources):
 		return "Ressources insuffisantes."
 	case errors.Is(err, prerequisite.ErrUnmet):
-		return "Prérequis manquants."
+		return "Les prérequis de cette recherche ne sont pas remplis : la carte en donne le détail."
 	case errors.Is(err, appresearch.ErrInvalidRequest):
 		return "La demande de recherche est invalide."
 	default:
@@ -429,7 +466,7 @@ func productionError(err error) string {
 	case errors.Is(err, domaineconomy.ErrInsufficientResources):
 		return "Ressources insuffisantes."
 	case errors.Is(err, prerequisite.ErrUnmet):
-		return "Prérequis manquants."
+		return "Les prérequis de cette recherche ne sont pas remplis : la carte en donne le détail."
 	case errors.Is(err, appshipyard.ErrWrongFamily), errors.Is(err, unit.ErrUnknownUnit):
 		return "Cette unité ne se produit pas depuis cette page."
 	default:

@@ -24,13 +24,30 @@
           </p>
           <p class="muted">{{.Duration}}</p>
           {{end}}
+          {{if .Role}}
+          <button type="button" class="card__more" aria-describedby="role-{{.ID}}">Rôle</button>
+          <div class="card__stats" id="role-{{.ID}}" role="note"><p>{{.Role}}</p></div>
+          {{end}}
           {{if .Offered}}
           <form method="post" action="/planets/{{$.Planet.ID}}/research/{{.ID}}"{{if .AwaitingResources}} data-cost-metal="{{.CostMetal}}" data-cost-crystal="{{.CostCrystal}}" data-cost-deuterium="{{.CostDeuterium}}"{{end}}>
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
             <button type="submit"{{if .AwaitingResources}} disabled{{end}}>Rechercher</button>
           </form>
-          {{else}}<p class="muted">{{.Reason}}</p>{{end}}
+          {{else}}
+          {{if .Requirements}}
+          <div class="card__requires">
+            <p class="card__requires-title">Nécessite</p>
+            <dl>
+              {{range .Requirements}}
+              <dt class="{{if .Met}}requirement--met{{else}}requirement--unmet{{end}}">{{.Name}}</dt>
+              <dd class="{{if .Met}}requirement--met{{else}}requirement--unmet{{end}}">{{.Reached}} / {{.Level}}</dd>
+              {{end}}
+            </dl>
+          </div>
+          {{end}}
+          {{if .Reason}}<p class="muted">{{.Reason}}</p>{{end}}
+          {{end}}
         </div>
       </article>
     {{end}}
