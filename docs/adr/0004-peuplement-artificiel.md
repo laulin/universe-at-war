@@ -49,12 +49,31 @@ carte, ce qui empile une population fondée d'un coup sur les premiers inscrits.
 Un serveur se peuple seul en quelques minutes après l'activation, et une partie
 lancée avant cette version se remplit au redémarrage sans repartir de zéro.
 
-Quatre réglages de la section `ai` restent inertes : `difficulty`,
-`coordination`, `diplomacy` et `initial_development_level`. Le dernier ne peut
-pas être honoré naïvement — offrir des bâtiments aux machines est précisément
-l'API interne de faveur que la spécification interdit. Un départ avancé devra
-être une règle de l'univers appliquée à tous, humains compris.
+Un seul réglage de la section `ai` reste inerte : `initial_development_level`.
+Il ne peut pas être honoré naïvement — offrir des bâtiments aux machines est
+précisément l'API interne de faveur que la spécification interdit. Un départ
+avancé devra être une règle de l'univers appliquée à tous, humains compris.
 
-`independent_count` devient descriptif : `total` décidant de la population, ce
-compteur ne commande plus rien, et l'écart entre ce que l'assistant affiche et ce
-que l'univers contient devra être levé côté interface.
+`independent_count` est descriptif : `total` décidant de la population, ce
+compteur est un plancher et non une part. L'assistant le dit désormais, et la
+page d'administration affiche la population commandée à côté de celle présente.
+
+## Décisions ultérieures
+
+- **La difficulté** infléchit les poids d'un archétype : marge de sécurité,
+  prudence, convoitise, seuil de rentabilité et nombre de sondes. Elle ne touche
+  ni le rythme de développement, qui appartient au caractère, ni le fleetsave,
+  qui est une règle de bien jouer et non un curseur. Elle est lue dans le ruleset
+  à chaque réflexion plutôt que stockée, donc la changer change tout le monde.
+- **La coordination** est la part des réflexions qu'un membre consacre à ce que
+  son alliance veut. Le tirage vient de la graine et du tick, dans l'idiome des
+  réflexions, mêlé d'une constante propre pour ne pas suivre leur gigue. Ne pas
+  répondre à un appel n'est pas gêner : le membre laisse la cible de l'alliance
+  tranquille et continue de partager ce qu'il voit.
+- **La diplomatie** repose sur les déclarations reçues, que le build ne chargeait
+  pas : une relation annonce, et une annonce que personne n'entend n'annonce
+  rien. Les alliances répondent en nature, jamais deux fois, et seul le chef
+  parle, par le cas d'usage ordinaire.
+- **Une naissance interrompue** après la fondation de l'empire n'est plus
+  abandonnée : le compte n'est plus désactivé, et le réconciliateur donne son
+  caractère au joueur avant d'en fonder de nouveaux.
