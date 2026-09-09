@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,14 +15,7 @@ import (
 
 func TestBootstrapCreatesAdminExactlyOnce(t *testing.T) {
 	ctx := context.Background()
-	database, err := storagesqlite.Open(ctx, filepath.Join(t.TempDir(), "universe.db"))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := freshDatabase(t, ctx, "universe.db")
 
 	now := time.Date(2042, time.April, 5, 6, 7, 8, 0, time.UTC)
 	passwords := auth.NewPasswordHasher(auth.Parameters{

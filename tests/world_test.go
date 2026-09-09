@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -184,14 +183,7 @@ func setResources(t *testing.T, ctx context.Context, database *storagesqlite.Dat
 // benchmarkDatabase prepares an empty universe for a benchmark.
 func benchmarkDatabase(b *testing.B, ctx context.Context) *storagesqlite.Database {
 	b.Helper()
-	database, err := storagesqlite.Open(ctx, filepath.Join(b.TempDir(), "benchmark.db"))
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(ctx); err != nil {
-		b.Fatal(err)
-	}
+	database := freshDatabase(b, ctx, "benchmark.db")
 	return database
 }
 

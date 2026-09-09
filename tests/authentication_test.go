@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -20,14 +19,7 @@ func TestAuthenticationSessionLifecycle(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2042, time.May, 6, 7, 8, 9, 0, time.UTC)
 	clock := appclock.NewFake(now)
-	database, err := storagesqlite.Open(ctx, filepath.Join(t.TempDir(), "universe.db"))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := freshDatabase(t, ctx, "universe.db")
 
 	parameters := auth.Parameters{
 		MemoryKiB:   8 * 1024,
@@ -137,14 +129,7 @@ func TestExpiredSessionIsRejected(t *testing.T) {
 
 func authenticatedService(t *testing.T, ctx context.Context, clock *appclock.Fake, lifetime time.Duration) (*storagesqlite.Database, appauth.Service, string) {
 	t.Helper()
-	database, err := storagesqlite.Open(ctx, filepath.Join(t.TempDir(), "universe.db"))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := freshDatabase(t, ctx, "universe.db")
 	passwords := auth.NewPasswordHasher(auth.Parameters{
 		MemoryKiB: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32,
 	}, bytes.NewReader(bytes.Repeat([]byte{0x17}, 128)))

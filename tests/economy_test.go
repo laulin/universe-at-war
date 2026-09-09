@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -222,14 +221,7 @@ func TestConcurrentBuildingSpendOnlySucceedsOnce(t *testing.T) {
 
 func economyDatabase(t *testing.T, ctx context.Context, accountCount int) *storagesqlite.Database {
 	t.Helper()
-	database, err := storagesqlite.Open(ctx, filepath.Join(t.TempDir(), "economy.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	database := freshDatabase(t, ctx, "economy.db")
 	now := "2042-09-10T11:12:13Z"
 	for id := 1; id <= accountCount; id++ {
 		if _, err := database.Write().ExecContext(ctx, "INSERT INTO accounts(id, username, username_normalized, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", id, fmt.Sprintf("player%d", id), fmt.Sprintf("player%d", id), now, now); err != nil {
