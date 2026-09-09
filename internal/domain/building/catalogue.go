@@ -82,6 +82,10 @@ type Plan struct {
 	TargetLevel int
 	Cost        economy.Resources
 	Duration    time.Duration
+	// EnergyChange is what reaching the target level does to the body's energy
+	// balance: negative for a mine, which draws more, positive for the solar
+	// plant, which yields more, and zero for everything else.
+	EnergyChange int64
 }
 
 func DefaultCatalogue() Catalogue {
@@ -152,7 +156,7 @@ func (c Catalogue) Definition(id ID) (Definition, bool) {
 func (c Catalogue) Cost(id ID, targetLevel int, multiplier float64) (economy.Resources, error) {
 	definition, ok := c.definitions[id]
 	if !ok {
-		return economy.Resources{}, errors.New("building: unknown building")
+		return economy.Resources{}, ErrUnknownBuilding
 	}
 	if targetLevel < 1 || (definition.MaximumLevel > 0 && targetLevel > definition.MaximumLevel) || multiplier <= 0 || math.IsNaN(multiplier) || math.IsInf(multiplier, 0) {
 		return economy.Resources{}, errors.New("building: invalid target level or multiplier")
@@ -192,8 +196,14 @@ func (c Catalogue) Duration(cost economy.Resources, roboticsLevel, naniteLevel i
 	return time.Duration(int64(seconds)) * time.Second, nil
 }
 
-// ErrWrongPlacement reports a building that cannot stand on this body.
-var ErrWrongPlacement = errors.New("building: this building cannot be built here")
+var (
+	// ErrWrongPlacement reports a building that cannot stand on this body.
+	ErrWrongPlacement = errors.New("building: this building cannot be built here")
+	// ErrUnknownBuilding reports an identifier the catalogue does not carry.
+	ErrUnknownBuilding = errors.New("building: unknown building")
+	// ErrNoFreeField reports a body with no room left for another building.
+	ErrNoFreeField = errors.New("building: no free field")
+)
 
 // Plan validates placement, fields and prerequisites and calculates the next
 // level.
@@ -203,13 +213,13 @@ func (c Catalogue) Plan(id ID, placement Placement, levels Levels, researches pr
 	}
 	definition, ok := c.definitions[id]
 	if !ok {
-		return Plan{}, errors.New("building: unknown building")
+		return Plan{}, ErrUnknownBuilding
 	}
 	if definition.Placement != placement {
 		return Plan{}, ErrWrongPlacement
 	}
 	if usedFields < 0 || totalFields <= 0 || usedFields >= totalFields {
-		return Plan{}, errors.New("building: no free field")
+		return Plan{}, ErrNoFreeField
 	}
 	for buildingID, level := range levels {
 		if _, known := c.definitions[buildingID]; !known || level < 0 {
@@ -228,7 +238,39 @@ func (c Catalogue) Plan(id ID, placement Placement, levels Levels, researches pr
 	if err != nil {
 		return Plan{}, err
 	}
-	return Plan{Building: id, TargetLevel: target, Cost: cost, Duration: duration}, nil
+	change, err := energyChange(id, levels[id], target, configured.Economy.EnergyConsumptionGrowth)
+	if err != nil {
+		return Plan{}, err
+	}
+	return Plan{Building: id, TargetLevel: target, Cost: cost, Duration: duration, EnergyChange: change}, nil
+}
+
+// energyChange answers what the level being ordered does to the body's energy
+// balance, which is the figure a player decides on: a mine costs energy, the
+// solar plant gives it, and the rest of the catalogue neither.
+func energyChange(id ID, currentLevel, targetLevel int, consumptionGrowth float64) (int64, error) {
+	var before, after int64
+	var err error
+	switch id {
+	case MetalMine, CrystalMine, DeuteriumSynthesizer:
+		if before, err = economy.MineEnergy(currentLevel, consumptionGrowth); err != nil {
+			return 0, err
+		}
+		if after, err = economy.MineEnergy(targetLevel, consumptionGrowth); err != nil {
+			return 0, err
+		}
+		return before - after, nil
+	case SolarPlant:
+		if before, err = economy.SolarPlantEnergy(currentLevel); err != nil {
+			return 0, err
+		}
+		if after, err = economy.SolarPlantEnergy(targetLevel); err != nil {
+			return 0, err
+		}
+		return after - before, nil
+	default:
+		return 0, nil
+	}
 }
 
 func costComponent(base int64, factor float64) (int64, error) {

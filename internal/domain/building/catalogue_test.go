@@ -102,3 +102,60 @@ func TestPlacementSeparatesPlanetsFromMoons(t *testing.T) {
 		}
 	}
 }
+
+// TestPlanCarriesTheEnergyItChanges checks the sign the card depends on: a mine
+// costs the balance, the plant gives to it, and nothing else touches it.
+func TestPlanCarriesTheEnergyItChanges(t *testing.T) {
+	catalogue := DefaultCatalogue()
+	configured := rules.Default()
+	growth := configured.Economy.EnergyConsumptionGrowth
+
+	mine, err := catalogue.Plan(MetalMine, OnPlanet, Levels{MetalMine: 12}, nil, 20, 100, configured)
+	if err != nil {
+		t.Fatalf("Plan(metal mine) error = %v", err)
+	}
+	before, _ := economy.MineEnergy(12, growth)
+	after, _ := economy.MineEnergy(13, growth)
+	if mine.EnergyChange != before-after {
+		t.Fatalf("a mine changes energy by %d, want %d", mine.EnergyChange, before-after)
+	}
+	if mine.EnergyChange >= 0 {
+		t.Fatalf("a mine level should cost energy, changed by %d", mine.EnergyChange)
+	}
+
+	plant, err := catalogue.Plan(SolarPlant, OnPlanet, Levels{SolarPlant: 13}, nil, 20, 100, configured)
+	if err != nil {
+		t.Fatalf("Plan(solar plant) error = %v", err)
+	}
+	yieldBefore, _ := economy.SolarPlantEnergy(13)
+	yieldAfter, _ := economy.SolarPlantEnergy(14)
+	if plant.EnergyChange != yieldAfter-yieldBefore {
+		t.Fatalf("a plant changes energy by %d, want %d", plant.EnergyChange, yieldAfter-yieldBefore)
+	}
+	if plant.EnergyChange <= 0 {
+		t.Fatalf("a plant level should give energy, changed by %d", plant.EnergyChange)
+	}
+
+	for _, id := range []ID{MetalStorage, RoboticsFactory, ResearchLab} {
+		plan, err := catalogue.Plan(id, OnPlanet, Levels{}, nil, 20, 100, configured)
+		if err != nil {
+			t.Fatalf("Plan(%s) error = %v", id, err)
+		}
+		if plan.EnergyChange != 0 {
+			t.Fatalf("%s changed energy by %d, want none", id, plan.EnergyChange)
+		}
+	}
+}
+
+// TestPlanNamesWhyItRefuses keeps the reasons a caller must tell apart from one
+// another, rather than folding them into one opaque error.
+func TestPlanNamesWhyItRefuses(t *testing.T) {
+	catalogue := DefaultCatalogue()
+	configured := rules.Default()
+	if _, err := catalogue.Plan(MetalMine, OnPlanet, Levels{}, nil, 1, 1, configured); !errors.Is(err, ErrNoFreeField) {
+		t.Fatalf("a full planet error = %v, want ErrNoFreeField", err)
+	}
+	if _, err := catalogue.Plan("not_a_building", OnPlanet, Levels{}, nil, 0, 100, configured); !errors.Is(err, ErrUnknownBuilding) {
+		t.Fatalf("an unknown building error = %v, want ErrUnknownBuilding", err)
+	}
+}
