@@ -23,26 +23,41 @@ type Thinker interface {
 	ThinkDue(context.Context, int) (int, error)
 }
 
+// Populator brings the universe up to the artificial population its ruleset
+// ordered. Like a reflection it acts through the ordinary use cases, which open
+// their own transactions, so it runs between two batches of events rather than
+// inside one — and only a few players at a time, so a universe fills up while
+// the simulation keeps its rhythm.
+type Populator interface {
+	Populate(context.Context, int) (int, error)
+}
+
 // Worker sleeps until the nearest known event, a wake-up, or a safety rescan.
 type Worker struct {
-	Clock          domainclock.Clock
-	Processor      Processor
-	Thinker        Thinker
-	BatchSize      int
-	RescanInterval time.Duration
-	Logger         *slog.Logger
-	Metrics        *observability.Metrics
-	wake           chan struct{}
+	Clock     domainclock.Clock
+	Processor Processor
+	Thinker   Thinker
+	Populator Populator
+	BatchSize int
+	// PopulationBatch is how many artificial players may be born in one pass.
+	// It is small on purpose: a universe that owes fifty of them is better
+	// filled over a few minutes than in one burst that holds up everything else.
+	PopulationBatch int
+	RescanInterval  time.Duration
+	Logger          *slog.Logger
+	Metrics         *observability.Metrics
+	wake            chan struct{}
 }
 
 func NewWorker(clock domainclock.Clock, processor Processor) *Worker {
 	return &Worker{
-		Clock:          clock,
-		Processor:      processor,
-		BatchSize:      100,
-		RescanInterval: 30 * time.Second,
-		Logger:         slog.New(slog.DiscardHandler),
-		wake:           make(chan struct{}, 1),
+		Clock:           clock,
+		Processor:       processor,
+		BatchSize:       100,
+		PopulationBatch: 5,
+		RescanInterval:  30 * time.Second,
+		Logger:          slog.New(slog.DiscardHandler),
+		wake:            make(chan struct{}, 1),
 	}
 }
 
@@ -62,6 +77,19 @@ func (w *Worker) Run(ctx context.Context) error {
 		logger = slog.New(slog.DiscardHandler)
 	}
 	for {
+		// Whoever the ruleset ordered and the universe does not hold yet is
+		// born before the batch, so the first reflection of a new player is
+		// already in the schedule this pass is about to read.
+		if w.Populator != nil && w.PopulationBatch > 0 {
+			if born, err := w.Populator.Populate(ctx, w.PopulationBatch); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				logger.Error("artificial population failed", "error", err.Error())
+			} else {
+				w.Metrics.Recruit(born)
+			}
+		}
 		// A batch that fails is logged and retried at the next wake-up: a
 		// transient database error must not stop the simulation for good.
 		failed := false

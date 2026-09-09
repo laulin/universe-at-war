@@ -34,23 +34,24 @@ import (
 // world wires the same services as the serve command so that acceptance tests
 // exercise the production composition instead of a parallel assembly.
 type world struct {
-	Database *storagesqlite.Database
-	Clock    *appclock.Fake
-	Events   *storagesqlite.EventProcessor
-	Economy  appeconomy.Service
-	Research appresearch.Service
-	Shipyard appshipyard.Service
-	Fleet    appfleet.Service
-	Galaxy   appgalaxy.Service
-	Reports  appreports.Service
-	Phalanx  appphalanx.Service
-	JumpGate appjumpgate.Service
-	Alliance appalliance.Service
-	ACS      appacs.Service
-	AI       appai.Service
-	Thinking appai.Thinking
-	Teamwork appai.Teamwork
-	Brain    *ai.Brain
+	Database   *storagesqlite.Database
+	Clock      *appclock.Fake
+	Events     *storagesqlite.EventProcessor
+	Economy    appeconomy.Service
+	Research   appresearch.Service
+	Shipyard   appshipyard.Service
+	Fleet      appfleet.Service
+	Galaxy     appgalaxy.Service
+	Reports    appreports.Service
+	Phalanx    appphalanx.Service
+	JumpGate   appjumpgate.Service
+	Alliance   appalliance.Service
+	ACS        appacs.Service
+	AI         appai.Service
+	Population appai.Populating
+	Thinking   appai.Thinking
+	Teamwork   appai.Teamwork
+	Brain      *ai.Brain
 }
 
 func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fake) *world {
@@ -108,30 +109,32 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Completer:  events,
 	}
 	thinking := appai.Thinking{Clock: clock, Thought: aiRepository}
+	artificials := appai.Service{
+		Clock:      clock,
+		Repository: aiRepository,
+		Empires:    economy,
+		Alliances:  alliance,
+		Seeds:      random.NewSeedGenerator(rand.Reader),
+		Completer:  events,
+	}
 	return &world{
-		Database: database,
-		Clock:    clock,
-		Events:   events,
-		Economy:  economy,
-		Research: research,
-		Shipyard: shipyard,
-		Fleet:    fleetService,
-		Galaxy:   galaxyService,
-		Reports:  reportsService,
-		Phalanx:  appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
-		JumpGate: appjumpgate.Service{Clock: clock, Repository: storagesqlite.NewJumpGateRepository(database.Write(), catalogues), Completer: events},
-		Alliance: alliance,
-		ACS:      operations,
-		AI: appai.Service{
-			Clock:      clock,
-			Repository: aiRepository,
-			Empires:    economy,
-			Alliances:  alliance,
-			Seeds:      random.NewSeedGenerator(rand.Reader),
-			Completer:  events,
-		},
-		Thinking: thinking,
-		Teamwork: appai.Teamwork{Shared: aiRepository},
+		Database:   database,
+		Clock:      clock,
+		Events:     events,
+		Economy:    economy,
+		Research:   research,
+		Shipyard:   shipyard,
+		Fleet:      fleetService,
+		Galaxy:     galaxyService,
+		Reports:    reportsService,
+		Phalanx:    appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
+		JumpGate:   appjumpgate.Service{Clock: clock, Repository: storagesqlite.NewJumpGateRepository(database.Write(), catalogues), Completer: events},
+		Alliance:   alliance,
+		ACS:        operations,
+		AI:         artificials,
+		Population: appai.Populating{Clock: clock, Service: artificials, Census: aiRepository},
+		Thinking:   thinking,
+		Teamwork:   appai.Teamwork{Shared: aiRepository},
 		Brain: &ai.Brain{
 			Clock: clock, Thinking: thinking, Economy: economy, Research: research, Shipyard: shipyard,
 			Fleet: fleetService, Reports: reportsService, Galaxy: galaxyService,

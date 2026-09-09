@@ -398,6 +398,11 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Catalogues: catalogues,
 		Logger:     logger,
 	}
+	worker.Populator = appai.Populating{
+		Clock:   clock,
+		Service: artificials,
+		Census:  aiRepository,
+	}
 	workerContext, stopWorker := context.WithCancel(ctx)
 	defer stopWorker()
 	workerErrors := make(chan error, 1)

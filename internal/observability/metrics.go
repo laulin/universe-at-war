@@ -19,6 +19,7 @@ type Metrics struct {
 	events      atomic.Int64
 	eventFail   atomic.Int64
 	reflections atomic.Int64
+	recruits    atomic.Int64
 
 	mu       sync.Mutex
 	statuses map[int]int64
@@ -65,6 +66,14 @@ func (m *Metrics) Reflection(count int) {
 	m.reflections.Add(int64(count))
 }
 
+// Recruit records artificial players brought into the universe.
+func (m *Metrics) Recruit(count int) {
+	if m == nil || count <= 0 {
+		return
+	}
+	m.recruits.Add(int64(count))
+}
+
 // Snapshot is the readable state of the counters.
 type Snapshot struct {
 	Requests       int64
@@ -73,6 +82,7 @@ type Snapshot struct {
 	Events         int64
 	EventFailures  int64
 	Reflections    int64
+	Recruits       int64
 	Statuses       map[int]int64
 }
 
@@ -87,6 +97,7 @@ func (m *Metrics) Read() Snapshot {
 		Events:         m.events.Load(),
 		EventFailures:  m.eventFail.Load(),
 		Reflections:    m.reflections.Load(),
+		Recruits:       m.recruits.Load(),
 		Statuses:       map[int]int64{},
 	}
 	if snapshot.Requests > 0 {
@@ -109,9 +120,9 @@ func (s Snapshot) String() string {
 	}
 	sort.Ints(statuses)
 	var builder strings.Builder
-	fmt.Fprintf(&builder, "requests %d\naverage_request_ms %.2f\nserver_failures %d\nevents %d\nevent_failures %d\nreflections %d\n",
+	fmt.Fprintf(&builder, "requests %d\naverage_request_ms %.2f\nserver_failures %d\nevents %d\nevent_failures %d\nreflections %d\nrecruits %d\n",
 		s.Requests, float64(s.AverageRequest)/float64(time.Millisecond), s.ServerFailures,
-		s.Events, s.EventFailures, s.Reflections)
+		s.Events, s.EventFailures, s.Reflections, s.Recruits)
 	for _, status := range statuses {
 		fmt.Fprintf(&builder, "status_%d %d\n", status, s.Statuses[status])
 	}
