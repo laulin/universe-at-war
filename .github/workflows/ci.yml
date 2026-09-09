@@ -10,7 +10,7 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -22,9 +22,9 @@ jobs:
       - name: Verify formatting
         run: test -z "$(gofmt -l .)"
       - name: Unit and integration tests
-        run: go test ./...
+        run: go test -timeout 30m ./...
       - name: Race detector
-        run: go test -race ./...
+        run: go test -race -timeout 30m ./...
       - name: Vet
         run: go vet ./...
       - name: Staticcheck

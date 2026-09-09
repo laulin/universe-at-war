@@ -24,11 +24,14 @@ release:
 art:
 	./scripts/build-art.sh
 
+# The race detector instruments a SQLite transpiled to Go, which costs the suite
+# roughly two orders of magnitude. It stays well inside this budget, but not
+# inside the ten minutes go test allows by default.
 test:
-	$(GO) test ./...
+	$(GO) test -timeout 30m ./...
 
 test-race:
-	$(GO) test -race ./...
+	$(GO) test -race -timeout 30m ./...
 
 vet:
 	$(GO) vet ./...
