@@ -949,7 +949,13 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 			len(planet.Queue) >= planet.Rules.Progression.QueueLength, choice.Available && !choice.Affordable)
 		// A prerequisite that is still missing outranks an installation that is
 		// merely busy: the busy one is over in a while, the missing one is not.
-		if len(choice.Missing) == 0 && choice.FacilityBusy {
+		switch {
+		case len(choice.Missing) > 0:
+			// The card lists every dependency with the level reached, which says
+			// more than the sentence and says it in the same place. Keeping both
+			// would only be the same refusal written twice.
+			reason = ""
+		case choice.FacilityBusy:
 			reason = facilityBusyReason(choice.Definition.ID)
 		}
 		views = append(views, buildingPageChoice{

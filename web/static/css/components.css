@@ -167,10 +167,23 @@
 .card__stats li { display: flex; justify-content: space-between; gap: var(--space-3); }
 .card__stats b { color: var(--accent); font-variant-numeric: tabular-nums; }
 .card__stats p { margin: 0; }
+
+/* What a locked card depends on stays on the card rather than under it: it is
+   the reason the card is locked, and a reason nobody hovers over is a reason
+   nobody reads. */
+.card__requires { margin-top: var(--space-2); font-size: var(--text-xs); }
+.card__requires-title {
+  margin: 0 0 var(--space-1);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.card__requires dl { display: grid; grid-template-columns: 1fr auto; gap: 0 var(--space-3); margin: 0; }
+.card__requires dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 /* A dependency reads as done or as outstanding at a glance, since the whole
    point of listing the met ones is telling them from the rest. */
-.card__stats .requirement--met { color: var(--ok); }
-.card__stats .requirement--unmet { color: var(--warn); }
+.requirement--met { color: var(--ok); }
+.requirement--unmet { color: var(--warn); }
 .card__volleys {
   margin: var(--space-3) 0 var(--space-1);
   padding-top: var(--space-2);

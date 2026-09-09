@@ -31,7 +31,7 @@ func TestABuildingWaitingOnAPrerequisiteOffersNoForm(t *testing.T) {
 	if strings.Contains(card, "<form") || strings.Contains(card, "data-cost-metal") {
 		t.Fatalf("a card blocked by a prerequisite offers a form: %q", card)
 	}
-	if !strings.Contains(card, "Prérequis manquants") {
+	if !strings.Contains(card, "Nécessite") || !strings.Contains(card, "requirement--unmet") {
 		t.Fatalf("the card does not say what it waits for: %q", card)
 	}
 }
