@@ -144,6 +144,30 @@ func TestVisitingABodyRemembersIt(t *testing.T) {
 	t.Fatalf("visiting a body did not remember it: %v", recorder.Result().Cookies())
 }
 
+// Changing bodies is navigation within a screen, not a return to the resource
+// screen. Lunar tools are the exception because a planet cannot open them.
+func TestSwitchingBodiesKeepsTheCurrentSection(t *testing.T) {
+	handler, _, _, bodies, session, csrfCookie := expansionHandler(t)
+
+	for _, section := range []string{"research", "shipyard", "defense", "fleet"} {
+		page := getPage(t, handler, fmt.Sprintf("/planets/%d/%s", bodies.AliceHome, section), session, csrfCookie)
+		for _, class := range []string{"body-summary", "body-stock"} {
+			target := fmt.Sprintf(`class="%s" href="/planets/%d/%s"`, class, bodies.Colony, section)
+			if !strings.Contains(page, target) {
+				t.Fatalf("%s body switch does not preserve its section (%s): %q", section, target, page)
+			}
+		}
+	}
+
+	phalanx := getPage(t, handler, fmt.Sprintf("/planets/%d/phalanx", bodies.Moon), session, csrfCookie)
+	if target := fmt.Sprintf(`class="body-summary" href="/planets/%d/phalanx"`, bodies.FarMoon); !strings.Contains(phalanx, target) {
+		t.Fatalf("moon switch does not preserve the phalanx (%s): %q", target, phalanx)
+	}
+	if target := fmt.Sprintf(`class="body-summary" href="/planets/%d"`, bodies.Colony); !strings.Contains(phalanx, target) {
+		t.Fatalf("phalanx switch to a planet does not fall back to resources (%s): %q", target, phalanx)
+	}
+}
+
 // A number field is as wide as the longest value its ceiling admits, and the row
 // that carries it beside its "max" button sits in a form laid out as a grid. An
 // automatic grid column does not shrink below what it holds, so an order ceiling

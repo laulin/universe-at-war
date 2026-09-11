@@ -109,7 +109,7 @@
       <ul>
         {{range .Bodies}}
         <li class="body-card{{if .Current}} body-card--current{{end}}">
-          <a class="body-summary" href="/planets/{{.ID}}"{{if .Current}} aria-current="true"{{end}}>
+          <a class="body-summary" href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>
             <img src="/art/body/{{.ArtSlot}}" alt="{{.Kind}}" width="38" height="38">
             <span class="body-name">{{.Name}}</span>
             <span class="body-coord">[{{.Coordinate}}]</span>
@@ -124,7 +124,7 @@
             {{if .OutboundFleets}}<a class="body-activity__item" href="/planets/{{.ID}}/fleet#missions-title" title="Flottes en vol depuis ce corps : {{.OutboundFleets}}" aria-label="Voir les flottes en vol depuis ce corps : {{.OutboundFleets}}">{{template "activity-fleet-icon"}}<b>{{.OutboundFleets}}</b></a>{{end}}
           </span>
           {{end}}
-          <a class="body-stock" href="/planets/{{.ID}}" aria-label="Voir les ressources de {{.Name}}">
+          <a class="body-stock" href="{{.URL}}" aria-label="Ouvrir {{.Name}} dans la section courante">
             {{range .Resources}}<span class="res-{{.Slug}}"><b>{{.Initial}}</b> <span class="{{if .Full}}is-full{{end}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</span></span>{{end}}
           </a>
         </li>

@@ -135,7 +135,8 @@ func expansionHandler(t *testing.T) (http.Handler, *storagesqlite.Database, *wor
 	handler, err := webhandler.New(webhandler.Dependencies{
 		Authentication: webAuthenticationStub{principal: appauth.Principal{AccountID: 1, Username: "player1"}},
 		ServerState:    runningStateStub{}, CSRFSecrets: sequenceSecret{value: "csrf-token"},
-		Economy: universeWorld.Economy, Fleet: universeWorld.Fleet, Galaxy: universeWorld.Galaxy,
+		Economy: universeWorld.Economy, Research: universeWorld.Research, Shipyard: universeWorld.Shipyard,
+		Fleet: universeWorld.Fleet, Galaxy: universeWorld.Galaxy,
 		Reports: universeWorld.Reports, Phalanx: universeWorld.Phalanx, JumpGate: universeWorld.JumpGate,
 	})
 	if err != nil {

@@ -1238,8 +1238,10 @@ type pageShell struct {
 // bodyLink is one entry of the celestial body column: identity plus the settled
 // economy of the body, which every screen shows in the shell.
 type bodyLink struct {
-	ID         int64
-	Name       string
+	ID   int64
+	Name string
+	// URL keeps the current body-scoped section when the player switches body.
+	URL        string
 	Coordinate string
 	Kind       string
 	IsMoon     bool
@@ -1351,8 +1353,9 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 			activity.Buildings = int64(len(planet.Queue))
 		}
 		link := bodyLink{
-			ID: planet.ID, Name: planet.Name, Coordinate: planet.Coordinate.String(),
-			Kind: bodyKindName(planet.Kind), IsMoon: moon, Current: planet.ID == currentID,
+			ID: planet.ID, Name: planet.Name, URL: bodySectionURL(section, planet.ID, moon),
+			Coordinate: planet.Coordinate.String(),
+			Kind:       bodyKindName(planet.Kind), IsMoon: moon, Current: planet.ID == currentID,
 			ArtSlot:         bodyArtSlot(planet.Coordinate.Position, moon),
 			Resources:       bodyResources(planet.Stock, planet.Capacity, planet.Rates, moon),
 			EnergyProduced:  planet.Energy.Produced,
@@ -1393,6 +1396,32 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 		shell.Current = &current
 	}
 	return shell
+}
+
+// bodySectionURL keeps body switching inside the current gameplay screen. A
+// lunar-only screen cannot exist for a planet, so those two sections fall back
+// to the target's resources instead of linking to a guaranteed 404.
+func bodySectionURL(section string, bodyID int64, moon bool) string {
+	base := fmt.Sprintf("/planets/%d", bodyID)
+	switch section {
+	case "research":
+		return base + "/research"
+	case "shipyard":
+		return base + "/shipyard"
+	case "defense":
+		return base + "/defense"
+	case "fleet":
+		return base + "/fleet"
+	case "phalanx":
+		if moon {
+			return base + "/phalanx"
+		}
+	case "jump":
+		if moon {
+			return base + "/jump"
+		}
+	}
+	return base
 }
 
 // bodyResources lays the three storable resources out in a fixed order, so the
