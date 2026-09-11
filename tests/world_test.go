@@ -9,6 +9,7 @@ import (
 
 	"universeatwar/internal/ai"
 	appacs "universeatwar/internal/app/acs"
+	appactivity "universeatwar/internal/app/activity"
 	appai "universeatwar/internal/app/ai"
 	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
@@ -38,6 +39,7 @@ type world struct {
 	Database         *storagesqlite.Database
 	Clock            *appclock.Fake
 	Events           *storagesqlite.EventProcessor
+	Activity         appactivity.Service
 	Economy          appeconomy.Service
 	Research         appresearch.Service
 	Shipyard         appshipyard.Service
@@ -97,6 +99,10 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Seeds:      random.NewSeedGenerator(rand.Reader),
 		Completer:  events,
 	}
+	activityService := appactivity.Service{
+		Repository: storagesqlite.NewActivityRepository(database.Read()),
+		Completer:  events,
+	}
 	galaxyService := appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())}
 	reportsService := appreports.Service{
 		Clock:      clock,
@@ -125,6 +131,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Database:         database,
 		Clock:            clock,
 		Events:           events,
+		Activity:         activityService,
 		Economy:          economy,
 		Research:         research,
 		Shipyard:         shipyard,
