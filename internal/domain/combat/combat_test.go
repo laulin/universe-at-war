@@ -56,6 +56,9 @@ func TestOneFighterAgainstOneRocketLauncher(t *testing.T) {
 	if result.Debris != (economy.Resources{}) {
 		t.Fatalf("debris = %+v, want none while defenses leave no wreckage", result.Debris)
 	}
+	if result.ShipDebris != (economy.Resources{}) || result.DefenseDebris != (economy.Resources{}) {
+		t.Fatalf("debris breakdown = ships %+v, defenses %+v", result.ShipDebris, result.DefenseDebris)
+	}
 	if result.Defenders[0].Rebuilt[unit.RocketLauncher] != 0 {
 		t.Fatalf("the launcher was rebuilt despite a failed draw: %+v", result.Defenders[0])
 	}
@@ -84,6 +87,30 @@ func TestTheSameDuelLostByTheAttackerLeavesShipDebris(t *testing.T) {
 	}
 	if result.Debris != (economy.Resources{Metal: 900, Crystal: 300}) {
 		t.Fatalf("debris = %+v, want 900 metal and 300 crystal", result.Debris)
+	}
+	if result.ShipDebris != result.Debris || result.DefenseDebris != (economy.Resources{}) {
+		t.Fatalf("debris breakdown = ships %+v, defenses %+v", result.ShipDebris, result.DefenseDebris)
+	}
+}
+
+func TestDefenseDebrisIsSeparatedFromShipDebris(t *testing.T) {
+	input := plainInput(
+		map[unit.ID]int64{unit.LightFighter: 1},
+		map[unit.ID]int64{unit.RocketLauncher: 1},
+	)
+	input.Rules.DefensesToDebris = .3
+	input.Rules.DefenseRebuildChance = 0
+	result, err := Resolve(input, random.NewScript(nil, []float64{.10, .40, .60}))
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if result.ShipDebris != (economy.Resources{}) {
+		t.Fatalf("ship debris = %+v, want none", result.ShipDebris)
+	}
+	want := economy.Resources{Metal: 600}
+	if result.DefenseDebris != want || result.Debris != want {
+		t.Fatalf("debris = total %+v, ships %+v, defenses %+v, want defense %+v",
+			result.Debris, result.ShipDebris, result.DefenseDebris, want)
 	}
 }
 
@@ -268,6 +295,9 @@ func FuzzResolveKeepsItsInvariants(f *testing.F) {
 		}
 		if result.Debris.Metal < 0 || result.Debris.Crystal < 0 || result.Debris.Deuterium != 0 {
 			t.Fatalf("debris = %+v", result.Debris)
+		}
+		if result.Debris != result.ShipDebris.Plus(result.DefenseDebris) {
+			t.Fatalf("debris breakdown does not add up: %+v", result)
 		}
 		if result.MoonChance < 0 || result.MoonChance > input.Rules.MaximumMoonChance {
 			t.Fatalf("moon chance = %v", result.MoonChance)

@@ -84,12 +84,14 @@ type PartyResult struct {
 
 // Result is the full outcome of a battle.
 type Result struct {
-	Outcome    Outcome
-	Rounds     []Round
-	Attackers  []PartyResult
-	Defenders  []PartyResult
-	Debris     economy.Resources
-	MoonChance float64
+	Outcome       Outcome
+	Rounds        []Round
+	Attackers     []PartyResult
+	Defenders     []PartyResult
+	ShipDebris    economy.Resources
+	DefenseDebris economy.Resources
+	Debris        economy.Resources
+	MoonChance    float64
 }
 
 // instance is one unit on the battlefield.
@@ -164,7 +166,8 @@ func Resolve(input Input, source random.Source) (Result, error) {
 	rebuildDefenses(&defenders, input.Rules.DefenseRebuildChance, source)
 	result.Attackers = attackers.parties
 	result.Defenders = defenders.parties
-	result.Debris = debrisOf(attackers, defenders, input.Rules)
+	result.ShipDebris, result.DefenseDebris = debrisOf(attackers, defenders, input.Rules)
+	result.Debris = result.ShipDebris.Plus(result.DefenseDebris)
 	result.MoonChance = MoonChance(result.Debris, input.Rules.MaximumMoonChance)
 	return result, nil
 }
@@ -378,17 +381,22 @@ func rebuildDefenses(defenders *side, chance float64, source random.Source) {
 	}
 }
 
-// debrisOf prices the wrecks with the cost their owners actually paid.
-func debrisOf(attackers, defenders side, settings rules.CombatSettings) economy.Resources {
+// debrisOf prices the wrecks with the cost their owners actually paid and
+// retains their origin. The public debris field is their sum, while a
+// simulation can explain whether it came from ships or planetary defenses.
+func debrisOf(attackers, defenders side, settings rules.CombatSettings) (economy.Resources, economy.Resources) {
 	shipMetal, shipCrystal := lostValue(attackers, false)
 	defenderShipMetal, defenderShipCrystal := lostValue(defenders, false)
 	defenseMetal, defenseCrystal := lostValue(defenders, true)
-	return economy.Resources{
-		Metal: floored(settings.ShipsToDebris*float64(shipMetal+defenderShipMetal)) +
-			floored(settings.DefensesToDebris*float64(defenseMetal)),
-		Crystal: floored(settings.ShipsToDebris*float64(shipCrystal+defenderShipCrystal)) +
-			floored(settings.DefensesToDebris*float64(defenseCrystal)),
+	ships := economy.Resources{
+		Metal:   floored(settings.ShipsToDebris * float64(shipMetal+defenderShipMetal)),
+		Crystal: floored(settings.ShipsToDebris * float64(shipCrystal+defenderShipCrystal)),
 	}
+	defenses := economy.Resources{
+		Metal:   floored(settings.DefensesToDebris * float64(defenseMetal)),
+		Crystal: floored(settings.DefensesToDebris * float64(defenseCrystal)),
+	}
+	return ships, defenses
 }
 
 // lostValue totals what one family of one side lost, at the price paid for it.

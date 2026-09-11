@@ -60,6 +60,16 @@
       }
     }
   ],
+  "ShipDebris": {
+    "Metal": 36000,
+    "Crystal": 12000,
+    "Deuterium": 0
+  },
+  "DefenseDebris": {
+    "Metal": 0,
+    "Crystal": 0,
+    "Deuterium": 0
+  },
   "Debris": {
     "Metal": 36000,
     "Crystal": 12000,

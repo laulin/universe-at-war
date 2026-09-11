@@ -9,6 +9,8 @@
     <p class="eyebrow">{{.Report.Coordinate}} — {{.Report.OccurredAt.Format "2006-01-02 15:04:05"}} UTC ({{.Report.Freshness}})</p>
     <h2 id="report-title">{{.Report.KindName}}{{if .Report.Hostile}} <span class="hostile">⚠ hostile</span>{{end}}</h2>
 
+    {{if .AttackLink}}<p><a class="button" href="{{.AttackLink}}">Préparer une attaque{{with .Current}} depuis {{.Name}}{{end}}</a></p>{{end}}
+
     {{with .Espionage}}
     <dl class="summary">
       <dt>Cible</dt><dd>{{.TargetPlanetName}} — {{.TargetPlayerName}}</dd>

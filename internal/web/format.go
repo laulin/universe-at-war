@@ -9,8 +9,17 @@ import (
 // templateFuncs are the few helpers the views need. Everything else is computed
 // in Go: a template that does arithmetic is a template nobody can test.
 var templateFuncs = template.FuncMap{
-	"figure": figure,
-	"signed": signed,
+	"decimal":  decimal,
+	"figure":   figure,
+	"signed":   signed,
+	"unitName": unitName,
+}
+
+// decimal renders sampled unit averages in the French notation used by the
+// rest of the interface. One decimal keeps rare losses visible instead of
+// rounding them down to zero.
+func decimal(value float64) string {
+	return strings.Replace(strconv.FormatFloat(value, 'f', 1, 64), ".", ",", 1)
 }
 
 // figure groups thousands the way the player reads them in game: 1.659.181.

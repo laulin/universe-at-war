@@ -19,6 +19,7 @@ import (
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
+	appbattlesimulation "universeatwar/internal/app/battlesimulation"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
@@ -139,6 +140,10 @@ type reportsService interface {
 	SharedWithAlliance(context.Context, appauth.Principal) ([]appreports.Summary, error)
 }
 
+type battleSimulationService interface {
+	Estimate(context.Context, appauth.Principal, appbattlesimulation.Request) (appbattlesimulation.Estimate, error)
+}
+
 type phalanxService interface {
 	Scan(context.Context, appauth.Principal, int64, universe.Coordinate) (appphalanx.Scan, error)
 }
@@ -150,63 +155,65 @@ type jumpGateService interface {
 
 // Dependencies are the application services required by the HTTP adapter.
 type Dependencies struct {
-	Authentication authenticationService
-	ServerState    stateService
-	CSRFSecrets    secretGenerator
-	Nonces         secretGenerator
-	Setup          setupService
-	Economy        economyService
-	Research       researchService
-	Shipyard       shipyardService
-	Fleet          fleetService
-	Galaxy         galaxyService
-	Reports        reportsService
-	Phalanx        phalanxService
-	JumpGate       jumpGateService
-	Alliance       allianceService
-	ACS            acsService
-	Artificials    artificialService
-	Dashboard      dashboardService
-	Invitations    invitationService
-	Moderation     moderationService
-	Backups        backupService
-	Registration   registrationService
-	Logger         *slog.Logger
-	Metrics        *observability.Metrics
-	SecureCookies  bool
-	LoginLimiter   loginRateLimiter
+	Authentication   authenticationService
+	ServerState      stateService
+	CSRFSecrets      secretGenerator
+	Nonces           secretGenerator
+	Setup            setupService
+	Economy          economyService
+	Research         researchService
+	Shipyard         shipyardService
+	Fleet            fleetService
+	Galaxy           galaxyService
+	Reports          reportsService
+	BattleSimulation battleSimulationService
+	Phalanx          phalanxService
+	JumpGate         jumpGateService
+	Alliance         allianceService
+	ACS              acsService
+	Artificials      artificialService
+	Dashboard        dashboardService
+	Invitations      invitationService
+	Moderation       moderationService
+	Backups          backupService
+	Registration     registrationService
+	Logger           *slog.Logger
+	Metrics          *observability.Metrics
+	SecureCookies    bool
+	LoginLimiter     loginRateLimiter
 }
 
 // Handler serves the minimal bootstrap and authentication interface.
 type Handler struct {
-	authentication  authenticationService
-	serverState     stateService
-	csrfSecrets     secretGenerator
-	nonces          secretGenerator
-	setup           setupService
-	economy         economyService
-	research        researchService
-	shipyard        shipyardService
-	fleet           fleetService
-	galaxy          galaxyService
-	reports         reportsService
-	phalanx         phalanxService
-	jumpGate        jumpGateService
-	alliance        allianceService
-	acs             acsService
-	artificials     artificialService
-	dashboard       dashboardService
-	invitations     invitationService
-	moderation      moderationService
-	backups         backupService
-	metrics         *observability.Metrics
-	registration    registrationService
-	secureCookies   bool
-	loginLimiter    loginRateLimiter
-	registerLimiter loginRateLimiter
-	clock           func() time.Time
-	pages           map[string]*template.Template
-	mux             *http.ServeMux
+	authentication   authenticationService
+	serverState      stateService
+	csrfSecrets      secretGenerator
+	nonces           secretGenerator
+	setup            setupService
+	economy          economyService
+	research         researchService
+	shipyard         shipyardService
+	fleet            fleetService
+	galaxy           galaxyService
+	reports          reportsService
+	battleSimulation battleSimulationService
+	phalanx          phalanxService
+	jumpGate         jumpGateService
+	alliance         allianceService
+	acs              acsService
+	artificials      artificialService
+	dashboard        dashboardService
+	invitations      invitationService
+	moderation       moderationService
+	backups          backupService
+	metrics          *observability.Metrics
+	registration     registrationService
+	secureCookies    bool
+	loginLimiter     loginRateLimiter
+	registerLimiter  loginRateLimiter
+	clock            func() time.Time
+	pages            map[string]*template.Template
+	mux              *http.ServeMux
 }
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
@@ -269,29 +276,30 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		nonces = auth.NewSecretGenerator(rand.Reader, 16)
 	}
 	handler := &Handler{
-		authentication: dependencies.Authentication,
-		serverState:    dependencies.ServerState,
-		csrfSecrets:    dependencies.CSRFSecrets,
-		nonces:         nonces,
-		setup:          dependencies.Setup,
-		economy:        dependencies.Economy,
-		research:       dependencies.Research,
-		shipyard:       dependencies.Shipyard,
-		fleet:          dependencies.Fleet,
-		galaxy:         dependencies.Galaxy,
-		reports:        dependencies.Reports,
-		phalanx:        dependencies.Phalanx,
-		jumpGate:       dependencies.JumpGate,
-		alliance:       dependencies.Alliance,
-		acs:            dependencies.ACS,
-		artificials:    dependencies.Artificials,
-		dashboard:      dependencies.Dashboard,
-		invitations:    dependencies.Invitations,
-		moderation:     dependencies.Moderation,
-		backups:        dependencies.Backups,
-		registration:   dependencies.Registration,
-		secureCookies:  dependencies.SecureCookies,
-		loginLimiter:   limiter,
+		authentication:   dependencies.Authentication,
+		serverState:      dependencies.ServerState,
+		csrfSecrets:      dependencies.CSRFSecrets,
+		nonces:           nonces,
+		setup:            dependencies.Setup,
+		economy:          dependencies.Economy,
+		research:         dependencies.Research,
+		shipyard:         dependencies.Shipyard,
+		fleet:            dependencies.Fleet,
+		galaxy:           dependencies.Galaxy,
+		reports:          dependencies.Reports,
+		battleSimulation: dependencies.BattleSimulation,
+		phalanx:          dependencies.Phalanx,
+		jumpGate:         dependencies.JumpGate,
+		alliance:         dependencies.Alliance,
+		acs:              dependencies.ACS,
+		artificials:      dependencies.Artificials,
+		dashboard:        dependencies.Dashboard,
+		invitations:      dependencies.Invitations,
+		moderation:       dependencies.Moderation,
+		backups:          dependencies.Backups,
+		registration:     dependencies.Registration,
+		secureCookies:    dependencies.SecureCookies,
+		loginLimiter:     limiter,
 		// Signing up forgives a few typos before it starts slowing down.
 		registerLimiter: &LoginLimiter{FreeAttempts: 3, now: time.Now, attempts: map[string]loginAttempt{}},
 		clock:           func() time.Time { return time.Now().UTC() },

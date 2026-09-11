@@ -99,6 +99,16 @@
       "Rebuilt": null
     }
   ],
+  "ShipDebris": {
+    "Metal": 168300,
+    "Crystal": 70500,
+    "Deuterium": 0
+  },
+  "DefenseDebris": {
+    "Metal": 0,
+    "Crystal": 0,
+    "Deuterium": 0
+  },
   "Debris": {
     "Metal": 168300,
     "Crystal": 70500,

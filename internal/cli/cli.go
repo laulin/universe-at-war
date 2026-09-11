@@ -21,6 +21,7 @@ import (
 	appai "universeatwar/internal/app/ai"
 	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
+	appbattlesimulation "universeatwar/internal/app/battlesimulation"
 	appbootstrap "universeatwar/internal/app/bootstrap"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
@@ -378,6 +379,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()),
 		Completer:  events,
 	}
+	battleSimulation := appbattlesimulation.Service{Reports: reports, Economy: economy, Catalogues: catalogues}
 	shipyard := appshipyard.Service{
 		Clock:      clock,
 		Repository: shipyardRepository,
@@ -410,30 +412,31 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	workerErrors := make(chan error, 1)
 	go func() { workerErrors <- worker.Run(workerContext) }()
 	handler, err := webhandler.New(webhandler.Dependencies{
-		Authentication: authentication,
-		ServerState:    states,
-		CSRFSecrets:    auth.NewSecretGenerator(random, 32),
-		Nonces:         auth.NewSecretGenerator(random, 16),
-		Setup:          setup,
-		Economy:        economy,
-		Research:       research,
-		Shipyard:       shipyard,
-		Fleet:          fleet,
-		Galaxy:         galaxy,
-		Reports:        reports,
-		Phalanx:        sensors,
-		JumpGate:       gates,
-		Alliance:       alliance,
-		ACS:            operations,
-		Artificials:    artificials,
-		Dashboard:      dashboard,
-		Invitations:    invitations,
-		Moderation:     moderation,
-		Backups:        backups,
-		Registration:   registration,
-		Logger:         logger,
-		Metrics:        metrics,
-		SecureCookies:  *secureCookie,
+		Authentication:   authentication,
+		ServerState:      states,
+		CSRFSecrets:      auth.NewSecretGenerator(random, 32),
+		Nonces:           auth.NewSecretGenerator(random, 16),
+		Setup:            setup,
+		Economy:          economy,
+		Research:         research,
+		Shipyard:         shipyard,
+		Fleet:            fleet,
+		Galaxy:           galaxy,
+		Reports:          reports,
+		BattleSimulation: battleSimulation,
+		Phalanx:          sensors,
+		JumpGate:         gates,
+		Alliance:         alliance,
+		ACS:              operations,
+		Artificials:      artificials,
+		Dashboard:        dashboard,
+		Invitations:      invitations,
+		Moderation:       moderation,
+		Backups:          backups,
+		Registration:     registration,
+		Logger:           logger,
+		Metrics:          metrics,
+		SecureCookies:    *secureCookie,
 	})
 	if err != nil {
 		return r.commandError("serve", err)

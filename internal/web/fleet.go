@@ -10,8 +10,10 @@ import (
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
+	appbattlesimulation "universeatwar/internal/app/battlesimulation"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
+	appreports "universeatwar/internal/app/reports"
 	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/unit"
@@ -118,6 +120,7 @@ type fleetConfirmPageData struct {
 	LaunchKey     string
 	OperationKey  string
 	GroupedAttack bool
+	Simulation    *appbattlesimulation.Estimate
 }
 
 // fleetForm is the transport shape of the send wizard, kept as typed values so
@@ -133,6 +136,13 @@ type fleetForm struct {
 	Crystal     int64
 	Deuterium   int64
 	HoldUntil   string
+	// ReportID carries the immutable intelligence source from a report shortcut
+	// through preview and editing. It never changes launch authorization.
+	ReportID int64
+	// SelectAll is only a GET preset from a contextual shortcut. It is resolved
+	// against the authoritative stationed inventory and is never trusted back
+	// from a submitted form.
+	SelectAll unit.ID
 }
 
 func (h *Handler) fleetPage(response http.ResponseWriter, request *http.Request) {
@@ -189,10 +199,22 @@ func (h *Handler) fleetSendPage(response http.ResponseWriter, request *http.Requ
 	if !ok {
 		return
 	}
-	form := fleetForm{Speed: 100, Mission: string(domainfleet.MissionTransport)}
+	form := fleetForm{
+		Speed: 100, Mission: string(domainfleet.MissionTransport),
+		Composition: map[unit.ID]int64{},
+	}
 	form.Galaxy, _ = strconv.Atoi(request.URL.Query().Get("galaxy"))
 	form.System, _ = strconv.Atoi(request.URL.Query().Get("system"))
 	form.Position, _ = strconv.Atoi(request.URL.Query().Get("position"))
+	if reportID, err := strconv.ParseInt(request.URL.Query().Get("report"), 10, 64); err == nil && reportID > 0 {
+		form.ReportID = reportID
+	}
+	if mission := domainfleet.Mission(request.URL.Query().Get("mission")); mission.Valid() {
+		form.Mission = string(mission)
+	}
+	if form.Mission == string(domainfleet.MissionRecycle) && request.URL.Query().Get("select") == string(unit.Recycler) {
+		form.SelectAll = unit.Recycler
+	}
 	h.renderFleetSend(response, request, http.StatusOK, principal, planetID, form, "")
 }
 
@@ -217,6 +239,12 @@ func (h *Handler) renderFleetSend(response http.ResponseWriter, request *http.Re
 	}
 	shell := h.gameShell(request.Context(), token, principal, "fleet", planets, planetID)
 	shell.Error = message
+	if form.Composition == nil {
+		form.Composition = map[unit.ID]int64{}
+	}
+	if form.SelectAll != "" {
+		form.Composition[form.SelectAll] = overview.Stationed[form.SelectAll]
+	}
 	hold := composedHold(form.Composition, h.shipCatalogue())
 	loaded := form.CargoMetal + form.Crystal + form.Deuterium
 	h.render(response, status, "fleet-send", fleetSendPageData{
@@ -331,6 +359,28 @@ func (h *Handler) previewFleet(response http.ResponseWriter, request *http.Reque
 	}
 	data.GroupedAttack = domainfleet.Mission(form.Mission) == domainfleet.MissionAttack &&
 		h.inAnAlliance(request.Context(), principal)
+	if form.ReportID > 0 && domainfleet.Mission(form.Mission) == domainfleet.MissionAttack && h.battleSimulation != nil {
+		estimate, estimateErr := h.battleSimulation.Estimate(request.Context(), principal, appbattlesimulation.Request{
+			ReportID: form.ReportID, OriginPlanet: planetID,
+			Target: launchRequest.Target, Composition: launchRequest.Composition,
+			Cargo: launchRequest.Cargo, Fuel: plan.Fuel,
+		})
+		if errors.Is(estimateErr, appreports.ErrNotFound) {
+			http.NotFound(response, request)
+			return
+		}
+		if estimateErr != nil {
+			message := "Impossible de simuler ce rapport."
+			if errors.Is(estimateErr, appbattlesimulation.ErrTargetMismatch) {
+				message = "La destination ne correspond plus au rapport sélectionné."
+			} else if errors.Is(estimateErr, appbattlesimulation.ErrUnsupportedReport) {
+				message = "Ce type de rapport ne permet pas de simuler une attaque."
+			}
+			h.renderFleetSend(response, request, http.StatusBadRequest, principal, planetID, form, message)
+			return
+		}
+		data.Simulation = &estimate
+	}
 	h.render(response, http.StatusOK, "fleet-confirm", data)
 }
 
@@ -422,6 +472,9 @@ func parseFleetForm(request *http.Request) (fleetForm, error) {
 	form.Deuterium = optionalQuantity(request, "cargo_deuterium")
 	form.Composition = parseComposition(request)
 	form.HoldUntil = strings.TrimSpace(request.PostFormValue("hold_until"))
+	if reportID, err := strconv.ParseInt(request.PostFormValue("report_id"), 10, 64); err == nil && reportID > 0 {
+		form.ReportID = reportID
+	}
 	return form, nil
 }
 
@@ -567,7 +620,7 @@ func missionName(mission domainfleet.Mission) string {
 	case domainfleet.MissionTransport:
 		return "Transport"
 	case domainfleet.MissionDeploy:
-		return "Déploiement"
+		return "Stationner"
 	case domainfleet.MissionAttack:
 		return "Attaque"
 	case domainfleet.MissionEspionage:

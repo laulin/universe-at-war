@@ -29,6 +29,9 @@ func TestWebFleetLaunchAndRecallWorkflow(t *testing.T) {
 	if !strings.Contains(send, `name="composition[small_cargo]"`) || !strings.Contains(send, `name="galaxy"`) {
 		t.Fatalf("send page = %q", send)
 	}
+	if !strings.Contains(send, `value="deploy">Stationner</option>`) || strings.Contains(send, "Déploiement") {
+		t.Fatalf("the permanent mission is not named Stationner: %q", send)
+	}
 
 	form := url.Values{
 		"csrf_token": {"csrf-token"}, "galaxy": {"1"}, "system": {"1"}, "position": {"1"},

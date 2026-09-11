@@ -132,6 +132,10 @@ func TestWebHostileReportsRaiseAnAlertInTheLayout(t *testing.T) {
 	if strings.Contains(attacker, `⚠ 1`) {
 		t.Fatalf("the attacker sees a hostile alert: %q", attacker)
 	}
+	attackDetail := getPage(t, handler, "/reports/1", session, csrfCookie)
+	if !strings.Contains(attackDetail, "Préparer une attaque") || !strings.Contains(attackDetail, "report=1") {
+		t.Fatalf("an attack report has no new-attack shortcut: %q", attackDetail)
+	}
 
 	defenderHandler, err := webhandler.New(webhandler.Dependencies{
 		Authentication: webAuthenticationStub{principal: appauth.Principal{AccountID: 2, Username: "player2"}},
@@ -164,6 +168,7 @@ func intelligenceHandler(t *testing.T) (http.Handler, *storagesqlite.Database, *
 		Authentication: webAuthenticationStub{principal: appauth.Principal{AccountID: 1, Username: "player1"}},
 		ServerState:    runningStateStub{}, CSRFSecrets: sequenceSecret{value: "csrf-token"},
 		Economy: universe.Economy, Fleet: universe.Fleet, Galaxy: universe.Galaxy, Reports: universe.Reports,
+		BattleSimulation: universe.BattleSimulation,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -230,6 +235,47 @@ func TestWebReportsTellAnEmptyPlanetFromAnUnseenOne(t *testing.T) {
 	for _, said := range []string{"aucun vaisseau", "aucune défense", "aucune recherche"} {
 		if !strings.Contains(detail, said) {
 			t.Fatalf("the report does not say %q: %q", said, detail)
+		}
+	}
+	for _, shortcut := range []string{"Préparer une attaque", "mission=attack", "report=1"} {
+		if !strings.Contains(detail, shortcut) {
+			t.Fatalf("the report has no %q shortcut: %q", shortcut, detail)
+		}
+	}
+
+	// The attacking composition is chosen in the ordinary fleet wizard. Its
+	// confirmation automatically adds the estimate from this report.
+	if spy.ReturnsAt == nil {
+		t.Fatal("the probes have no return")
+	}
+	universe.Clock.Set(*spy.ReturnsAt)
+	if _, err := universe.Events.CompleteDue(ctx, 20); err != nil {
+		t.Fatal(err)
+	}
+	setUnits(t, ctx, database, 1, "light_fighter", 3)
+	preview := postFormRequest("/planets/1/fleet/preview", url.Values{
+		"csrf_token":                 {"csrf-token"},
+		"report_id":                  {"1"},
+		"galaxy":                     {"1"},
+		"system":                     {"1"},
+		"position":                   {"1"},
+		"mission":                    {"attack"},
+		"speed":                      {"100"},
+		"composition[light_fighter]": {"3"},
+	})
+	preview.AddCookie(session)
+	preview.AddCookie(csrfCookie)
+	confirmation := httptest.NewRecorder()
+	handler.ServeHTTP(confirmation, preview)
+	if confirmation.Code != http.StatusOK {
+		t.Fatalf("simulation preview = %d %q", confirmation.Code, confirmation.Body.String())
+	}
+	for _, shown := range []string{
+		"Simulation de bataille", "Victoire 100 %", "Butin estimé", "état actuel de la cible",
+		"Aucun vaisseau perdu", "Aucune défense perdue", "Débris issus des vaisseaux", "Débris issus des défenses",
+	} {
+		if !strings.Contains(confirmation.Body.String(), shown) {
+			t.Fatalf("simulation does not show %q: %q", shown, confirmation.Body.String())
 		}
 	}
 	// The document keeps the difference too, or the next reader loses it again.

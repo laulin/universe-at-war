@@ -75,6 +75,7 @@ type reportPageSummary struct {
 type reportPageData struct {
 	pageShell
 	Report     reportPageSummary
+	AttackLink string
 	Espionage  *espionagePageView
 	Detected   *report.DetectedPayload
 	Combat     *report.CombatPayload
@@ -377,9 +378,12 @@ func (h *Handler) reportPage(response http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
-	data := reportPageData{
-		pageShell: h.gameShell(request.Context(), token, principal, "reports", planets, h.rememberedBody(request)),
-		Report:    summaryView(detail.Summary),
+	shell := h.gameShell(request.Context(), token, principal, "reports", planets, h.rememberedBody(request))
+	data := reportPageData{pageShell: shell, Report: summaryView(detail.Summary)}
+	if shell.Current != nil && (detail.Summary.Kind == report.Espionage || detail.Summary.Kind == report.CombatAttack) {
+		at := detail.Summary.Coordinate
+		data.AttackLink = fmt.Sprintf("/planets/%d/fleet/send?galaxy=%d&system=%d&position=%d&mission=attack&report=%d",
+			shell.Current.ID, at.Galaxy, at.System, at.Position, detail.Summary.ID)
 	}
 	switch payload := detail.Payload.(type) {
 	case report.EspionagePayload:

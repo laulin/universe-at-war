@@ -7,6 +7,10 @@ technologies, les règles et une source aléatoire, et renvoie l'issue, les
 survivants, les pertes, les débris et le détail des rounds. Il ne connaît ni
 HTTP, ni SQLite. À entrée et seed égales, il rend strictement le même résultat.
 
+La prévisualisation lancée depuis un rapport réutilise cette fonction sans
+consulter la cible actuelle. Sa distribution et ses limites sont décrites dans
+[`combat-simulation.md`](combat-simulation.md).
+
 Les missiles ne participent jamais à un combat de flotte.
 
 ## Statistiques effectives
@@ -67,6 +71,10 @@ Débris, une seule troncature par ressource et par famille :
 débris_métal = floor(part_vaisseaux * somme(pertes_vaisseaux * métal_payé))
              + floor(part_défenses  * somme(défenses_perdues_non_reconstruites * métal_payé))
 ```
+
+Le résultat conserve séparément les deux termes, puis expose leur somme comme
+débris total. Cette distinction est informative et ne modifie ni le champ de
+débris recyclable ni le calcul de la chance de lune.
 
 Le coût payé est le coût de base multiplié par le multiplicateur de la famille,
 exactement comme au chantier. Le deutérium ne produit jamais de débris.

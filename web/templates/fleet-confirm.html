@@ -12,6 +12,84 @@
       <dt>Arrivée prévue</dt><dd>{{.Plan.ArrivesAt.Format "2006-01-02 15:04:05"}} UTC</dd>
       <dt>Retour prévu</dt><dd>{{if .Plan.ReturnsAt}}{{.Plan.ReturnsAt.Format "2006-01-02 15:04:05"}} UTC{{else}}aucun{{end}}</dd>
     </dl>
+    {{with .Simulation}}
+    <section class="battle-simulation" aria-labelledby="simulation-title">
+      <p class="eyebrow">Estimation fondée sur le rapport du {{.OccurredAt.Format "2006-01-02 15:04:05"}} UTC</p>
+      <h3 id="simulation-title">Simulation de bataille</h3>
+      {{if .Available}}
+      <p class="simulation-outcomes">
+        <strong class="friendly">Victoire {{printf "%.0f" .WinRate}} %</strong>
+        <span>Nul {{printf "%.0f" .DrawRate}} %</span>
+        <strong class="hostile">Défaite {{printf "%.0f" .LossRate}} %</strong>
+      </p>
+      <p class="muted">{{.Samples}} combats déterministes ont été comparés. Les fourchettes indiquent le minimum et le maximum observés.</p>
+      <div class="simulation-grid">
+        <article>
+          <h4>Pertes attaquantes</h4>
+          <strong>{{figure .AttackerLosses.Total.Average}}</strong>
+          <small>{{figure .AttackerLosses.Total.Minimum}} à {{figure .AttackerLosses.Total.Maximum}} ressources</small>
+          <p><span class="res-metal">M {{figure .AttackerLosses.Metal.Average}}</span> · <span class="res-crystal">C {{figure .AttackerLosses.Crystal.Average}}</span> · <span class="res-deuterium">D {{figure .AttackerLosses.Deuterium.Average}}</span></p>
+          {{if .AttackerShipLosses}}<h5>Vaisseaux perdus</h5>
+          <ul class="unit-losses">
+            {{range .AttackerShipLosses}}<li><span>{{unitName .ID}}</span><span><strong>{{decimal .Average}}</strong> en moyenne <small>{{figure .Minimum}} à {{figure .Maximum}}</small></span></li>{{end}}
+          </ul>{{else}}<p class="muted">Aucun vaisseau perdu.</p>{{end}}
+        </article>
+        <article>
+          <h4>Pertes défenseurs</h4>
+          <strong>{{figure .DefenderLosses.Total.Average}}</strong>
+          <small>{{figure .DefenderLosses.Total.Minimum}} à {{figure .DefenderLosses.Total.Maximum}} ressources</small>
+          <p><span class="res-metal">M {{figure .DefenderLosses.Metal.Average}}</span> · <span class="res-crystal">C {{figure .DefenderLosses.Crystal.Average}}</span> · <span class="res-deuterium">D {{figure .DefenderLosses.Deuterium.Average}}</span></p>
+          <h5>Vaisseaux perdus</h5>
+          {{if .DefenderShipLosses}}<ul class="unit-losses">
+            {{range .DefenderShipLosses}}<li><span>{{unitName .ID}}</span><span><strong>{{decimal .Average}}</strong> en moyenne <small>{{figure .Minimum}} à {{figure .Maximum}}</small></span></li>{{end}}
+          </ul>{{else}}<p class="muted">Aucun vaisseau perdu.</p>{{end}}
+          <h5>Défenses perdues</h5>
+          {{if .DefenderDefenseLosses}}<ul class="unit-losses">
+            {{range .DefenderDefenseLosses}}<li><span>{{unitName .ID}}</span><span><strong>{{decimal .Average}}</strong> en moyenne <small>{{figure .Minimum}} à {{figure .Maximum}}</small></span></li>{{end}}
+          </ul>{{else}}<p class="muted">Aucune défense perdue.</p>{{end}}
+          <small>Les reconstructions défensives sont déjà déduites.</small>
+        </article>
+        <article>
+          <h4>Débris issus des vaisseaux</h4>
+          <strong>{{figure .ShipDebris.Total.Average}}</strong>
+          <small>{{figure .ShipDebris.Total.Minimum}} à {{figure .ShipDebris.Total.Maximum}} ressources</small>
+          <p><span class="res-metal">M {{figure .ShipDebris.Metal.Average}}</span> · <span class="res-crystal">C {{figure .ShipDebris.Crystal.Average}}</span></p>
+        </article>
+        <article>
+          <h4>Débris issus des défenses</h4>
+          <strong>{{figure .DefenseDebris.Total.Average}}</strong>
+          <small>{{figure .DefenseDebris.Total.Minimum}} à {{figure .DefenseDebris.Total.Maximum}} ressources</small>
+          <p><span class="res-metal">M {{figure .DefenseDebris.Metal.Average}}</span> · <span class="res-crystal">C {{figure .DefenseDebris.Crystal.Average}}</span></p>
+        </article>
+        <article>
+          <h4>Débris totaux</h4>
+          <strong>{{figure .Debris.Total.Average}}</strong>
+          <small>{{figure .Debris.Total.Minimum}} à {{figure .Debris.Total.Maximum}} ressources</small>
+          <p><span class="res-metal">M {{figure .Debris.Metal.Average}}</span> · <span class="res-crystal">C {{figure .Debris.Crystal.Average}}</span></p>
+          <p>Chance de lune moyenne : {{.MoonChance.Average}} %</p>
+        </article>
+        {{if .LootKnown}}<article>
+          <h4>Butin estimé</h4>
+          <strong>{{figure .Loot.Total.Average}}</strong>
+          <small>{{figure .Loot.Total.Minimum}} à {{figure .Loot.Total.Maximum}} ressources</small>
+          <p><span class="res-metal">M {{figure .Loot.Metal.Average}}</span> · <span class="res-crystal">C {{figure .Loot.Crystal.Average}}</span> · <span class="res-deuterium">D {{figure .Loot.Deuterium.Average}}</span></p>
+        </article>
+        <article>
+          <h4>Bilan estimé</h4>
+          <strong>{{signed .Net.Average}}</strong>
+          <small>pertes et carburant déduits · {{signed .Net.Minimum}} à {{signed .Net.Maximum}}</small>
+          <p>Avec recyclage intégral : <strong>{{signed .NetWithDebris.Average}}</strong></p>
+        </article>{{end}}
+      </div>
+      {{else}}
+      {{if .UnavailableReason}}<div class="alert" role="status">Simulation indisponible : {{.UnavailableReason}}</div>
+      {{else}}<div class="alert" role="status">Simulation indisponible : le rapport ne révèle pas {{range $index, $missing := .Missing}}{{if $index}}, {{end}}{{$missing}}{{end}}.</div>{{end}}
+      {{end}}
+      {{range .Warnings}}<p class="muted">⚠ {{.}}</p>{{end}}
+      <p class="muted">Cette estimation ne consulte jamais l'état actuel de la cible. Une flotte, une défense ou une technologie peut changer avant l'arrivée.</p>
+      <p><a href="/planets/{{$.Planet.ID}}/fleet/send?galaxy={{$.Form.Galaxy}}&amp;system={{$.Form.System}}&amp;position={{$.Form.Position}}&amp;mission=espionage">Espionner à nouveau avant d'attaquer</a></p>
+    </section>
+    {{end}}
     <!-- One form for the whole confirmation. Each button carries its own action
          and its own idempotency key, and a button submits only its own name and
          value: two keys stay two keys. Split in two, the cargo would exist in
@@ -24,6 +102,7 @@
       <input type="hidden" name="mission" value="{{.Form.Mission}}">
       <input type="hidden" name="hold_until" value="{{.Form.HoldUntil}}">
       <input type="hidden" name="speed" value="{{.Form.Speed}}">
+      {{if .Form.ReportID}}<input type="hidden" name="report_id" value="{{.Form.ReportID}}">{{end}}
       {{range $id, $quantity := .Form.Composition}}<input type="hidden" name="composition[{{$id}}]" value="{{$quantity}}">{{end}}
       <fieldset>
         <legend>Cargo</legend>

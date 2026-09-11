@@ -6,6 +6,7 @@
     {{if .Ships}}
     <form method="post" action="/planets/{{.Planet.ID}}/fleet/preview">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      {{if .Form.ReportID}}<input type="hidden" name="report_id" value="{{.Form.ReportID}}">{{end}}
       <fieldset>
         <legend>Composition</legend>
         {{range .Ships}}
@@ -74,8 +75,8 @@
         </label>
         <p class="muted">Le carburant sort de la soute et du même deutérium : la confirmation donne la capacité qu'il laisse.</p>
       </fieldset>
-      <button type="submit">Calculer la mission</button>
-      <p class="muted">Vous verrez la distance, le carburant et l'heure d'arrivée avant de confirmer.</p>
+      <button type="submit">{{if .Form.ReportID}}Calculer et simuler l'attaque{{else}}Calculer la mission{{end}}</button>
+      <p class="muted">Vous verrez la distance, le carburant et l'heure d'arrivée{{if .Form.ReportID}}, puis l'estimation du combat,{{end}} avant de confirmer.</p>
     </form>
     {{else}}<p class="muted">Aucun vaisseau disponible sur cette planète.</p>{{end}}
   </section>
