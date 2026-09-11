@@ -34,42 +34,46 @@
     <p><a href="/admin/moderation">Modération</a> · <a href="/admin/ai">Joueurs artificiels</a></p>
 
     <h3 id="accounts-title">Comptes</h3>
-    <table class="bodies" aria-labelledby="accounts-title">
-      <thead>
-        <tr><th scope="col">Compte</th><th scope="col">Nature</th><th scope="col">Rôles</th>
-        <th scope="col">État</th><th scope="col">Empire</th><th scope="col">Actions</th></tr>
-      </thead>
-      <tbody>
-      {{range .Accounts}}
-        <tr>
-          <th scope="row">{{.Username}}</th>
-          <td>{{.Kind}}</td>
-          <td>{{range .Roles}}{{.}} {{end}}</td>
-          <td>{{.Status}}{{if .Banned}} — <span class="hostile">⚠ banni</span>{{end}}</td>
-          <td>{{if .HasEmpire}}oui{{else}}non{{end}}</td>
-          <td>
-            <form method="post" action="/admin/accounts/{{.ID}}/role">
-              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <label for="role-{{.ID}}">Rôle</label>
-              <select id="role-{{.ID}}" name="role">
-                <option value="PLAYER">PLAYER</option>
-                <option value="MODERATOR">MODERATOR</option>
-                <option value="ADMIN">ADMIN</option>
-              </select>
-              <button type="submit" name="granted" value="1">Accorder</button>
-              <button type="submit" name="granted" value="0">Retirer</button>
-            </form>
-            <form method="post" action="/admin/accounts/{{.ID}}/status">
-              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <button type="submit" name="status" value="{{if eq .Status "active"}}disabled{{else}}active{{end}}">
-                {{if eq .Status "active"}}Désactiver{{else}}Réactiver{{end}}
-              </button>
-            </form>
-          </td>
-        </tr>
-      {{end}}
-      </tbody>
-    </table>
+    <div class="admin-table-scroll">
+      <table class="bodies admin-accounts" aria-labelledby="accounts-title">
+        <thead>
+          <tr><th scope="col">Compte</th><th scope="col">Nature</th><th scope="col">Rôles</th>
+          <th scope="col">État</th><th scope="col">Empire</th><th scope="col">Actions</th></tr>
+        </thead>
+        <tbody>
+        {{range .Accounts}}
+          <tr>
+            <th scope="row">{{.Username}}</th>
+            <td>{{.Kind}}</td>
+            <td>{{range .Roles}}{{.}} {{end}}</td>
+            <td>{{.Status}}{{if .Banned}} — <span class="hostile">⚠ banni</span>{{end}}</td>
+            <td>{{if .HasEmpire}}oui{{else}}non{{end}}</td>
+            <td>
+              <div class="admin-account-actions">
+                <form method="post" action="/admin/accounts/{{.ID}}/role">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <label for="role-{{.ID}}">Rôle</label>
+                  <select id="role-{{.ID}}" name="role">
+                    <option value="PLAYER">PLAYER</option>
+                    <option value="MODERATOR">MODERATOR</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                  <button type="submit" name="granted" value="1">Accorder</button>
+                  <button type="submit" name="granted" value="0">Retirer</button>
+                </form>
+                <form method="post" action="/admin/accounts/{{.ID}}/status">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" name="status" value="{{if eq .Status "active"}}disabled{{else}}active{{end}}">
+                    {{if eq .Status "active"}}Désactiver{{else}}Réactiver{{end}}
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
 
     <h3 id="invitations-title">Invitations</h3>
     <form method="post" action="/admin/invitations" aria-labelledby="invitations-title">

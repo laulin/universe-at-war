@@ -208,6 +208,15 @@ func TestWebAdministrationIsReservedAndWarnsAPlayingAdministrator(t *testing.T) 
 			t.Fatalf("the dashboard misses %q", expected)
 		}
 	}
+	if !strings.Contains(page, `class="admin-account-actions"`) {
+		t.Fatalf("the account commands do not share an action row: %q", page)
+	}
+	styles := fetch(admin, "/static/css/pages.css")
+	if styles.Code != http.StatusOK || !strings.Contains(styles.Body.String(), ".admin-account-actions {") ||
+		!strings.Contains(styles.Body.String(), "flex-wrap: nowrap;") ||
+		!strings.Contains(styles.Body.String(), "align-items: flex-end;") {
+		t.Fatalf("the administration action row is not kept aligned: %q", styles.Body.String())
+	}
 	// A moderator reaches the sanctions and nothing else.
 	if code := statusOf(t, moderator, "/admin", session, csrfCookie); code != http.StatusNotFound {
 		t.Fatalf("GET the dashboard as a moderator = %d", code)

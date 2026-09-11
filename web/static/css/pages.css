@@ -26,6 +26,17 @@
 .filters { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
 .filters a { font-size: var(--text-sm); }
 
+.admin-table-scroll { max-width: 100%; overflow-x: auto; }
+.admin-account-actions {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  min-width: max-content;
+}
+.bodies .admin-account-actions form { flex: none; flex-wrap: nowrap; }
+.admin-account-actions button { white-space: nowrap; }
+
 .battle-simulation {
   margin-block: var(--space-4);
   padding: var(--space-4);
