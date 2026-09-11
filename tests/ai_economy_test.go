@@ -68,6 +68,35 @@ func TestArtificialPlayerDevelopsAnEmptyEmpire(t *testing.T) {
 	}
 }
 
+func TestArtificialPlayerNamesANewColonyWithoutOverwritingChosenNames(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+	profile, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Kepler", Archetype: domainai.CautiousMiner,
+		Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinSeed(t, ctx, database, 42, universeWorld.Clock.Now().Add(5*time.Minute))
+	colony := insertColony(t, ctx, database, profile.PlayerID, "Colonie", 1, 2, 4)
+	chosen := insertColony(t, ctx, database, profile.PlayerID, "Forge", 1, 2, 5)
+
+	universeWorld.Clock.Advance(5 * time.Minute)
+	if _, err := universeWorld.Events.CompleteDue(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	if thought, err := universeWorld.Brain.ThinkDue(ctx, 10); err != nil || thought != 1 {
+		t.Fatalf("ThinkDue() = %d, %v", thought, err)
+	}
+
+	assertSingleText(t, database, "SELECT name FROM planets WHERE id = ?", "Kepler 1:2:4", colony)
+	assertSingleText(t, database, "SELECT name FROM planets WHERE id = ?", "Forge", chosen)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM ai_decisions WHERE body_id = ? AND action = 'rename 1:2:4' AND outcome = 'done'", 1, colony)
+}
+
 // TestReflectionIsReproducibleAndArchetypesDiffer proves the same state and the
 // same seed give the same decision, and that two characters do not.
 func TestReflectionIsReproducibleAndArchetypesDiffer(t *testing.T) {

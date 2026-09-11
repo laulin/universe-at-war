@@ -76,7 +76,18 @@
         <div class="hero__plate">
           {{with .Current}}<img class="hero__badge" src="/art/body/{{.ArtSlot}}" alt="" width="44" height="44">{{end}}
           <div>
-            <h1>{{template "title" .}}</h1>
+            {{if .RenameAction}}
+            <div class="hero__rename" data-body-rename>
+              <h1><button class="hero__rename-trigger" type="button" data-body-rename-trigger hidden aria-label="Renommer {{with .Current}}{{.Name}}{{end}}">{{with .Current}}{{.Name}}{{end}}</button></h1>
+              <form class="hero__rename-form" method="post" action="{{.RenameAction}}" data-body-rename-form>
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <label for="body-name" class="visually-hidden">Nom de la planète</label>
+                <input id="body-name" name="name" value="{{with .Current}}{{.Name}}{{end}}" maxlength="32" required autocomplete="off" data-body-rename-input>
+                <button type="submit">Enregistrer</button>
+                <button class="ghost" type="button" data-body-rename-cancel hidden>Annuler</button>
+              </form>
+            </div>
+            {{else}}<h1>{{template "title" .}}</h1>{{end}}
             {{with .Current}}<p>{{.Kind}} · [{{.Coordinate}}]{{if .TotalFields}} · {{.UsedFields}} / {{.TotalFields}} cases{{end}}</p>{{end}}
           </div>
         </div>

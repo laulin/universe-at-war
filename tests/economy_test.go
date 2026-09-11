@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -280,6 +281,42 @@ func TestPlanetsListEveryOwnedBodyAndRejectForeignOnes(t *testing.T) {
 	if _, _, err := universe.Economy.Buildings(ctx, stranger, colony); !errors.Is(err, appeconomy.ErrPlanetNotFound) {
 		t.Fatalf("Buildings(foreign planet) error = %v, want ErrPlanetNotFound", err)
 	}
+}
+
+func TestPlanetNamesAreValidatedAndOwned(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)
+	database := economyDatabase(t, ctx, 2)
+	universe := newWorld(t, database, appclock.NewFake(now))
+	owner := appauth.Principal{AccountID: 1}
+	stranger := appauth.Principal{AccountID: 2}
+	home, err := universe.Economy.CreateEmpire(ctx, owner, "Alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universe.Economy.CreateEmpire(ctx, stranger, "Beta"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := universe.Economy.RenamePlanet(ctx, owner, home.ID, "  Nouvelle Terre  "); err != nil {
+		t.Fatalf("RenamePlanet() error = %v", err)
+	}
+	renamed, err := universe.Economy.Planet(ctx, owner, home.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.Name != "Nouvelle Terre" {
+		t.Fatalf("renamed planet = %q", renamed.Name)
+	}
+	for _, invalid := range []string{"   ", strings.Repeat("é", 33)} {
+		if err := universe.Economy.RenamePlanet(ctx, owner, home.ID, invalid); !errors.Is(err, appeconomy.ErrInvalidPlanetName) {
+			t.Fatalf("RenamePlanet(%q) error = %v, want ErrInvalidPlanetName", invalid, err)
+		}
+	}
+	if err := universe.Economy.RenamePlanet(ctx, stranger, home.ID, "Volée"); !errors.Is(err, appeconomy.ErrPlanetNotFound) {
+		t.Fatalf("RenamePlanet(foreign) error = %v, want ErrPlanetNotFound", err)
+	}
+	assertSingleText(t, database, "SELECT name FROM planets WHERE id = ?", "Nouvelle Terre", home.ID)
 }
 
 func insertColony(t *testing.T, ctx context.Context, database *storagesqlite.Database, playerID int64, name string, galaxy, system, position int) int64 {

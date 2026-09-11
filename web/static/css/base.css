@@ -34,6 +34,17 @@ strong, td, th, time, output, meter, progress, .figure, .stat-value { font-varia
 
 .muted { color: var(--muted); font-weight: 400; }
 .faint { color: var(--faint); }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .eyebrow {
   color: var(--accent);
   letter-spacing: 0.12em;

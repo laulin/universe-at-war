@@ -93,6 +93,7 @@ type economyService interface {
 	CreateEmpire(context.Context, appauth.Principal, string) (appeconomy.Planet, error)
 	Planets(context.Context, appauth.Principal) ([]appeconomy.Planet, error)
 	Buildings(context.Context, appauth.Principal, int64) (appeconomy.Planet, []appeconomy.BuildingChoice, error)
+	RenamePlanet(context.Context, appauth.Principal, int64, string) error
 	EnqueueBuilding(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
 	CancelBuilding(context.Context, appauth.Principal, int64, int64) (appeconomy.Cancellation, error)
 }
@@ -315,6 +316,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /setup/{step}", handler.saveSetupStep)
 	handler.mux.HandleFunc("POST /empire", handler.createEmpire)
 	handler.mux.HandleFunc("GET /planets/{planet}", handler.planetPage)
+	handler.mux.HandleFunc("POST /planets/{planet}/name", handler.renamePlanet)
 	handler.mux.HandleFunc("POST /planets/{planet}/buildings/{building}", handler.startBuilding)
 	handler.mux.HandleFunc("GET /planets/{planet}/research", handler.researchPage)
 	handler.mux.HandleFunc("POST /planets/{planet}/research/{research}", handler.startResearch)
@@ -827,6 +829,41 @@ func (h *Handler) createEmpire(response http.ResponseWriter, request *http.Reque
 	http.Redirect(response, request, "/", http.StatusSeeOther)
 }
 
+// renamePlanet keeps the editing gesture on the resources page while the use
+// case remains the authority for both ownership and name validation.
+func (h *Handler) renamePlanet(response http.ResponseWriter, request *http.Request) {
+	principal, _, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if !h.validCSRF(response, request) {
+		return
+	}
+	planetID, ok := h.planetParameter(response, request)
+	if !ok {
+		return
+	}
+	err := h.economy.RenamePlanet(request.Context(), principal, planetID, request.PostFormValue("name"))
+	if errors.Is(err, appeconomy.ErrPlanetNotFound) || errors.Is(err, appeconomy.ErrNoEmpire) {
+		http.NotFound(response, request)
+		return
+	}
+	if err != nil {
+		planets, planet, choices, loadErr := h.planetView(request.Context(), principal, planetID)
+		if loadErr != nil {
+			http.Error(response, "economy unavailable", http.StatusInternalServerError)
+			return
+		}
+		message := "Impossible de renommer cette planète."
+		if errors.Is(err, appeconomy.ErrInvalidPlanetName) {
+			message = "Le nom doit contenir entre 1 et 32 caractères."
+		}
+		h.renderEconomy(response, request, http.StatusBadRequest, principal, planets, planet, choices, message)
+		return
+	}
+	http.Redirect(response, request, fmt.Sprintf("/planets/%d", planetID), http.StatusSeeOther)
+}
+
 func (h *Handler) startBuilding(response http.ResponseWriter, request *http.Request) {
 	principal, _, ok := h.requirePrincipal(response, request)
 	if !ok {
@@ -980,6 +1017,7 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 		})
 	}
 	shell := h.gameShell(request.Context(), token, principal, "planet", planets, planet.ID)
+	shell.RenameAction = fmt.Sprintf("/planets/%d/name", planet.ID)
 	shell.Error = message
 	shell.Notice = cancellationNotice(request)
 	h.render(response, status, "economy", economyPageData{
@@ -1165,6 +1203,9 @@ type pageShell struct {
 	Current   *bodyLink
 	Now       time.Time
 	Alerts    int
+	// RenameAction makes the current body's title editable on the resources
+	// page. Other pages keep their own section title untouched.
+	RenameAction string
 	// Notice reports a mutation that went through, next to Error which reports
 	// one that did not.
 	Notice string

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	appai "universeatwar/internal/app/ai"
 	appauth "universeatwar/internal/app/authentication"
@@ -36,6 +37,7 @@ type Thinking interface {
 type Economy interface {
 	Planets(context.Context, appauth.Principal) ([]appeconomy.Planet, error)
 	Buildings(context.Context, appauth.Principal, int64) (appeconomy.Planet, []appeconomy.BuildingChoice, error)
+	RenamePlanet(context.Context, appauth.Principal, int64, string) error
 	EnqueueBuilding(context.Context, appauth.Principal, int64, building.ID, string) (appeconomy.Queue, error)
 }
 
@@ -105,7 +107,8 @@ func (b *Brain) think(ctx context.Context, profile domainai.Profile) []domainai.
 		return []domainai.Decision{domainai.Skip(domainai.Strategic, "survey", "no body to act from")}
 	}
 	home := planets[0]
-	decisions := []domainai.Decision{b.build(ctx, principal, profile, home.ID)}
+	decisions := b.nameColonies(ctx, principal, profile, planets)
+	decisions = append(decisions, b.build(ctx, principal, profile, home.ID))
 	decisions = append(decisions, b.research(ctx, principal, profile, home.ID))
 	decisions = append(decisions, b.produce(ctx, principal, profile, home.ID))
 	team := friends{names: map[string]bool{}, coordinates: map[universe.Coordinate]bool{}}
@@ -144,6 +147,47 @@ func (b *Brain) think(ctx context.Context, profile domainai.Profile) []domainai.
 	}
 	plan := b.assignment(ctx, profile, alliance, beliefs, allied)
 	return append(decisions, b.campaign(ctx, principal, profile, planets, observations, team, plan)...)
+}
+
+// nameColonies gives a freshly settled world a stable name on the first
+// reflection that sees it. A human or a previous reflection may already have
+// chosen another name; only the colonisation default is ever replaced.
+func (b *Brain) nameColonies(ctx context.Context, principal appauth.Principal, profile domainai.Profile, planets []appeconomy.Planet) []domainai.Decision {
+	var decisions []domainai.Decision
+	for _, planet := range planets {
+		if planet.Kind != building.OnPlanet || planet.Name != appeconomy.DefaultColonyName {
+			continue
+		}
+		name := artificialColonyName(profile.Name, planet.Coordinate)
+		action := "rename " + planet.Coordinate.String()
+		if err := b.Economy.RenamePlanet(ctx, principal, planet.ID, name); err != nil {
+			decision := failure(domainai.Strategic, action, err)
+			decision.BodyID = planet.ID
+			decisions = append(decisions, decision)
+			continue
+		}
+		decisions = append(decisions, domainai.Decision{
+			Layer: domainai.Strategic, Action: action, Outcome: domainai.Done,
+			Reason: "a new colony needs a distinct name", BodyID: planet.ID,
+		})
+	}
+	return decisions
+}
+
+// artificialColonyName stays deterministic across retries and within the same
+// 32-character contract as a human-entered name. Coordinates distinguish even
+// the colonies of an artificial player whose own name had to be truncated.
+func artificialColonyName(owner string, coordinate universe.Coordinate) string {
+	suffix := " " + coordinate.String()
+	ownerRunes := []rune(strings.TrimSpace(owner))
+	available := 32 - len([]rune(suffix))
+	if available < 1 {
+		return appeconomy.DefaultColonyName
+	}
+	if len(ownerRunes) > available {
+		ownerRunes = ownerRunes[:available]
+	}
+	return string(ownerRunes) + suffix
 }
 
 // build raises the one building the body wants most and can pay for.

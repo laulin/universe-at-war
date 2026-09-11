@@ -150,6 +150,68 @@ func TestWebPlanetOfAnotherAccountIsNotFound(t *testing.T) {
 	}
 }
 
+func TestWebPlanetTitleCanRenameOnlyItsOwnPlanet(t *testing.T) {
+	handler, database, session, csrfCookie := fleetHandler(t)
+
+	page := getPage(t, handler, "/planets/1", session, csrfCookie)
+	for _, fragment := range []string{
+		`data-body-rename`,
+		`action="/planets/1/name"`,
+		`data-body-rename-trigger`,
+		`value="Planète mère"`,
+		`maxlength="32"`,
+	} {
+		if !strings.Contains(page, fragment) {
+			t.Fatalf("rename control misses %q: %q", fragment, page)
+		}
+	}
+
+	withoutCSRF := postFormRequest("/planets/1/name", url.Values{"name": {"Nouvelle Terre"}})
+	withoutCSRF.AddCookie(session)
+	denied := httptest.NewRecorder()
+	handler.ServeHTTP(denied, withoutCSRF)
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("rename without CSRF = %d, want 403", denied.Code)
+	}
+
+	rename := postFormRequest("/planets/1/name", url.Values{
+		"csrf_token": {"csrf-token"}, "name": {"  Nouvelle Terre  "},
+	})
+	rename.AddCookie(session)
+	rename.AddCookie(csrfCookie)
+	renamed := httptest.NewRecorder()
+	handler.ServeHTTP(renamed, rename)
+	if renamed.Code != http.StatusSeeOther || renamed.Header().Get("Location") != "/planets/1" {
+		t.Fatalf("rename = %d %q", renamed.Code, renamed.Body.String())
+	}
+	if refreshed := getPage(t, handler, "/planets/1", session, csrfCookie); !strings.Contains(refreshed, `value="Nouvelle Terre"`) {
+		t.Fatalf("renamed title is absent: %q", refreshed)
+	}
+
+	invalid := postFormRequest("/planets/1/name", url.Values{
+		"csrf_token": {"csrf-token"}, "name": {"   "},
+	})
+	invalid.AddCookie(session)
+	invalid.AddCookie(csrfCookie)
+	refused := httptest.NewRecorder()
+	handler.ServeHTTP(refused, invalid)
+	if refused.Code != http.StatusBadRequest || !strings.Contains(refused.Body.String(), "entre 1 et 32 caractères") {
+		t.Fatalf("invalid rename = %d %q", refused.Code, refused.Body.String())
+	}
+
+	foreign := postFormRequest("/planets/2/name", url.Values{
+		"csrf_token": {"csrf-token"}, "name": {"Volée"},
+	})
+	foreign.AddCookie(session)
+	foreign.AddCookie(csrfCookie)
+	foreignResponse := httptest.NewRecorder()
+	handler.ServeHTTP(foreignResponse, foreign)
+	if foreignResponse.Code != http.StatusNotFound {
+		t.Fatalf("foreign rename = %d, want 404", foreignResponse.Code)
+	}
+	assertSingleText(t, database, "SELECT name FROM planets WHERE id = 2", "Planète mère")
+}
+
 func getPage(t *testing.T, handler http.Handler, target string, cookies ...*http.Cookie) string {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, target, nil)

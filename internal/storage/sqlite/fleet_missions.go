@@ -451,7 +451,7 @@ func (r *FleetRepository) resolveColonization(ctx context.Context, tx *sql.Tx, r
 	planetID, err := createBody(ctx, tx, bodyRecord{
 		ownerPlayerID: row.ownerPlayerID,
 		kind:          building.OnPlanet,
-		name:          "Colonie",
+		name:          appeconomy.DefaultColonyName,
 		at:            row.target,
 		traits:        traits,
 		createdAt:     dueAt,

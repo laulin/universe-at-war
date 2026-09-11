@@ -231,6 +231,29 @@ func (r *EconomyRepository) Planets(ctx context.Context, accountID int64, now ti
 	return planets, nil
 }
 
+// RenamePlanet updates only a body owned by the account. The ownership check
+// lives in the UPDATE itself, so a concurrent transfer or deletion cannot turn
+// a successful preflight into a write on somebody else's world.
+func (r *EconomyRepository) RenamePlanet(ctx context.Context, accountID, planetID int64, name string) error {
+	result, err := r.write.ExecContext(ctx, `
+		UPDATE planets SET name = ?
+		WHERE id = ? AND owner_player_id IN (
+			SELECT id FROM players WHERE account_id = ?
+		)
+	`, name, planetID, accountID)
+	if err != nil {
+		return fmt.Errorf("economy repository: rename planet: %w", err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("economy repository: rename planet result: %w", err)
+	}
+	if changed == 0 {
+		return appeconomy.ErrPlanetNotFound
+	}
+	return nil
+}
+
 // ownedPlanetIDs lists the planets of an account and refuses an account without
 // an empire, so no caller has to guess between an empty list and no player.
 func ownedPlanetIDs(ctx context.Context, tx *sql.Tx, accountID int64) ([]int64, error) {

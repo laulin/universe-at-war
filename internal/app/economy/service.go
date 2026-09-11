@@ -18,18 +18,23 @@ import (
 	"universeatwar/internal/domain/universe"
 )
 
+// DefaultColonyName identifies a world that has just been founded and has not
+// received a player-facing name yet.
+const DefaultColonyName = "Colonie"
+
 var (
-	ErrForbidden      = errors.New("economy: authenticated account required")
-	ErrEmpireExists   = errors.New("economy: account already owns an empire")
-	ErrNameTaken      = errors.New("economy: this player name is already used")
-	ErrNoEmpire       = errors.New("economy: account has no empire")
-	ErrPlanetNotFound = errors.New("economy: planet does not belong to this account")
-	ErrUniverseFull   = errors.New("economy: universe has no free position")
-	ErrQueueBusy      = errors.New("economy: the construction queue changed under this order")
-	ErrQueueFull      = errors.New("economy: the construction queue is full")
-	ErrFacilityBusy   = errors.New("economy: the facility is in use by another activity")
-	ErrInvalidName    = errors.New("economy: player name must contain 3 to 32 characters")
-	ErrInvalidRequest = errors.New("economy: invalid construction request")
+	ErrForbidden         = errors.New("economy: authenticated account required")
+	ErrEmpireExists      = errors.New("economy: account already owns an empire")
+	ErrNameTaken         = errors.New("economy: this player name is already used")
+	ErrNoEmpire          = errors.New("economy: account has no empire")
+	ErrPlanetNotFound    = errors.New("economy: planet does not belong to this account")
+	ErrUniverseFull      = errors.New("economy: universe has no free position")
+	ErrQueueBusy         = errors.New("economy: the construction queue changed under this order")
+	ErrQueueFull         = errors.New("economy: the construction queue is full")
+	ErrFacilityBusy      = errors.New("economy: the facility is in use by another activity")
+	ErrInvalidName       = errors.New("economy: player name must contain 3 to 32 characters")
+	ErrInvalidPlanetName = errors.New("economy: planet name must contain 1 to 32 characters")
+	ErrInvalidRequest    = errors.New("economy: invalid construction request")
 	// ErrQueueEntryNotFound covers an order that never existed, belongs to
 	// somebody else, or has already left the queue.
 	ErrQueueEntryNotFound = errors.New("economy: no such construction in the queue")
@@ -141,6 +146,7 @@ type Repository interface {
 	CreateEmpireNear(context.Context, int64, string, universe.Coordinate, time.Time) (Planet, error)
 	Planet(context.Context, int64, int64, time.Time, building.Catalogue) (Planet, error)
 	Planets(context.Context, int64, time.Time, building.Catalogue) ([]Planet, error)
+	RenamePlanet(context.Context, int64, int64, string) error
 	EnqueueBuilding(context.Context, int64, int64, building.ID, string, time.Time, building.Catalogue) (Queue, error)
 	CancelBuilding(context.Context, int64, int64, int64, time.Time, building.Catalogue) (Cancellation, error)
 }
@@ -206,6 +212,20 @@ func (s Service) Planets(ctx context.Context, principal appauth.Principal) ([]Pl
 		return nil, err
 	}
 	return s.Repository.Planets(ctx, principal.AccountID, s.Clock.Now().UTC(), s.Catalogue)
+}
+
+// RenamePlanet gives one owned body a player-facing name. Planet identifiers
+// reveal nothing on failure: a body owned by somebody else is reported exactly
+// like one that does not exist.
+func (s Service) RenamePlanet(ctx context.Context, principal appauth.Principal, planetID int64, name string) error {
+	if err := s.validatePrincipal(principal); err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	if planetID <= 0 || len([]rune(name)) < 1 || len([]rune(name)) > 32 {
+		return ErrInvalidPlanetName
+	}
+	return s.Repository.RenamePlanet(ctx, principal.AccountID, planetID, name)
 }
 
 func (s Service) settleDueEvents(ctx context.Context) error {

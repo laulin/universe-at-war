@@ -82,8 +82,10 @@ worker reprend automatiquement les événements après un redémarrage.
 
 L'interface est un centre de commandement en trois colonnes : la navigation à
 gauche, la barre des ressources du corps courant en haut, la liste des corps de
-l'empire à droite avec leurs stocks et les totaux. Un stock arrivé à sa capacité
-passe en alerte, car il ne produit plus.
+l'empire à droite avec leurs stocks et les totaux. Sur la page Ressources, un
+clic sur le nom du corps dans le bandeau permet de le modifier directement ;
+Entrée enregistre le nouveau nom. Un stock arrivé à sa capacité passe en alerte,
+car il ne produit plus.
 
 Les compteurs ne restent pas figés entre deux chargements : le navigateur
 prolonge chaque stock au taux que la page affiche déjà, de la barre du haut aux
@@ -135,8 +137,8 @@ main depuis la page Administration, retire ceux dont il ne veut plus — un retr
 est définitif, personne ne renaît à sa place — et suit leur santé, leur prochaine
 réflexion et le journal de leurs décisions. Une intelligence artificielle possède un compte sans mot de
 passe, fonde son empire, paie ses constructions, attend ses files, espionne
-avant d'attaquer, perd ses flottes et dort en dehors de ses heures. Elle passe
-par les mêmes cas d'usage que vous : un test structurel garantit qu'elle
+avant d'attaquer, nomme ses nouvelles colonies, perd ses flottes et dort en
+dehors de ses heures. Elle passe par les mêmes cas d'usage que vous : un test structurel garantit qu'elle
 n'atteint aucune base de données ni aucune vérité adverse.
 
 Les machines peuvent aussi faire équipe. Un administrateur les affecte à une

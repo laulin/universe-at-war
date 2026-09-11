@@ -50,6 +50,48 @@
   // comes after that guard only runs on a page that ticks, and a form is not
   // that kind of page.
 
+  // The resources-page title is the rename control. The real form is rendered
+  // open as a no-script fallback; once this convenience is available, the title
+  // replaces it until clicked. Enter submits naturally, while Escape or leaving
+  // the editor restores the last server-confirmed value.
+  const rename = document.querySelector("[data-body-rename]");
+  if (rename) {
+    const trigger = rename.querySelector("[data-body-rename-trigger]");
+    const form = rename.querySelector("[data-body-rename-form]");
+    const input = rename.querySelector("[data-body-rename-input]");
+    const cancel = rename.querySelector("[data-body-rename-cancel]");
+    const close = () => {
+      input.value = input.defaultValue;
+      form.hidden = true;
+      trigger.hidden = false;
+      cancel.hidden = true;
+    };
+    const open = () => {
+      trigger.hidden = true;
+      form.hidden = false;
+      cancel.hidden = false;
+      input.focus();
+      input.select();
+    };
+    trigger.addEventListener("click", open);
+    cancel.addEventListener("click", close);
+    form.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        trigger.focus();
+      }
+    });
+    form.addEventListener("focusout", () => {
+      window.setTimeout(() => {
+        if (!form.contains(document.activeElement)) {
+          close();
+        }
+      }, 0);
+    });
+    close();
+  }
+
   // The server writes the ceiling of a field on the field itself, so a button
   // that fills it to the brim needs no figure of its own. It is rendered away
   // and revealed here: without a script there is no button rather than a dead
