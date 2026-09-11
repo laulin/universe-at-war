@@ -64,11 +64,21 @@ partie est engagée : seul le rappel, tant que la mission le permet, la fait
 revenir.
 
 La carte galaxie n'affiche que le public : noms de planètes, joueurs et champs
-de débris. Elle propose d'espionner en un clic ou de préparer une flotte. Les
+de débris. Ses coordonnées de système sont directement éditables. Chaque ligne
+ouvre l'assistant de flotte sur la bonne cible et la bonne mission : espionnage
+ou attaque d'un adversaire, transport ou stationnement sur ses propres mondes,
+et recyclage avec tous les recycleurs disponibles déjà sélectionnés. Les
 rapports d'espionnage, de combat et de recyclage sont immuables et filtrés à
 leur création : une section non révélée n'est pas envoyée au navigateur. Les
 rapports hostiles non lus sont signalés par un compteur et un texte, jamais par
 la seule couleur.
+
+Un rapport d'espionnage ou d'attaque permet de préparer immédiatement une
+nouvelle offensive. Après le choix des vaisseaux, la confirmation exécute une
+simulation probabiliste avec les technologies et les défenses effectivement
+connues : chances de victoire, pertes, butin, débris et bilan sont affichés sans
+jamais consulter l'état secret actuel de la cible. Les règles détaillées sont
+décrites dans [`docs/rules/combat-simulation.md`](docs/rules/combat-simulation.md).
 
 L'empire s'étend : une mission de colonisation fonde une planète si la position
 est encore libre à l'arrivée, un combat assez destructeur peut agréger une lune,
