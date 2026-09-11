@@ -19,7 +19,7 @@ import (
 )
 
 func TestWebGalaxyShowsOnlyPublicInformation(t *testing.T) {
-	handler, database, universe, session, csrfCookie := intelligenceHandler(t)
+	handler, database, _, session, csrfCookie := intelligenceHandler(t)
 	ctx := context.Background()
 	// The neighbour hides a fleet, defenses and a very recognisable stock.
 	setUnits(t, ctx, database, 2, "light_fighter", 987654)
@@ -35,22 +35,11 @@ func TestWebGalaxyShowsOnlyPublicInformation(t *testing.T) {
 			t.Fatalf("the galaxy page leaked %q", secret)
 		}
 	}
-	if !strings.Contains(page, "Espionner") {
-		t.Fatalf("the galaxy page offers no quick espionage: %q", page)
+	if !strings.Contains(page, "Espionner") || !strings.Contains(page, "Attaquer") ||
+		!strings.Contains(page, "mission=espionage") || !strings.Contains(page, "mission=attack") {
+		t.Fatalf("the galaxy page offers no hostile fleet shortcuts: %q", page)
 	}
 
-	spy := postFormRequest("/galaxy/1/1/1/spy", url.Values{
-		"csrf_token": {"csrf-token"}, "planet": {"1"}, "probes": {"2"}, "idempotency_key": {"spy-1"},
-	})
-	spy.AddCookie(session)
-	spy.AddCookie(csrfCookie)
-	launched := httptest.NewRecorder()
-	handler.ServeHTTP(launched, spy)
-	if launched.Code != http.StatusSeeOther || launched.Header().Get("Location") != "/galaxy/1/1" {
-		t.Fatalf("POST spy = %d %q", launched.Code, launched.Body.String())
-	}
-	assertSingleText(t, database, "SELECT mission FROM fleets WHERE id = 1", "espionage")
-	_ = universe
 }
 
 func TestWebReportsStayPrivateAndHideUnrevealedSections(t *testing.T) {
@@ -174,36 +163,6 @@ func intelligenceHandler(t *testing.T) (http.Handler, *storagesqlite.Database, *
 		t.Fatal(err)
 	}
 	return handler, database, universe, &http.Cookie{Name: "uaw_session", Value: "session"}, &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
-}
-
-// The map mints one key per button per rendering, so the same neighbour may be
-// spied again from a fresh page. A key made of the target alone turned the
-// second click into a replay of the first: no fleet, no report, no error.
-func TestWebGalaxySpiesTheSameNeighbourTwice(t *testing.T) {
-	handler, database, _, session, csrfCookie := intelligenceHandler(t)
-	// A second slot, or the second espionage would be refused for want of one.
-	setResearch(t, context.Background(), database, 1, "computer_technology", 1)
-
-	keys := map[string]bool{}
-	for range 2 {
-		page := getPage(t, handler, "/galaxy/1/1", session, csrfCookie)
-		key := formValue(t, page, `action="/galaxy/1/1/1/spy"`, "idempotency_key")
-		keys[key] = true
-		spy := postFormRequest("/galaxy/1/1/1/spy", url.Values{
-			"csrf_token": {"csrf-token"}, "planet": {"1"}, "probes": {"1"}, "idempotency_key": {key},
-		})
-		spy.AddCookie(session)
-		spy.AddCookie(csrfCookie)
-		launched := httptest.NewRecorder()
-		handler.ServeHTTP(launched, spy)
-		if launched.Code != http.StatusSeeOther {
-			t.Fatalf("POST spy = %d %q", launched.Code, launched.Body.String())
-		}
-	}
-	if len(keys) != 2 {
-		t.Fatal("two renderings of the map carry one espionage key")
-	}
-	assertSingleValue(t, database, "SELECT COUNT(*) FROM fleets WHERE mission = 'espionage'", 2)
 }
 
 // A mission that reached every threshold against a planet holding nothing says

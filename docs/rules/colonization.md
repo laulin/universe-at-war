@@ -7,6 +7,11 @@ vole, elle se résout à l'arrivée. Elle exige un vaisseau de colonisation, un
 emplacement de colonie encore libre et une position vide dans les limites de
 l'univers.
 
+La carte de galaxie propose « Coloniser » sur chaque position inoccupée. Ce
+raccourci ouvre l'assistant de flotte depuis le corps sélectionné, avec les
+coordonnées et la mission déjà renseignées ; la composition reste choisie par
+le joueur et suit les validations ordinaires.
+
 Tout se décide à l'arrivée, jamais au départ : la position est relue dans la
 transaction qui crée la planète. Si une autre colonisation est arrivée avant, la
 mission échoue proprement et la flotte rentre avec tout ce qu'elle transportait.

@@ -26,9 +26,9 @@ de réacteur à impulsion et 0,3 par niveau de propulsion hyperespace. Le
 pourcentage appartient à `{10, 20, ..., 100}` ; toute autre valeur est refusée.
 
 La vitesse d'univers dépend de la mission : `peaceful_fleet_speed` pour le
-transport, le déploiement, l'espionnage, la colonisation et le recyclage,
-`hostile_fleet_speed` pour l'attaque, `holding_fleet_speed` pour le
-stationnement. Le retour dure exactement aussi longtemps que l'aller.
+transport, le stationnement permanent, l'espionnage, la colonisation et le
+recyclage, `hostile_fleet_speed` pour l'attaque, `holding_fleet_speed` pour la
+défense alliée. Le retour dure exactement aussi longtemps que l'aller.
 
 ## Surclassement de moteur
 

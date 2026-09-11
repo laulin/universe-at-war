@@ -3,6 +3,9 @@ package tests
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -20,14 +23,138 @@ func TestTheMapOffersToSendAFleetToOwnPlanets(t *testing.T) {
 
 	page := getPage(t, handler, "/galaxy/1/1", session, csrfCookie)
 	row := galaxyRowOf(t, page, "1:1:3")
-	if !strings.Contains(row, "/fleet/send?galaxy=1&amp;system=1&amp;position=3") {
-		t.Fatalf("the map offers no fleet to a planet of the player: %q", row)
+	for _, action := range []string{"mission=deploy", "mission=transport", "Stationner", "Transporter"} {
+		if !strings.Contains(row, action) {
+			t.Fatalf("the map offers no %s action to a planet of the player: %q", action, row)
+		}
 	}
-	if strings.Contains(row, "Espionner") {
-		t.Fatalf("the map offers to spy a planet of the player: %q", row)
+	for _, hostile := range []string{"Espionner", "Attaquer"} {
+		if strings.Contains(row, hostile) {
+			t.Fatalf("the map offers to %s a planet of the player: %q", hostile, row)
+		}
 	}
 	if second <= 0 {
 		t.Fatal("the second planet was not created")
+	}
+}
+
+func TestTheMapOffersToColonizeEmptyPositions(t *testing.T) {
+	handler, database, _, session, csrfCookie := intelligenceHandler(t)
+
+	page := getPage(t, handler, "/galaxy/1/1", session, csrfCookie)
+	empty := galaxyRowOf(t, page, "1:1:4")
+	for _, expected := range []string{
+		"inoccupée", ">Coloniser</a>",
+		`/planets/1/fleet/send?galaxy=1&amp;system=1&amp;position=4&amp;mission=colonize`,
+	} {
+		if !strings.Contains(empty, expected) {
+			t.Fatalf("the empty position misses %s: %q", expected, empty)
+		}
+	}
+
+	colonization := getPage(t, handler,
+		"/planets/1/fleet/send?galaxy=1&system=1&position=4&mission=colonize",
+		session, csrfCookie)
+	for _, expected := range []string{
+		`name="galaxy" type="number" min="1" value="1"`,
+		`name="system" type="number" min="1" value="1"`,
+		`name="position" type="number" min="1" value="4"`,
+		`value="colonize" selected`,
+	} {
+		if !strings.Contains(colonization, expected) {
+			t.Fatalf("the colonization shortcut did not prefill %s: %q", expected, colonization)
+		}
+	}
+
+	for _, occupied := range []string{"1:1:1", homeCoordinate(t, context.Background(), database, 1)} {
+		row := galaxyRowOf(t, page, occupied)
+		if strings.Contains(row, "Coloniser") || strings.Contains(row, "mission=colonize") {
+			t.Fatalf("the occupied position %s offers colonization: %q", occupied, row)
+		}
+	}
+}
+
+func TestTheMapNavigatesDirectlyToAnEditableSystem(t *testing.T) {
+	handler, _, _, session, csrfCookie := intelligenceHandler(t)
+	page := getPage(t, handler, "/galaxy/1/1", session, csrfCookie)
+	form := betweenMarkers(page, `class="galaxy-coordinate"`, "</form>")
+	for _, field := range []string{`name="galaxy"`, `name="system"`, `value="1"`, `>Afficher</button>`} {
+		if !strings.Contains(form, field) {
+			t.Fatalf("the coordinate form misses %s: %q", field, form)
+		}
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/galaxy?galaxy=1&system=2", nil)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/galaxy/1/2" {
+		t.Fatalf("GET editable coordinates = %d %q", response.Code, response.Header().Get("Location"))
+	}
+
+	outside := httptest.NewRequest(http.MethodGet, "/galaxy?galaxy=1&system=0", nil)
+	outside.AddCookie(session)
+	outside.AddCookie(csrfCookie)
+	refused := httptest.NewRecorder()
+	handler.ServeHTTP(refused, outside)
+	if refused.Code != http.StatusBadRequest {
+		t.Fatalf("GET outside coordinates = %d, want 400", refused.Code)
+	}
+}
+
+func TestGalaxyShortcutsPrefillMissionsAndEveryRecycler(t *testing.T) {
+	handler, database, _, session, csrfCookie := intelligenceHandler(t)
+	ctx := context.Background()
+	setUnits(t, ctx, database, 1, "recycler", 7)
+	if _, err := database.Write().ExecContext(ctx, `
+		INSERT INTO debris_fields(galaxy, system, position, metal, crystal, created_at, updated_at)
+		VALUES (1, 1, 1, 12345, 6789, '2042-09-10T11:12:13Z', '2042-09-10T11:12:13Z')
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	page := getPage(t, handler, "/galaxy/1/1", session, csrfCookie)
+	row := galaxyRowOf(t, page, "1:1:1")
+	for _, expected := range []string{
+		`mission=espionage`, `>Espionner</a>`, `mission=attack`, `>Attaquer</a>`,
+		`/art/resource/debris`, `mission=recycle&amp;select=recycler`, `M 12.345`, `C 6.789`,
+	} {
+		if !strings.Contains(row, expected) {
+			t.Fatalf("the target row misses %s: %q", expected, row)
+		}
+	}
+
+	recycle := getPage(t, handler,
+		"/planets/1/fleet/send?galaxy=1&system=1&position=1&mission=recycle&select=recycler",
+		session, csrfCookie)
+	if !strings.Contains(recycle, `value="recycle" selected`) {
+		t.Fatalf("the debris shortcut did not select recycling: %q", recycle)
+	}
+	quantity := betweenMarkers(recycle, `id="ship-recycler"`, ">")
+	if !strings.Contains(quantity, `value="7"`) {
+		t.Fatalf("the debris shortcut selected something other than every recycler: %q", quantity)
+	}
+}
+
+func TestGalaxyActionsLeaveFromTheSelectedBody(t *testing.T) {
+	handler, database, _, session, csrfCookie := intelligenceHandler(t)
+	ctx := context.Background()
+	second := insertPlanet(t, ctx, database, 1, "Colonie", 1, 1, 3)
+	page := getPage(t, handler, "/galaxy/1/1", session, csrfCookie,
+		&http.Cookie{Name: "uaw_body", Value: strconv.FormatInt(second, 10)})
+	foreign := galaxyRowOf(t, page, "1:1:1")
+	if !strings.Contains(foreign, fmt.Sprintf(`/planets/%d/fleet/send`, second)) {
+		t.Fatalf("the map ignored the selected origin: %q", foreign)
+	}
+	selected := galaxyRowOf(t, page, "1:1:3")
+	if strings.Contains(selected, "/fleet/send") {
+		t.Fatalf("the selected body offers to fly to itself: %q", selected)
+	}
+	empty := galaxyRowOf(t, page, "1:1:4")
+	if !strings.Contains(empty, fmt.Sprintf(`/planets/%d/fleet/send`, second)) ||
+		!strings.Contains(empty, "mission=colonize") {
+		t.Fatalf("the colonization shortcut ignored the selected origin: %q", empty)
 	}
 }
 
@@ -90,7 +217,7 @@ func galaxyRowOf(t *testing.T, page, coordinate string) string {
 	if at < 0 {
 		t.Fatalf("the map holds no row for %s", coordinate)
 	}
-	start := strings.LastIndex(page[:at], "<tr>")
+	start := strings.LastIndex(page[:at], "<tr")
 	end := strings.Index(page[at:], "</tr>")
 	if start < 0 || end < 0 {
 		t.Fatalf("the row of %s is not a row", coordinate)

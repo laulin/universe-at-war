@@ -9,14 +9,11 @@ import (
 
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
-	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appreports "universeatwar/internal/app/reports"
 	domaineconomy "universeatwar/internal/domain/economy"
-	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/report"
 	"universeatwar/internal/domain/rules"
-	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 )
 
@@ -35,7 +32,6 @@ type galaxyPageRow struct {
 	// to its own coordinate — the domain measures that trip at five — but
 	// offering to send one there from itself helps nobody.
 	IsOrigin bool
-	SpyKey   string
 }
 
 type galaxyPageData struct {
@@ -47,6 +43,8 @@ type galaxyPageData struct {
 	NextLink     string
 	HomePlanet   int64
 	CanAct       bool
+	GalaxyMax    int
+	SystemMax    int
 }
 
 type reportsPageData struct {
@@ -185,6 +183,39 @@ func (h *Handler) galaxyPage(response http.ResponseWriter, request *http.Request
 	h.renderGalaxy(response, request, http.StatusOK, principal, view, "")
 }
 
+// navigateGalaxy turns the editable x:y controls into the canonical path of a
+// system. Keeping this as an ordinary GET form makes direct navigation work
+// without JavaScript and leaves refreshes and bookmarks with one stable URL.
+func (h *Handler) navigateGalaxy(response http.ResponseWriter, request *http.Request) {
+	principal, _, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if principal.MustChangePassword {
+		http.Redirect(response, request, "/password/change", http.StatusSeeOther)
+		return
+	}
+	if h.galaxy == nil {
+		http.NotFound(response, request)
+		return
+	}
+	galaxy, galaxyErr := strconv.Atoi(request.URL.Query().Get("galaxy"))
+	system, systemErr := strconv.Atoi(request.URL.Query().Get("system"))
+	if galaxyErr != nil || systemErr != nil {
+		http.Error(response, "Coordonnées invalides.", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.galaxy.System(request.Context(), principal, galaxy, system); err != nil {
+		if errors.Is(err, appgalaxy.ErrOutsideUniverse) {
+			http.Error(response, "Coordonnées hors de l'univers.", http.StatusBadRequest)
+			return
+		}
+		http.Error(response, "galaxy unavailable", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(response, request, fmt.Sprintf("/galaxy/%d/%d", galaxy, system), http.StatusSeeOther)
+}
+
 func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Request, status int, principal appauth.Principal, view appgalaxy.View, message string) {
 	planets, err := h.economy.Planets(request.Context(), principal)
 	if err != nil && !errors.Is(err, appeconomy.ErrNoEmpire) {
@@ -195,14 +226,22 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 	if !ok {
 		return
 	}
-	// The actions of the map fly from one body, so its own line is the one line
-	// that has nothing to offer but its debris. It is found by coordinate rather
-	// than by identifier: a moon shares the coordinate of its planet and the map
-	// reads them into the same row.
+	shell := h.gameShell(request.Context(), token, principal, "galaxy", planets, h.rememberedBody(request))
+	shell.Error = message
+	// The actions of the map fly from the body selected in the shared shell, so
+	// changing planets changes every shortcut consistently. Its own line is the
+	// one line that has nothing to offer but its debris. It is found by
+	// coordinate rather than by identifier: a moon shares the coordinate of its
+	// planet and the map reads them into the same row.
 	origin := universe.Coordinate{}
-	for _, planet := range planets {
-		if len(view.HomePlanets) > 0 && planet.ID == view.HomePlanets[0] {
-			origin = planet.Coordinate
+	homePlanet := int64(0)
+	if shell.Current != nil {
+		homePlanet = shell.Current.ID
+		for _, planet := range planets {
+			if planet.ID == homePlanet {
+				origin = planet.Coordinate
+				break
+			}
 		}
 	}
 	rows := make([]galaxyPageRow, 0, len(view.Rows))
@@ -222,73 +261,16 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 			display.DebrisMetal = row.Debris.Metal
 			display.DebrisCrystal = row.Debris.Crystal
 		}
-		// Spying the same neighbour again is a new mission rather than a repeat of
-		// the last one, so every button of every rendering carries its own key.
-		if display.Occupied && !display.Own {
-			key, ok := h.formKey(response, "spy")
-			if !ok {
-				return
-			}
-			display.SpyKey = key
-		}
 		rows = append(rows, display)
 	}
-	shell := h.gameShell(request.Context(), token, principal, "galaxy", planets, h.rememberedBody(request))
-	shell.Error = message
 	data := galaxyPageData{
 		pageShell: shell, Galaxy: view.Galaxy, System: view.System, Rows: rows,
 		PreviousLink: systemLink(view.Galaxy, view.System-1, view.Limits),
 		NextLink:     systemLink(view.Galaxy, view.System+1, view.Limits),
-	}
-	if len(view.HomePlanets) > 0 {
-		data.HomePlanet = view.HomePlanets[0]
-		data.CanAct = true
+		HomePlanet:   homePlanet, CanAct: homePlanet > 0,
+		GalaxyMax: view.Limits.Galaxies, SystemMax: view.Limits.Systems,
 	}
 	h.render(response, status, "galaxy", data)
-}
-
-// spyFromGalaxy launches an espionage straight from the map.
-func (h *Handler) spyFromGalaxy(response http.ResponseWriter, request *http.Request) {
-	principal, _, ok := h.requirePrincipal(response, request)
-	if !ok {
-		return
-	}
-	if !h.validCSRF(response, request) {
-		return
-	}
-	if h.fleet == nil || h.galaxy == nil {
-		http.NotFound(response, request)
-		return
-	}
-	galaxy, galaxyErr := strconv.Atoi(request.PathValue("galaxy"))
-	system, systemErr := strconv.Atoi(request.PathValue("system"))
-	position, positionErr := strconv.Atoi(request.PathValue("position"))
-	planetID, planetErr := strconv.ParseInt(request.PostFormValue("planet"), 10, 64)
-	probes, probesErr := strconv.ParseInt(request.PostFormValue("probes"), 10, 64)
-	if galaxyErr != nil || systemErr != nil || positionErr != nil || planetErr != nil {
-		http.NotFound(response, request)
-		return
-	}
-	if probesErr != nil || probes <= 0 {
-		probes = 1
-	}
-	_, err := h.fleet.Launch(request.Context(), principal, planetID, appfleet.LaunchRequest{
-		Target:      universe.Coordinate{Galaxy: galaxy, System: system, Position: position},
-		TargetKind:  domainfleet.TargetPlanet,
-		Mission:     domainfleet.MissionEspionage,
-		Composition: domainfleet.Composition{unit.EspionageProbe: probes},
-		Percent:     100,
-	}, request.PostFormValue("idempotency_key"))
-	if err != nil {
-		view, viewErr := h.galaxy.System(request.Context(), principal, galaxy, system)
-		if viewErr != nil {
-			http.Error(response, "galaxy unavailable", http.StatusInternalServerError)
-			return
-		}
-		h.renderGalaxy(response, request, http.StatusBadRequest, principal, view, fleetError(err))
-		return
-	}
-	http.Redirect(response, request, fmt.Sprintf("/galaxy/%d/%d", galaxy, system), http.StatusSeeOther)
 }
 
 func (h *Handler) reportsPage(response http.ResponseWriter, request *http.Request) {

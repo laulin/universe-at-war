@@ -351,6 +351,10 @@ var resourceGlyphs = map[string]string{
 		`<ellipse cx="13" cy="20" rx="2.6" ry="3.6" fill="#d8fff5" opacity=".7"/>`,
 	"energy": `<path d="M18 2 L7 18 H14 L13 30 L25 13 H18 Z" fill="#f3c969"/>` +
 		`<path d="M18 2 L7 18 H14 Z" fill="#fde9b0"/>`,
+	"debris": `<path d="M5 22 L8 11 L17 5 L27 10 L29 20 L22 28 L11 27 Z" fill="#778999"/>` +
+		`<path d="M8 11 L17 5 L16 15 Z" fill="#b8c5cf"/>` +
+		`<path d="M16 15 L27 10 L29 20 L21 19 Z" fill="#596a79"/>` +
+		`<circle cx="12" cy="21" r="2" fill="#33424f"/><circle cx="22" cy="14" r="1.5" fill="#d5dce2" opacity=".7"/>`,
 	"darkmatter": `<circle cx="16" cy="16" r="11" fill="#8d3bd6"/>` +
 		`<circle cx="16" cy="16" r="11" fill="none" stroke="#e08cff" stroke-width="2" opacity=".8"/>` +
 		`<circle cx="12" cy="12" r="3" fill="#f2c9ff" opacity=".7"/>`,

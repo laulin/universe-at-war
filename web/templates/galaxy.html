@@ -3,38 +3,54 @@
   <section class="panel-wide" aria-labelledby="galaxy-title">
     <p class="eyebrow">Carte publique</p>
     <h2 id="galaxy-title">Système {{.Galaxy}}:{{.System}}</h2>
-    <p class="galaxy-navigation">
-      {{if .PreviousLink}}<a href="{{.PreviousLink}}">← Système précédent</a>{{end}}
-      {{if .NextLink}}<a href="{{.NextLink}}">Système suivant →</a>{{end}}
-    </p>
-    <table class="bodies">
+    <div class="galaxy-navigation">
+      {{if .PreviousLink}}<a class="galaxy-navigation__step" href="{{.PreviousLink}}">← Système précédent</a>{{else}}<span></span>{{end}}
+      <form class="galaxy-coordinate" method="get" action="/galaxy">
+        <label for="galaxy-coordinate">Galaxie
+          <input id="galaxy-coordinate" name="galaxy" type="number" min="1" max="{{.GalaxyMax}}" value="{{.Galaxy}}" required>
+        </label>
+        <span class="galaxy-coordinate__separator" aria-hidden="true">:</span>
+        <label for="system-coordinate">Système
+          <input id="system-coordinate" name="system" type="number" min="1" max="{{.SystemMax}}" value="{{.System}}" required>
+        </label>
+        <button type="submit">Afficher</button>
+      </form>
+      {{if .NextLink}}<a class="galaxy-navigation__step" href="{{.NextLink}}">Système suivant →</a>{{else}}<span></span>{{end}}
+    </div>
+    <table class="bodies galaxy-table">
       <caption>Cette page ne montre que ce que tout le monde peut voir.</caption>
       <thead>
         <tr><th scope="col">Position</th><th scope="col">Planète</th><th scope="col">Joueur</th><th scope="col">Débris</th><th scope="col">Actions</th></tr>
       </thead>
       <tbody>
       {{range .Rows}}
-        <tr>
+        <tr class="{{if .Own}}galaxy-row--own{{else if not .Occupied}}galaxy-row--empty{{end}}">
           <th scope="row">{{.Coordinate}}</th>
-          <td>{{if .Occupied}}{{.PlanetName}}{{else}}<span class="muted">inoccupée</span>{{end}}</td>
-          <td>{{if .Occupied}}{{.OwnerName}}{{if .Own}} <span class="own-marker">(vous)</span>{{end}}{{else}}—{{end}}</td>
-          <td>{{if .HasDebris}}M {{.DebrisMetal}} · C {{.DebrisCrystal}}{{else}}—{{end}}</td>
-          <td>
-            {{if and $.CanAct .Occupied (not .Own)}}
-            <form method="post" action="/galaxy/{{$.Galaxy}}/{{$.System}}/{{.Position}}/spy">
-              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <input type="hidden" name="planet" value="{{$.HomePlanet}}">
-              <input type="hidden" name="idempotency_key" value="{{.SpyKey}}">
-              <label for="probes-{{.Position}}">Sondes</label>
-              <input id="probes-{{.Position}}" name="probes" type="number" min="1" value="1">
-              <button type="submit">Espionner</button>
-            </form>
-            <a href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}">Envoyer une flotte</a>
-            {{else if and $.CanAct .Own (not .IsOrigin)}}
-            <a href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}">Envoyer une flotte</a>
-            {{else if and $.CanAct .HasDebris}}
-            <a href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}">Recycler</a>
+          <td data-label="Planète">{{if .Occupied}}<strong>{{.PlanetName}}</strong>{{else}}<span class="muted">inoccupée</span>{{end}}</td>
+          <td data-label="Joueur">{{if .Occupied}}{{.OwnerName}}{{if .Own}} <span class="own-marker">(vous)</span>{{end}}{{else}}—{{end}}</td>
+          <td data-label="Débris">
+            {{if .HasDebris}}
+            <div class="galaxy-debris">
+              {{if $.CanAct}}<a class="galaxy-debris__link" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=recycle&amp;select=recycler" aria-label="Recycler les débris en {{.Coordinate}}" title="Recycler les débris">
+                <img src="/art/resource/debris" alt="" width="24" height="24">
+              </a>{{else}}<img src="/art/resource/debris" alt="Débris" width="24" height="24">{{end}}
+              <span class="res-metal" title="Métal">M {{figure .DebrisMetal}}</span>
+              <span class="res-crystal" title="Cristal">C {{figure .DebrisCrystal}}</span>
+            </div>
             {{else}}<span class="muted">—</span>{{end}}
+          </td>
+          <td data-label="Actions">
+            <div class="galaxy-actions">
+              {{if and $.CanAct (not .Occupied)}}
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=colonize">Coloniser</a>
+              {{else if and $.CanAct .Occupied (not .Own)}}
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=espionage">Espionner</a>
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=attack">Attaquer</a>
+              {{else if and $.CanAct .Own (not .IsOrigin)}}
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=deploy">Stationner</a>
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=transport">Transporter</a>
+              {{else}}<span class="muted">—</span>{{end}}
+            </div>
           </td>
         </tr>
       {{end}}

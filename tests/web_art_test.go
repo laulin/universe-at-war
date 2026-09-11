@@ -22,7 +22,7 @@ func TestArtSlotsAlwaysRenderAnImage(t *testing.T) {
 	for _, target := range []string{
 		"/art/building/metal_mine", "/art/research/astrophysics", "/art/ship/light_fighter",
 		"/art/defense/rocket_launcher", "/art/resource/metal", "/art/resource/crystal",
-		"/art/resource/deuterium", "/art/resource/energy", "/art/body/planet",
+		"/art/resource/deuterium", "/art/resource/energy", "/art/resource/debris", "/art/body/planet",
 		"/art/body/moon", "/art/banner/overview", "/art/banner/shipyard",
 	} {
 		recorder := fetch(handler, target)
