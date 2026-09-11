@@ -465,6 +465,9 @@ fieldset + fieldset { border-top: 1px solid var(--border); padding-top: var(--sp
   background: rgba(18, 40, 60, 0.6);
 }
 .bodies tbody tr:hover { background: rgba(120, 217, 255, 0.05); }
+.bodies--hostile { border: 1px solid rgba(255, 68, 87, 0.45); }
+.bodies--hostile tbody tr { background: rgba(255, 68, 87, 0.05); }
+.bodies--hostile tbody th { color: #ffb3bd; }
 .bodies form { margin: 0; display: flex; gap: var(--space-1); align-items: end; }
 .bodies form input[type="number"] { width: 5rem; }
 

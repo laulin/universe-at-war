@@ -5,6 +5,28 @@
     <h2 id="slots-title">{{.Used}} / {{.Slots}} flottes en vol</h2>
     <p><a href="/planets/{{.Planet.ID}}/fleet/send">Envoyer une flotte</a></p>
   </section>
+  <section class="incoming-fleets" aria-labelledby="incoming-title">
+    <p class="eyebrow">Détection</p>
+    <h2 id="incoming-title">Flottes ennemies en approche</h2>
+    {{if .Incoming}}
+    <table class="bodies bodies--hostile">
+      <caption>Attaques visant vos corps, par ordre d’arrivée. Horaires en temps universel.</caption>
+      <thead>
+        <tr><th scope="col">Attaquant</th><th scope="col">Trajet</th><th scope="col">Composition</th><th scope="col">Impact</th></tr>
+      </thead>
+      <tbody>
+      {{range .Incoming}}
+        <tr>
+          <th scope="row">{{.Attacker}}</th>
+          <td>{{.Origin}} → {{.Target}}</td>
+          <td>{{.Composition}}</td>
+          <td>{{.ArrivesAt.Format "15:04:05"}} (<time datetime="{{.ArrivesISO}}" data-countdown data-done="impact" data-refresh="page" aria-live="off">{{.ArrivesAt.Format "15:04:05"}}</time>)</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">Aucune flotte ennemie en approche.</p>{{end}}
+  </section>
   <section aria-labelledby="stationed-title">
     <p class="eyebrow">Sur place</p>
     <h2 id="stationed-title">Vaisseaux stationnés</h2>

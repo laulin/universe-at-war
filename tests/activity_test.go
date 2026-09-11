@@ -6,6 +6,7 @@ import (
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
+	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appclock "universeatwar/internal/clock"
 	domainfleet "universeatwar/internal/domain/fleet"
@@ -13,6 +14,50 @@ import (
 )
 
 func TestActivitySnapshotCountsQueuesAndVisibleFleetTraffic(t *testing.T) {
+	fixture := newActivityFixture(t)
+	ctx := context.Background()
+
+	aliceActivity, err := fixture.game.Activity.Snapshot(ctx, fixture.alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliceBody := aliceActivity.Bodies[fixture.aliceHome.ID]
+	if aliceBody.Buildings != 1 || aliceBody.Researches != 1 || aliceBody.Ships != 3 ||
+		aliceBody.Defenses != 4 || aliceBody.OutboundFleets != 1 || aliceBody.IncomingAttacks != 0 {
+		t.Fatalf("Alice activity = %+v", aliceBody)
+	}
+	if len(aliceActivity.Incoming) != 0 {
+		t.Fatalf("Alice sees foreign traffic not aimed at her: %+v", aliceActivity.Incoming)
+	}
+
+	bobActivity, err := fixture.game.Activity.Snapshot(ctx, fixture.bob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobBody := bobActivity.Bodies[fixture.bobHome.ID]
+	if bobBody.IncomingAttacks != 1 || bobBody.OutboundFleets != 0 {
+		t.Fatalf("Bob activity = %+v", bobBody)
+	}
+	if len(bobActivity.Incoming) != 1 {
+		t.Fatalf("Bob incoming attacks = %+v", bobActivity.Incoming)
+	}
+	approach := bobActivity.Incoming[0]
+	if approach.FleetID != fixture.attack.ID || approach.AttackerName != "Alice" ||
+		approach.TargetPlanetID != fixture.bobHome.ID || approach.Composition[unit.LightFighter] != 2 ||
+		approach.Origin != fixture.aliceHome.Coordinate || approach.Target != fixture.bobHome.Coordinate {
+		t.Fatalf("incoming approach = %+v", approach)
+	}
+}
+
+type activityFixture struct {
+	game               *world
+	alice, bob         appauth.Principal
+	aliceHome, bobHome appeconomy.Planet
+	attack             appfleet.Fleet
+}
+
+func newActivityFixture(t *testing.T) activityFixture {
+	t.Helper()
 	ctx := context.Background()
 	clock := appclock.NewFake(time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC))
 	database := economyDatabase(t, ctx, 2)
@@ -55,35 +100,5 @@ func TestActivitySnapshotCountsQueuesAndVisibleFleetTraffic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	aliceActivity, err := game.Activity.Snapshot(ctx, alice)
-	if err != nil {
-		t.Fatal(err)
-	}
-	aliceBody := aliceActivity.Bodies[aliceHome.ID]
-	if aliceBody.Buildings != 1 || aliceBody.Researches != 1 || aliceBody.Ships != 3 ||
-		aliceBody.Defenses != 4 || aliceBody.OutboundFleets != 1 || aliceBody.IncomingAttacks != 0 {
-		t.Fatalf("Alice activity = %+v", aliceBody)
-	}
-	if len(aliceActivity.Incoming) != 0 {
-		t.Fatalf("Alice sees foreign traffic not aimed at her: %+v", aliceActivity.Incoming)
-	}
-
-	bobActivity, err := game.Activity.Snapshot(ctx, bob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bobBody := bobActivity.Bodies[bobHome.ID]
-	if bobBody.IncomingAttacks != 1 || bobBody.OutboundFleets != 0 {
-		t.Fatalf("Bob activity = %+v", bobBody)
-	}
-	if len(bobActivity.Incoming) != 1 {
-		t.Fatalf("Bob incoming attacks = %+v", bobActivity.Incoming)
-	}
-	approach := bobActivity.Incoming[0]
-	if approach.FleetID != attack.ID || approach.AttackerName != "Alice" ||
-		approach.TargetPlanetID != bobHome.ID || approach.Composition[unit.LightFighter] != 2 ||
-		approach.Origin != aliceHome.Coordinate || approach.Target != bobHome.Coordinate {
-		t.Fatalf("incoming approach = %+v", approach)
-	}
+	return activityFixture{game: game, alice: alice, bob: bob, aliceHome: aliceHome, bobHome: bobHome, attack: attack}
 }

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	appactivity "universeatwar/internal/app/activity"
 	appauth "universeatwar/internal/app/authentication"
 	appbattlesimulation "universeatwar/internal/app/battlesimulation"
 	appeconomy "universeatwar/internal/app/economy"
@@ -119,6 +120,10 @@ type fleetService interface {
 	Recall(context.Context, appauth.Principal, int64, string) (appfleet.Fleet, error)
 }
 
+type activityService interface {
+	Snapshot(context.Context, appauth.Principal) (appactivity.Snapshot, error)
+}
+
 // bodyKindName names a kind of celestial body for the player.
 func bodyKindName(kind building.Placement) string {
 	if kind == building.OnMoon {
@@ -164,6 +169,7 @@ type Dependencies struct {
 	Research         researchService
 	Shipyard         shipyardService
 	Fleet            fleetService
+	Activity         activityService
 	Galaxy           galaxyService
 	Reports          reportsService
 	BattleSimulation battleSimulationService
@@ -194,6 +200,7 @@ type Handler struct {
 	research         researchService
 	shipyard         shipyardService
 	fleet            fleetService
+	activity         activityService
 	galaxy           galaxyService
 	reports          reportsService
 	battleSimulation battleSimulationService
@@ -285,6 +292,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		research:         dependencies.Research,
 		shipyard:         dependencies.Shipyard,
 		fleet:            dependencies.Fleet,
+		activity:         dependencies.Activity,
 		galaxy:           dependencies.Galaxy,
 		reports:          dependencies.Reports,
 		battleSimulation: dependencies.BattleSimulation,
@@ -1211,6 +1219,9 @@ type pageShell struct {
 	Current   *bodyLink
 	Now       time.Time
 	Alerts    int
+	// Incoming holds hostile flights aimed at any body of the account. It is
+	// populated once with the shared shell and rendered by the fleet page.
+	Incoming []incomingFleet
 	// RenameAction makes the current body's title editable on the resources
 	// page. Other pages keep their own section title untouched.
 	RenameAction string
@@ -1243,6 +1254,22 @@ type bodyLink struct {
 	EnergyAvailable int64
 	UsedFields      int
 	TotalFields     int
+	Buildings       int64
+	Researches      int64
+	Ships           int64
+	Defenses        int64
+	OutboundFleets  int64
+	IncomingAttacks int64
+}
+
+// incomingFleet is a hostile approach prepared for the fleet page.
+type incomingFleet struct {
+	Attacker    string
+	Origin      string
+	Target      string
+	Composition string
+	ArrivesAt   time.Time
+	ArrivesISO  string
 }
 
 // shellResource is one figure of the resource bar, computed here rather than in
@@ -1298,12 +1325,31 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 			shell.Alerts = alerts
 		}
 	}
+	activities := appactivity.Snapshot{Bodies: map[int64]appactivity.Body{}}
+	if h.activity != nil {
+		if snapshot, err := h.activity.Snapshot(ctx, principal); err == nil {
+			activities = snapshot
+			for _, approach := range snapshot.Incoming {
+				shell.Incoming = append(shell.Incoming, incomingFleet{
+					Attacker: approach.AttackerName, Origin: approach.Origin.String(), Target: approach.Target.String(),
+					Composition: compositionSummary(approach.Composition), ArrivesAt: approach.ArrivesAt,
+					ArrivesISO: approach.ArrivesAt.Format(time.RFC3339),
+				})
+			}
+		}
+	}
 	var metal, crystal, deuterium int64
 	// The bar and the totals sit on the same screen, so the empire has to earn
 	// what its bodies earn or the two would climb apart.
 	var earned domaineconomy.Rates
 	for _, planet := range planets {
 		moon := planet.Kind == building.OnMoon
+		activity := activities.Bodies[planet.ID]
+		if activity.Buildings == 0 {
+			// The planet projection already carries this queue, so construction
+			// remains visible if the optional aggregate reader is unavailable.
+			activity.Buildings = int64(len(planet.Queue))
+		}
 		link := bodyLink{
 			ID: planet.ID, Name: planet.Name, Coordinate: planet.Coordinate.String(),
 			Kind: bodyKindName(planet.Kind), IsMoon: moon, Current: planet.ID == currentID,
@@ -1314,6 +1360,12 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 			EnergyAvailable: planet.Energy.Produced - planet.Energy.Consumed,
 			UsedFields:      planet.UsedFields,
 			TotalFields:     planet.TotalFields,
+			Buildings:       activity.Buildings,
+			Researches:      activity.Researches,
+			Ships:           activity.Ships,
+			Defenses:        activity.Defenses,
+			OutboundFleets:  activity.OutboundFleets,
+			IncomingAttacks: activity.IncomingAttacks,
 		}
 		metal += planet.Stock.Metal
 		crystal += planet.Stock.Crystal

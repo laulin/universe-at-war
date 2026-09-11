@@ -1,3 +1,9 @@
+{{define "activity-building-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 20V9h5v11M13 20V4h5v16M8 12h1m-1 3h1m6-8h1m-1 4h1m-1 4h1"/></svg>{{end}}
+{{define "activity-research-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6m-5 0v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M8 15h8"/></svg>{{end}}
+{{define "activity-ship-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4c3 1 5 3 6 6l-6 6-6-6 6-6Zm-6 6-4 1-2 3 7 1m5 1-1 6-3-2-1-5m5-5h.01"/></svg>{{end}}
+{{define "activity-defense-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3 8-8 10-5-2-8-5-8-10V6l8-3Zm0 5v8m-4-4h8"/></svg>{{end}}
+{{define "activity-fleet-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17 17 4m-7 0h7v7M5 7h3M4 11h3M3 15h3"/></svg>{{end}}
+{{define "activity-danger-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 22 21H2L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg>{{end}}
 {{define "layout"}}<!doctype html>
 <html lang="fr">
 <head>
@@ -107,6 +113,16 @@
             <img src="/art/body/{{.ArtSlot}}" alt="{{.Kind}}" width="38" height="38">
             <span class="body-name">{{.Name}}</span>
             <span class="body-coord">[{{.Coordinate}}]</span>
+            {{if or .Buildings .Researches .Ships .Defenses .OutboundFleets .IncomingAttacks}}
+            <span class="body-activity" aria-label="Activités de {{.Name}}">
+              {{if .IncomingAttacks}}<span class="body-activity__item body-activity__item--danger" title="Attaques ennemies en approche : {{.IncomingAttacks}}" aria-label="Attaques ennemies en approche : {{.IncomingAttacks}}">{{template "activity-danger-icon"}}<b>{{.IncomingAttacks}}</b></span>{{end}}
+              {{if .Buildings}}<span class="body-activity__item" title="Constructions : {{.Buildings}}" aria-label="Constructions : {{.Buildings}}">{{template "activity-building-icon"}}<b>{{.Buildings}}</b></span>{{end}}
+              {{if .Researches}}<span class="body-activity__item" title="Recherches : {{.Researches}}" aria-label="Recherches : {{.Researches}}">{{template "activity-research-icon"}}<b>{{.Researches}}</b></span>{{end}}
+              {{if .Ships}}<span class="body-activity__item" title="Vaisseaux en construction : {{.Ships}}" aria-label="Vaisseaux en construction : {{.Ships}}">{{template "activity-ship-icon"}}<b>{{.Ships}}</b></span>{{end}}
+              {{if .Defenses}}<span class="body-activity__item" title="Défenses en construction : {{.Defenses}}" aria-label="Défenses en construction : {{.Defenses}}">{{template "activity-defense-icon"}}<b>{{.Defenses}}</b></span>{{end}}
+              {{if .OutboundFleets}}<span class="body-activity__item" title="Flottes en vol depuis ce corps : {{.OutboundFleets}}" aria-label="Flottes en vol depuis ce corps : {{.OutboundFleets}}">{{template "activity-fleet-icon"}}<b>{{.OutboundFleets}}</b></span>{{end}}
+            </span>
+            {{end}}
             <span class="body-stock">
               {{range .Resources}}<span class="res-{{.Slug}}"><b>{{.Initial}}</b> <span class="{{if .Full}}is-full{{end}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</span></span>{{end}}
             </span>

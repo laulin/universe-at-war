@@ -17,6 +17,7 @@ import (
 
 	"universeatwar/internal/ai"
 	appacs "universeatwar/internal/app/acs"
+	appactivity "universeatwar/internal/app/activity"
 	appadmin "universeatwar/internal/app/administration"
 	appai "universeatwar/internal/app/ai"
 	appalliance "universeatwar/internal/app/alliance"
@@ -387,6 +388,10 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Completer:  events,
 		Wake:       worker.Wake,
 	}
+	activity := appactivity.Service{
+		Repository: storagesqlite.NewActivityRepository(database.Read()),
+		Completer:  events,
+	}
 	worker.Thinker = &ai.Brain{
 		Clock:      clock,
 		Thinking:   appai.Thinking{Clock: clock, Thought: aiRepository},
@@ -421,6 +426,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Research:         research,
 		Shipyard:         shipyard,
 		Fleet:            fleet,
+		Activity:         activity,
 		Galaxy:           galaxy,
 		Reports:          reports,
 		BattleSimulation: battleSimulation,

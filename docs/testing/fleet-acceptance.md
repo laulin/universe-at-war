@@ -29,6 +29,12 @@
     et distingue une confirmation périmée d'une mission refusée.
 13. La confirmation ne porte qu'un formulaire : le lancement, l'attaque groupée
     et le retour à l'assistant partent du même cargo, avec des clés distinctes.
+14. La colonne des corps distingue les files de bâtiments, recherches,
+    vaisseaux et défenses, compte les unités restant au chantier et les flottes
+    parties de chaque corps, puis signale en rouge chaque attaque entrante.
+15. La page Flotte du défenseur liste l'attaquant, le trajet, la composition et
+    l'heure d'impact ; le propriétaire de l'attaque et les joueurs tiers ne
+    voient pas cette approche dans leurs propres alertes.
 
 ## Contrôles
 

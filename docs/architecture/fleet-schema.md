@@ -40,3 +40,18 @@ de l'état `outbound` peut réussir.
 `fleet_arrived` porte la priorité 30 et `fleet_returned` la priorité 40 : à
 échéance identique, une arrivée est traitée avant un retour, et les deux avant
 les achèvements de bâtiment, de recherche et de production.
+
+## Projection d'activité de l'empire
+
+Le panneau permanent des corps lit une projection dédiée, sans recopier les
+files dans le navigateur. Pour chaque corps, elle compte les bâtiments et les
+recherches encore en file, les vaisseaux et défenses restant à livrer, et les
+flottes actives qui en sont parties. Les quantités du chantier correspondent
+aux unités restantes (`quantity - delivered`), pas au nombre de lots.
+
+La même lecture sélectionne les attaques encore `outbound` dont la cible
+appartient actuellement au joueur. Elle alimente à la fois le triangle d'alerte
+du corps visé et la liste des approches de la page Flotte, afin que les deux ne
+puissent pas diverger. Une attaque n'est visible que par son défenseur : les
+missions d'espionnage et les vols dirigés vers un tiers ne sortent pas de cette
+frontière.
