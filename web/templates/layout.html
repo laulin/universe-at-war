@@ -108,24 +108,24 @@
       <p class="eyebrow">{{.Totals.Bodies}} corps</p>
       <ul>
         {{range .Bodies}}
-        <li>
-          <a href="/planets/{{.ID}}"{{if .Current}} aria-current="true"{{end}}>
+        <li class="body-card{{if .Current}} body-card--current{{end}}">
+          <a class="body-summary" href="/planets/{{.ID}}"{{if .Current}} aria-current="true"{{end}}>
             <img src="/art/body/{{.ArtSlot}}" alt="{{.Kind}}" width="38" height="38">
             <span class="body-name">{{.Name}}</span>
             <span class="body-coord">[{{.Coordinate}}]</span>
-            {{if or .Buildings .Researches .Ships .Defenses .OutboundFleets .IncomingAttacks}}
-            <span class="body-activity" aria-label="Activités de {{.Name}}">
-              {{if .IncomingAttacks}}<span class="body-activity__item body-activity__item--danger" title="Attaques ennemies en approche : {{.IncomingAttacks}}" aria-label="Attaques ennemies en approche : {{.IncomingAttacks}}">{{template "activity-danger-icon"}}<b>{{.IncomingAttacks}}</b></span>{{end}}
-              {{if .Buildings}}<span class="body-activity__item" title="Constructions : {{.Buildings}}" aria-label="Constructions : {{.Buildings}}">{{template "activity-building-icon"}}<b>{{.Buildings}}</b></span>{{end}}
-              {{if .Researches}}<span class="body-activity__item" title="Recherches : {{.Researches}}" aria-label="Recherches : {{.Researches}}">{{template "activity-research-icon"}}<b>{{.Researches}}</b></span>{{end}}
-              {{if .Ships}}<span class="body-activity__item" title="Vaisseaux en construction : {{.Ships}}" aria-label="Vaisseaux en construction : {{.Ships}}">{{template "activity-ship-icon"}}<b>{{.Ships}}</b></span>{{end}}
-              {{if .Defenses}}<span class="body-activity__item" title="Défenses en construction : {{.Defenses}}" aria-label="Défenses en construction : {{.Defenses}}">{{template "activity-defense-icon"}}<b>{{.Defenses}}</b></span>{{end}}
-              {{if .OutboundFleets}}<span class="body-activity__item" title="Flottes en vol depuis ce corps : {{.OutboundFleets}}" aria-label="Flottes en vol depuis ce corps : {{.OutboundFleets}}">{{template "activity-fleet-icon"}}<b>{{.OutboundFleets}}</b></span>{{end}}
-            </span>
-            {{end}}
-            <span class="body-stock">
-              {{range .Resources}}<span class="res-{{.Slug}}"><b>{{.Initial}}</b> <span class="{{if .Full}}is-full{{end}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</span></span>{{end}}
-            </span>
+          </a>
+          {{if or .Buildings .Researches .Ships .Defenses .OutboundFleets .IncomingAttacks}}
+          <span class="body-activity" aria-label="Activités de {{.Name}}">
+            {{if .IncomingAttacks}}<a class="body-activity__item body-activity__item--danger" href="/planets/{{.ID}}/fleet#incoming-title" title="Attaques ennemies en approche : {{.IncomingAttacks}}" aria-label="Voir les attaques ennemies en approche : {{.IncomingAttacks}}">{{template "activity-danger-icon"}}<b>{{.IncomingAttacks}}</b></a>{{end}}
+            {{if .Buildings}}<a class="body-activity__item" href="/planets/{{.ID}}" title="Constructions : {{.Buildings}}" aria-label="Voir les constructions : {{.Buildings}}">{{template "activity-building-icon"}}<b>{{.Buildings}}</b></a>{{end}}
+            {{if .Researches}}<a class="body-activity__item" href="/planets/{{.ID}}/research" title="Recherches : {{.Researches}}" aria-label="Voir les recherches : {{.Researches}}">{{template "activity-research-icon"}}<b>{{.Researches}}</b></a>{{end}}
+            {{if .Ships}}<a class="body-activity__item" href="/planets/{{.ID}}/shipyard" title="Vaisseaux en construction : {{.Ships}}" aria-label="Voir les vaisseaux en construction : {{.Ships}}">{{template "activity-ship-icon"}}<b>{{.Ships}}</b></a>{{end}}
+            {{if .Defenses}}<a class="body-activity__item" href="/planets/{{.ID}}/defense" title="Défenses en construction : {{.Defenses}}" aria-label="Voir les défenses en construction : {{.Defenses}}">{{template "activity-defense-icon"}}<b>{{.Defenses}}</b></a>{{end}}
+            {{if .OutboundFleets}}<a class="body-activity__item" href="/planets/{{.ID}}/fleet#missions-title" title="Flottes en vol depuis ce corps : {{.OutboundFleets}}" aria-label="Voir les flottes en vol depuis ce corps : {{.OutboundFleets}}">{{template "activity-fleet-icon"}}<b>{{.OutboundFleets}}</b></a>{{end}}
+          </span>
+          {{end}}
+          <a class="body-stock" href="/planets/{{.ID}}" aria-label="Voir les ressources de {{.Name}}">
+            {{range .Resources}}<span class="res-{{.Slug}}"><b>{{.Initial}}</b> <span class="{{if .Full}}is-full{{end}}" data-stock="{{.Amount}}" data-rate="{{.Rate}}"{{if not .Unbounded}} data-cap="{{.Capacity}}"{{end}}>{{figure .Amount}}</span></span>{{end}}
           </a>
         </li>
         {{end}}

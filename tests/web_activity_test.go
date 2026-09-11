@@ -27,6 +27,17 @@ func TestBodyColumnIndicatorsAndIncomingFleetWarning(t *testing.T) {
 			t.Fatalf("Alice body column has no %s: %q", indicator, alicePage)
 		}
 	}
+	for _, target := range []string{
+		fmt.Sprintf(`href="/planets/%d" title="Constructions : 1"`, fixture.aliceHome.ID),
+		fmt.Sprintf(`href="/planets/%d/research" title="Recherches : 1"`, fixture.aliceHome.ID),
+		fmt.Sprintf(`href="/planets/%d/shipyard" title="Vaisseaux en construction : 3"`, fixture.aliceHome.ID),
+		fmt.Sprintf(`href="/planets/%d/defense" title="Défenses en construction : 4"`, fixture.aliceHome.ID),
+		fmt.Sprintf(`href="/planets/%d/fleet#missions-title" title="Flottes en vol depuis ce corps : 1"`, fixture.aliceHome.ID),
+	} {
+		if !strings.Contains(alicePage, target) {
+			t.Fatalf("an activity badge does not target its page (%s): %q", target, alicePage)
+		}
+	}
 	if strings.Contains(alicePage, "Attaques ennemies en approche :") {
 		t.Fatalf("Alice sees an attack aimed at another player: %q", alicePage)
 	}
@@ -46,6 +57,10 @@ func TestBodyColumnIndicatorsAndIncomingFleetWarning(t *testing.T) {
 	}
 	if strings.Contains(bobFleet, "Aucune flotte ennemie en approche.") {
 		t.Fatalf("Bob's incoming attack is hidden: %q", bobFleet)
+	}
+	warningTarget := fmt.Sprintf(`href="/planets/%d/fleet#incoming-title"`, fixture.bobHome.ID)
+	if !strings.Contains(bobFleet, warningTarget) {
+		t.Fatalf("the attack badge does not target the incoming fleet list: %q", bobFleet)
 	}
 }
 

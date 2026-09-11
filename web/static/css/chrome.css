@@ -121,28 +121,29 @@
   font-size: var(--text-sm);
 }
 .body-column > ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
-.body-column a {
-  display: grid;
-  grid-template-columns: 2.4rem 1fr;
-  gap: 0 var(--space-2);
+.body-column .body-card {
   padding: var(--space-2);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
+}
+.body-column .body-card:hover { border-color: var(--border); background: rgba(31, 74, 108, 0.35); }
+.body-column .body-card--current { border-color: var(--border-strong); background: rgba(38, 96, 138, 0.4); }
+.body-column .body-summary {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  gap: 0 var(--space-2);
   color: var(--text);
   text-decoration: none;
 }
-.body-column a:hover { border-color: var(--border); background: rgba(31, 74, 108, 0.35); }
-.body-column a[aria-current="true"] { border-color: var(--border-strong); background: rgba(38, 96, 138, 0.4); }
-.body-column img { grid-row: 1 / -1; align-self: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; }
+.body-column img { grid-row: 1 / 3; align-self: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; }
 .body-column .body-name { font-weight: 700; color: var(--accent); }
-.body-column a[aria-current="true"] .body-name { color: var(--accent-strong); }
+.body-column .body-card--current .body-name { color: var(--accent-strong); }
 .body-column .body-coord { color: var(--muted); font-size: var(--text-xs); }
 .body-column .body-activity {
-  grid-column: 2;
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  margin-block: 0.2rem;
+  margin: 0.3rem 0 0.2rem calc(2.4rem + var(--space-2));
 }
 .body-activity__item {
   display: inline-flex;
@@ -156,7 +157,9 @@
   border-radius: 999px;
   font-size: 0.68rem;
   line-height: 1;
+  text-decoration: none;
 }
+.body-activity__item:hover, .body-activity__item:focus-visible { border-color: currentColor; background: rgba(120, 217, 255, 0.18); }
 .body-activity__item svg {
   width: 0.85rem;
   height: 0.85rem;
@@ -174,7 +177,15 @@
 }
 .body-activity__item--danger svg path:first-child { fill: currentColor; stroke: currentColor; }
 .body-activity__item--danger svg path:last-child { stroke: #07101d; stroke-width: 2.2; }
-.body-column .body-stock { grid-column: 2; display: grid; gap: 0; font-size: var(--text-xs); line-height: 1.45; }
+.body-column .body-stock {
+  display: grid;
+  gap: 0;
+  margin-left: calc(2.4rem + var(--space-2));
+  color: var(--text);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  text-decoration: none;
+}
 .body-column .body-stock b { color: var(--muted); font-weight: 400; }
 .body-column .totals { margin: var(--space-3) var(--space-1) var(--space-1); padding-top: var(--space-2); border-top: 1px solid var(--border); }
 .body-column .totals dl { display: grid; grid-template-columns: auto 1fr; gap: 0 var(--space-2); margin: 0; font-size: var(--text-xs); }
