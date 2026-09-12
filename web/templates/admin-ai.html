@@ -8,7 +8,8 @@
       {{if lt (len .Players) .Configured}}— l'univers se peuple encore, quelques joueurs à chaque passage.{{else}}— la population est au complet.{{end}}</p>
     {{end}}
     {{if .Players}}
-    <table class="bodies">
+    <div class="admin-table-scroll">
+    <table class="bodies admin-ai-table" aria-labelledby="ai-title">
       <thead>
         <tr>
           <th scope="col">Nom</th><th scope="col">Archétype</th><th scope="col">Horaires</th>
@@ -28,26 +29,31 @@
           <td>{{if .NextThinkAt}}{{.NextThinkAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</td>
           <td>
             {{if not .Retired}}
-            <form method="post" action="/admin/ai/{{.PlayerID}}/retire">
-              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <button type="submit">Retirer</button>
-            </form>
-            {{if not .Team}}
-            <form method="post" action="/admin/ai/{{.PlayerID}}/alliance">
-              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <label for="alliance-{{.PlayerID}}">Alliance</label>
-              <input id="alliance-{{.PlayerID}}" name="alliance" required>
-              <label for="tag-{{.PlayerID}}">Étiquette</label>
-              <input id="tag-{{.PlayerID}}" name="tag" required>
-              <button type="submit">Affecter</button>
-            </form>
-            {{end}}
+            <div class="admin-ai-actions">
+              <form method="post" action="/admin/ai/{{.PlayerID}}/retire">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit">Retirer</button>
+              </form>
+              {{if not .Team}}
+              <form class="admin-ai-alliance-form" method="post" action="/admin/ai/{{.PlayerID}}/alliance">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <label for="alliance-{{.PlayerID}}">Alliance
+                  <input id="alliance-{{.PlayerID}}" name="alliance" required>
+                </label>
+                <label for="tag-{{.PlayerID}}">Étiquette
+                  <input id="tag-{{.PlayerID}}" name="tag" required>
+                </label>
+                <button type="submit">Affecter</button>
+              </form>
+              {{end}}
+            </div>
             {{else}}<span class="muted">—</span>{{end}}
           </td>
         </tr>
       {{end}}
       </tbody>
     </table>
+    </div>
     {{else}}<p class="muted">Cet univers ne compte aucun joueur artificiel.</p>{{end}}
 
     <h3 id="add-title">Ajouter un joueur artificiel</h3>

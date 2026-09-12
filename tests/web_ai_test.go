@@ -236,6 +236,18 @@ func TestWebAdministratorAssignsAnAlliance(t *testing.T) {
 	if !strings.Contains(page, "Affecter") {
 		t.Fatalf("the page offers no alliance: %q", page)
 	}
+	for _, expected := range []string{`class="admin-table-scroll"`, `class="admin-ai-actions"`,
+		`class="admin-ai-alliance-form"`} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("the artificial-player actions miss the aligned layout %q: %q", expected, page)
+		}
+	}
+	styles := fetch(handler, "/static/css/pages.css")
+	if styles.Code != http.StatusOK || !strings.Contains(styles.Body.String(), ".admin-ai-actions {") ||
+		!strings.Contains(styles.Body.String(), "align-items: flex-end;") ||
+		!strings.Contains(styles.Body.String(), ".admin-ai-alliance-form label {") {
+		t.Fatalf("the artificial-player action row is not aligned: %q", styles.Body.String())
+	}
 	// The first founds the alliance, the second is invited into it.
 	postForm(t, handler, "/admin/ai/3/alliance", url.Values{
 		"csrf_token": {"csrf-token"}, "alliance": {"Les Machines"}, "tag": {"mch"},
