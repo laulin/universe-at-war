@@ -227,7 +227,7 @@ func buildReason(blocked string) string {
 	return "while saving for " + blocked
 }
 
-// research follows the fixed line of the archetype-independent technology plan.
+// research follows the next unmet milestone of the technology plan.
 func (b *Brain) research(ctx context.Context, principal appauth.Principal, profile domainai.Profile, bodyID int64) domainai.Decision {
 	if b.Research == nil {
 		return domainai.Skip(domainai.Strategic, "research", "no laboratory service")
@@ -248,7 +248,7 @@ func (b *Brain) research(ctx context.Context, principal appauth.Principal, profi
 			Available: choice.Available, Affordable: choice.Affordable,
 		}
 	}
-	chosen, blocked := domainai.Pick(options, domainai.ResearchPriorities())
+	chosen, blocked := domainai.Pick(options, domainai.PlannedResearchPriorities(options, profile.Preferences()))
 	if chosen == "" {
 		reason := "nothing to learn yet"
 		if blocked != "" {
@@ -298,7 +298,9 @@ func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profil
 			families[id] = overview.Family
 		}
 	}
-	wanted := domainai.ProductionPriorities(profile.Preferences(),
+	tuning := profile.Behaviour()
+	tuning.Preferences = profile.Preferences()
+	wanted := domainai.TunedProductionPriorities(tuning, options,
 		random.NewSeeded(uint64(profile.Seed)^uint64(profile.Tick)))
 	chosen, blocked := domainai.Pick(options, wanted)
 	if chosen == "" {
@@ -308,7 +310,7 @@ func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profil
 		}
 		return skip(domainai.Tactical, "produce", reason, bodyID)
 	}
-	quantity := domainai.OrderSize(options[chosen].Capacity)
+	quantity := domainai.OrderSizeUpTo(options[chosen].Capacity, tuning.BatchSize)
 	key := commandKey(profile, "produce", fmt.Sprintf("%s:%d", chosen, quantity))
 	if _, err := b.Shipyard.OrderFamily(ctx, principal, bodyID, unit.ID(chosen), families[chosen], quantity, key); err != nil {
 		return failure(domainai.Tactical, "produce "+chosen, err)

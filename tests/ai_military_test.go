@@ -8,6 +8,7 @@ import (
 	appai "universeatwar/internal/app/ai"
 	appauth "universeatwar/internal/app/authentication"
 	domainai "universeatwar/internal/domain/ai"
+	storagesqlite "universeatwar/internal/storage/sqlite"
 )
 
 // TestArtificialPlayerSpiesBeforeItRaids proves an artificial player learns
@@ -69,6 +70,111 @@ func TestArtificialPlayerSpiesBeforeItRaids(t *testing.T) {
 	assertSingleValue(t, database, "SELECT COUNT(*) > 0 FROM ai_memory WHERE kind = 'target'", 1)
 	assertSingleValue(t, database,
 		"SELECT COUNT(*) > 0 FROM ai_decisions WHERE action LIKE 'raid %' AND outcome = 'done'", 1)
+}
+
+// TestArtificialPlayerBuildsScoutsAndFindsADistantTarget covers the complete
+// autonomous loop that used to be impossible: the planner builds probes and a
+// combat fleet, looks outside its home system, refreshes its report and attacks.
+func TestArtificialPlayerBuildsScoutsAndFindsADistantTarget(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+	// Leave the AI alone in system 1. The human target is public, but two
+	// systems away, so a home-system-only scout would never discover it.
+	if _, err := database.Write().ExecContext(ctx, "UPDATE planets SET system = 3 WHERE id = 1"); err != nil {
+		t.Fatal(err)
+	}
+	profile, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Autonome", Archetype: domainai.Raider,
+		Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom := domainai.Raider.Tuning()
+	custom.DefenceShare = 0
+	custom.BatchSize = 5
+	profile, err = universeWorld.AI.Update(ctx, admin, profile.PlayerID, appai.UpdateRequest{
+		Version: profile.Version, Archetype: domainai.Raider,
+		Window: profile.Window, Interval: profile.Interval, Custom: &custom,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setBuilding(t, ctx, database, 2, "shipyard", 3)
+	setBuilding(t, ctx, database, 2, "research_lab", 4)
+	setResearch(t, ctx, database, profile.PlayerID, "combustion_drive", 3)
+	setResearch(t, ctx, database, profile.PlayerID, "espionage_technology", 3)
+	setResearch(t, ctx, database, profile.PlayerID, "computer_technology", 3)
+	setResources(t, ctx, database, 2, 500000, 500000, 500000)
+	setResources(t, ctx, database, 1, 100000, 80000, 40000)
+
+	// First reflection: no fixture gives it probes; it orders them itself.
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM production_orders WHERE planet_id = 2 AND unit_id = 'espionage_probe'", 1)
+	advanceToProduction(t, ctx, database, universeWorld, "espionage_probe")
+	assertSingleValue(t, database,
+		"SELECT quantity > 0 FROM planet_units WHERE planet_id = 2 AND unit_id = 'espionage_probe'", 1)
+
+	// It now starts a real combat fleet and sends its own probes to system 3.
+	setResources(t, ctx, database, 2, 500000, 500000, 500000)
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM production_orders WHERE planet_id = 2 AND unit_id = 'light_fighter'", 1)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'espionage' AND target_system = 3", 1, profile.PlayerID)
+
+	// Fighters take longer than a report stays fresh. Once they are ready the
+	// AI refreshes the intelligence, then attacks on the following reflection.
+	advanceToProduction(t, ctx, database, universeWorld, "light_fighter")
+	setResources(t, ctx, database, 2, 500000, 500000, 500000)
+	think(t, ctx, universeWorld)
+	var attacks int
+	if err := database.Read().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'attack'", profile.PlayerID).Scan(&attacks); err != nil {
+		t.Fatal(err)
+	}
+	if attacks == 0 {
+		var returnsText string
+		if err := database.Read().QueryRowContext(ctx, `
+		SELECT returns_at FROM fleets WHERE owner_player_id = ? AND mission = 'espionage'
+			AND state IN ('outbound', 'returning') ORDER BY id DESC LIMIT 1
+	`, profile.PlayerID).Scan(&returnsText); err != nil {
+			t.Fatal(err)
+		}
+		returnsAt, err := time.Parse(time.RFC3339Nano, returnsText)
+		if err != nil {
+			t.Fatal(err)
+		}
+		setClock(t, universeWorld.Clock, returnsAt)
+		if _, err := universeWorld.Events.CompleteDue(ctx, 100); err != nil {
+			t.Fatal(err)
+		}
+		think(t, ctx, universeWorld)
+	}
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'attack' AND target_system = 3", 1, profile.PlayerID)
+}
+
+func advanceToProduction(t *testing.T, ctx context.Context, database *storagesqlite.Database,
+	universeWorld *world, unitID string) {
+	t.Helper()
+	var completesText string
+	if err := database.Read().QueryRowContext(ctx, `
+		SELECT completes_at FROM production_orders WHERE planet_id = 2 AND unit_id = ?
+		ORDER BY id DESC LIMIT 1
+	`, unitID).Scan(&completesText); err != nil {
+		t.Fatal(err)
+	}
+	completesAt, err := time.Parse(time.RFC3339Nano, completesText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setClock(t, universeWorld.Clock, completesAt)
+	if _, err := universeWorld.Events.CompleteDue(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestAnAgeingReportCanCostTheFleet proves an artificial player acts on what it

@@ -70,11 +70,23 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 		}
 	}
 	best, stale, found := domainai.BestTarget(reserve(targets, plan.reserved), profile.Preferences())
-	if found {
+	behaviour := profile.Behaviour()
+	if found && behaviour.AttackEnabled {
 		return []domainai.Decision{b.raid(ctx, principal, profile, home, overview, best)}
 	}
-	if decision, sent := b.recycle(ctx, principal, profile, home, overview); sent {
+	if behaviour.RecycleEnabled {
+		if decision, sent := b.recycle(ctx, principal, profile, home, overview); sent {
+			return []domainai.Decision{decision}
+		}
+	}
+	if found && !behaviour.AttackEnabled {
+		decision := skip(domainai.Operational, "raid "+best.Coordinate.String(), "attacks are disabled for this character", home.ID)
+		coordinate := best.Coordinate
+		decision.Target = &coordinate
 		return []domainai.Decision{decision}
+	}
+	if !behaviour.EspionageEnabled {
+		return []domainai.Decision{skip(domainai.Operational, "spy", "espionage is disabled for this character", home.ID)}
 	}
 	return []domainai.Decision{b.spy(ctx, principal, profile, home, overview, stale, team)}
 }
@@ -193,7 +205,7 @@ func (b *Brain) spy(ctx context.Context, principal appauth.Principal, profile do
 	}
 	target := stale.Coordinate
 	if target.Galaxy == 0 {
-		found, ok := b.neighbour(ctx, principal, home, team)
+		found, ok := b.neighbour(ctx, principal, profile, home, team)
 		if !ok {
 			return skip(domainai.Operational, "spy", "nobody to look at nearby", home.ID)
 		}
@@ -262,27 +274,49 @@ func (b *Brain) recycle(ctx context.Context, principal appauth.Principal, profil
 	}, true
 }
 
-// neighbour picks the closest body of somebody else in the home system.
-func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, home appeconomy.Planet,
-	team friends) (universe.Coordinate, bool) {
+// neighbour picks the closest body of somebody else within the configured
+// exploration radius.
+func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	home appeconomy.Planet, team friends) (universe.Coordinate, bool) {
 	if b.Galaxy == nil {
 		return universe.Coordinate{}, false
 	}
-	view, err := b.Galaxy.System(ctx, principal, home.Coordinate.Galaxy, home.Coordinate.System)
-	if err != nil {
-		return universe.Coordinate{}, false
-	}
-	for _, row := range view.Rows {
-		if row.PlanetID == 0 || row.Own {
-			continue
+	radius := min(profile.Behaviour().SearchRadius, home.Rules.Topology.SystemsPerGalaxy)
+	seen := map[int]bool{}
+	for distance := 0; distance < radius; distance++ {
+		offsets := []int{distance}
+		if distance > 0 {
+			offsets = []int{distance, -distance}
+			// Half the characters walk the other direction first, keeping nearby
+			// targets shared without making every scout choose the same one.
+			if (profile.Seed+profile.Tick)&1 != 0 {
+				offsets[0], offsets[1] = offsets[1], offsets[0]
+			}
 		}
-		at := universe.Coordinate{
-			Galaxy: home.Coordinate.Galaxy, System: home.Coordinate.System, Position: row.Position,
+		for _, offset := range offsets {
+			system := home.Coordinate.System + offset
+			if home.Rules.Topology.CircularSystems {
+				systems := home.Rules.Topology.SystemsPerGalaxy
+				system = ((system-1)%systems+systems)%systems + 1
+			}
+			if system < 1 || system > home.Rules.Topology.SystemsPerGalaxy || seen[system] {
+				continue
+			}
+			seen[system] = true
+			view, err := b.Galaxy.System(ctx, principal, home.Coordinate.Galaxy, system)
+			if err != nil {
+				continue
+			}
+			for _, row := range view.Rows {
+				if row.PlanetID == 0 || row.Own {
+					continue
+				}
+				at := universe.Coordinate{Galaxy: home.Coordinate.Galaxy, System: system, Position: row.Position}
+				if !team.covers(row.OwnerName, at) {
+					return at, true
+				}
+			}
 		}
-		if team.covers(row.OwnerName, at) {
-			continue
-		}
-		return at, true
 	}
 	return universe.Coordinate{}, false
 }

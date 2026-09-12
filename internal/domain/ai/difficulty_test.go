@@ -84,3 +84,17 @@ func TestAProfileCarriesTheDifficultyIntoItsPreferences(t *testing.T) {
 		t.Fatalf("a profile without a difficulty did not play as normal: %+v", plain.Preferences())
 	}
 }
+
+func TestAProfileCanOverrideItsArchetype(t *testing.T) {
+	custom := Raider.Tuning()
+	custom.Greed = 2.5
+	custom.SearchRadius = 25
+	profile := Profile{Archetype: CautiousMiner, Custom: &custom}
+	if profile.Preferences().Greed != 2.5 || profile.Behaviour().SearchRadius != 25 {
+		t.Fatalf("custom behaviour was ignored: %+v", profile.Behaviour())
+	}
+	custom.SearchRadius = 0
+	if err := custom.Validate(); err == nil {
+		t.Fatal("an unbounded custom map scan was accepted")
+	}
+}

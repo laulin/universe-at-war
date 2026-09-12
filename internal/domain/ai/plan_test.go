@@ -113,3 +113,65 @@ func TestOrderSizeCommitsHalfAndNeverEverything(t *testing.T) {
 		}
 	}
 }
+
+func TestResearchPlanMovesThroughUnlockMilestones(t *testing.T) {
+	options := map[string]Option{
+		"energy_technology":    {ID: "energy_technology", Level: 0, Available: true, Affordable: true},
+		"laser_technology":     {ID: "laser_technology", Level: 0, Available: false, Affordable: true},
+		"combustion_drive":     {ID: "combustion_drive", Level: 0, Available: false, Affordable: true},
+		"espionage_technology": {ID: "espionage_technology", Level: 0, Available: false, Affordable: true},
+		"computer_technology":  {ID: "computer_technology", Level: 0, Available: true, Affordable: true},
+		"weapons_technology":   {ID: "weapons_technology", Level: 0},
+		"shielding_technology": {ID: "shielding_technology", Level: 0},
+		"armour_technology":    {ID: "armour_technology", Level: 0},
+	}
+	chosen, _ := Pick(options, PlannedResearchPriorities(options, Raider.Preferences()))
+	if chosen != "energy_technology" {
+		t.Fatalf("a new empire chose %q, want energy_technology", chosen)
+	}
+	energy := options["energy_technology"]
+	energy.Level = 2
+	options["energy_technology"] = energy
+	laser := options["laser_technology"]
+	laser.Available = true
+	options["laser_technology"] = laser
+	chosen, _ = Pick(options, PlannedResearchPriorities(options, Raider.Preferences()))
+	if chosen != "laser_technology" {
+		t.Fatalf("an empire kept repeating its first technology and chose %q", chosen)
+	}
+}
+
+func TestTunedProductionBuildsUtilityAndAdvancedUnits(t *testing.T) {
+	tuning := Raider.Tuning()
+	tuning.DefenceShare = 0
+	options := map[string]Option{
+		"espionage_probe": {ID: "espionage_probe", Owned: 0},
+		"battlecruiser":   {ID: "battlecruiser"},
+		"destroyer":       {ID: "destroyer"},
+		"bomber":          {ID: "bomber"},
+		"battleship":      {ID: "battleship"},
+		"cruiser":         {ID: "cruiser"},
+		"heavy_fighter":   {ID: "heavy_fighter"},
+		"light_fighter":   {ID: "light_fighter"},
+	}
+	wanted := TunedProductionPriorities(tuning, options, random.NewScript([]int{2}, nil))
+	if wanted[0] != "espionage_probe" {
+		t.Fatalf("a raider without probes wants %v", wanted)
+	}
+	probe := options["espionage_probe"]
+	probe.Owned = tuning.Probes * 2
+	options["espionage_probe"] = probe
+	wanted = TunedProductionPriorities(tuning, options, random.NewScript([]int{2}, nil))
+	if wanted[0] == "small_cargo" || wanted[0] == "light_fighter" {
+		t.Fatalf("a mature yard still starts from the old narrow roster: %v", wanted)
+	}
+	found := map[string]bool{}
+	for _, id := range wanted {
+		found[id] = true
+	}
+	for _, id := range []string{"cruiser", "battleship", "bomber", "destroyer", "battlecruiser"} {
+		if !found[id] {
+			t.Fatalf("the production plan never considers %s: %v", id, wanted)
+		}
+	}
+}

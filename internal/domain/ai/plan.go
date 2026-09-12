@@ -71,14 +71,20 @@ func BuildingPriorities(body Body) []string {
 	}
 	wanted = append(wanted, fullStores(body)...)
 	average := body.averageMine()
-	if average >= RoboticsFrom && body.level("robotics_factory") < 2 {
+	roboticsTarget := min(10, max(2, average-3))
+	if average >= RoboticsFrom && body.level("robotics_factory") < roboticsTarget {
 		wanted = append(wanted, "robotics_factory")
 	}
-	if average >= LaboratoryFrom && body.level("research_lab") < 3 {
+	laboratoryTarget := min(12, max(3, average-4))
+	if average >= LaboratoryFrom && body.level("research_lab") < laboratoryTarget {
 		wanted = append(wanted, "research_lab")
 	}
-	if average >= ShipyardFrom && body.level("shipyard") < 2 {
+	shipyardTarget := min(12, max(2, average-6))
+	if average >= ShipyardFrom && body.level("shipyard") < shipyardTarget {
 		wanted = append(wanted, "shipyard")
+	}
+	if average >= 16 && body.level("robotics_factory") >= 10 && body.level("nanite_factory") < min(4, 1+(average-16)/3) {
+		wanted = append(wanted, "nanite_factory")
 	}
 	return append(wanted, mineOrder(body)...)
 }
@@ -136,6 +142,56 @@ func ResearchPriorities() []string {
 	}
 }
 
+// PlannedResearchPriorities advances through unlock goals instead of selecting
+// the first technology forever. Several milestones of the same technology are
+// deliberate: they let useful unlocks in between take their turn.
+func PlannedResearchPriorities(options map[string]Option, preferences Preferences) []string {
+	goals := []struct {
+		id     string
+		target int
+	}{
+		{"energy_technology", 2},
+		{"laser_technology", 3},
+		{"combustion_drive", 3},
+		{"espionage_technology", 4},
+		{"computer_technology", 4},
+		{"armour_technology", 2},
+		{"impulse_drive", 4},
+		{"weapons_technology", 3},
+		{"shielding_technology", 2},
+		{"combustion_drive", 6},
+		{"laser_technology", 6},
+		{"ion_technology", 4},
+		{"energy_technology", 6},
+		{"shielding_technology", 5},
+		{"hyperspace_technology", 5},
+		{"hyperspace_drive", 6},
+		{"laser_technology", 12},
+		{"energy_technology", 8},
+		{"ion_technology", 5},
+		{"plasma_technology", 7},
+		{"astrophysics", 4},
+	}
+	var wanted []string
+	for _, goal := range goals {
+		if option, known := options[goal.id]; known && option.Level < goal.target {
+			wanted = append(wanted, goal.id)
+		}
+	}
+	// Mature empires balance their combat technologies. A military character
+	// aims slightly higher than an economy-first one.
+	combatTarget := 8
+	if preferences.Economy < .6 {
+		combatTarget = 12
+	}
+	for _, id := range []string{"weapons_technology", "shielding_technology", "armour_technology"} {
+		if option, known := options[id]; known && option.Level < combatTarget {
+			wanted = append(wanted, id)
+		}
+	}
+	return wanted
+}
+
 // ProductionPriorities is what a body builds next. The share of defences of the
 // archetype is the chance that the yard turns to the ground rather than the sky,
 // drawn from the seed of the player so the choice stays reproducible.
@@ -144,6 +200,42 @@ func ProductionPriorities(preferences Preferences, source random.Source) []strin
 		return []string{"rocket_launcher", "light_laser", "small_cargo", "light_fighter"}
 	}
 	return []string{"small_cargo", "light_fighter", "rocket_launcher"}
+}
+
+// TunedProductionPriorities builds the utility ships needed to discover and
+// exploit the universe, then varies a broad combat or defensive roster. Locked
+// and unaffordable entries are skipped later by Pick, so a young empire falls
+// back naturally to light units while a mature one stops doing only that.
+func TunedProductionPriorities(tuning Tuning, options map[string]Option, source random.Source) []string {
+	var wanted []string
+	if tuning.EspionageEnabled {
+		probeTarget := max(int64(2), tuning.Probes*2)
+		if option, known := options["espionage_probe"]; known && option.Owned < probeTarget {
+			wanted = append(wanted, "espionage_probe")
+		}
+	}
+	if random.Chance(source, tuning.DefenceShare) {
+		wanted = append(wanted,
+			"plasma_turret", "gauss_cannon", "heavy_laser", "ion_cannon",
+			"small_shield_dome", "large_shield_dome", "light_laser", "rocket_launcher")
+	} else {
+		warships := []string{
+			"battlecruiser", "destroyer", "bomber", "battleship", "cruiser", "heavy_fighter", "light_fighter",
+		}
+		start := source.IntN(len(warships))
+		wanted = append(wanted, warships[start:]...)
+		wanted = append(wanted, warships[:start]...)
+	}
+	if tuning.RecycleEnabled {
+		if option, known := options["recycler"]; known && option.Owned < 5 {
+			wanted = append(wanted, "recycler")
+		}
+	}
+	wanted = append(wanted, "large_cargo", "small_cargo")
+	if tuning.EspionageEnabled {
+		wanted = append(wanted, "espionage_probe")
+	}
+	return wanted
 }
 
 // Pick returns the first wanted option the game would actually accept, and the
@@ -168,12 +260,21 @@ func Pick(options map[string]Option, wanted []string) (chosen string, blocked st
 // OrderSize is how many units an artificial player commits to at once: half of
 // what it could pay for, never more than a batch, never less than one.
 func OrderSize(capacity int64) int64 {
+	return OrderSizeUpTo(capacity, 10)
+}
+
+// OrderSizeUpTo keeps part of the stock available for the other layers while
+// respecting the individual appetite configured by the administrator.
+func OrderSizeUpTo(capacity, maximum int64) int64 {
 	if capacity <= 0 {
 		return 0
 	}
 	size := capacity / 2
-	if size > 10 {
-		size = 10
+	if maximum < 1 {
+		maximum = 1
+	}
+	if size > maximum {
+		size = maximum
 	}
 	if size < 1 {
 		size = 1
