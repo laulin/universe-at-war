@@ -30,6 +30,9 @@ func TestWebGalaxyShowsOnlyPublicInformation(t *testing.T) {
 	if !strings.Contains(page, "Bob") || !strings.Contains(page, "1:1:1") {
 		t.Fatalf("galaxy page = %q", page)
 	}
+	if row := galaxyRowOf(t, page, "1:1:1"); !strings.Contains(row, `/art/body/planet-1`) {
+		t.Fatalf("the planet in position 1 has no orbital portrait: %q", row)
+	}
 	for _, secret := range []string{"987654", "876543", "765432", "light_fighter", "rocket_launcher"} {
 		if strings.Contains(page, secret) {
 			t.Fatalf("the galaxy page leaked %q", secret)

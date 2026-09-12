@@ -21,6 +21,7 @@ import (
 type galaxyPageRow struct {
 	Position      int
 	Coordinate    string
+	ArtSlot       string
 	PlanetName    string
 	OwnerName     string
 	Own           bool
@@ -249,6 +250,7 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 		display := galaxyPageRow{
 			Position:   row.Position,
 			Coordinate: fmt.Sprintf("%d:%d:%d", view.Galaxy, view.System, row.Position),
+			ArtSlot:    bodyArtSlot(row.Position, false),
 			PlanetName: row.PlanetName,
 			OwnerName:  row.OwnerName,
 			Own:        row.Own,

@@ -26,7 +26,10 @@
       {{range .Rows}}
         <tr class="{{if .Own}}galaxy-row--own{{else if not .Occupied}}galaxy-row--empty{{end}}">
           <th scope="row">{{.Coordinate}}</th>
-          <td data-label="Planète">{{if .Occupied}}<strong>{{.PlanetName}}</strong>{{else}}<span class="muted">inoccupée</span>{{end}}</td>
+          <td data-label="Planète">{{if .Occupied}}<span class="galaxy-planet">
+            <img class="galaxy-planet__icon" src="/art/body/{{.ArtSlot}}" alt="" width="42" height="42" loading="lazy" decoding="async">
+            <strong>{{.PlanetName}}</strong>
+          </span>{{else}}<span class="muted">inoccupée</span>{{end}}</td>
           <td data-label="Joueur">{{if .Occupied}}{{.OwnerName}}{{if .Own}} <span class="own-marker">(vous)</span>{{end}}{{else}}—{{end}}</td>
           <td data-label="Débris">
             {{if .HasDebris}}

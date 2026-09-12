@@ -145,6 +145,16 @@
 .galaxy-table .galaxy-row--own { background: rgba(120, 217, 255, 0.07); }
 .galaxy-table .galaxy-row--empty { color: var(--muted); }
 .galaxy-table th[scope="row"] { color: var(--accent); white-space: nowrap; }
+.galaxy-planet { display: inline-flex; align-items: center; gap: var(--space-3); }
+.galaxy-planet__icon {
+  width: 2.65rem;
+  height: 2.65rem;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  box-shadow: 0 0 .6rem rgba(120, 217, 255, 0.12);
+}
 .galaxy-debris { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; white-space: nowrap; }
 .galaxy-debris__link {
   display: inline-flex;
@@ -183,6 +193,7 @@
   .galaxy-table th[scope="row"]::before { content: "Position"; }
   .galaxy-table td::before { content: attr(data-label); }
   .galaxy-table td { display: flex; align-items: baseline; }
+  .galaxy-table td[data-label="Planète"] { align-items: center; }
 }
 
 .confirm { margin-top: var(--space-5); }
