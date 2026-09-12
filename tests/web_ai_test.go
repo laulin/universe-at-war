@@ -245,7 +245,8 @@ func TestWebAdministratorAssignsAnAlliance(t *testing.T) {
 	styles := fetch(handler, "/static/css/pages.css")
 	if styles.Code != http.StatusOK || !strings.Contains(styles.Body.String(), ".admin-ai-actions {") ||
 		!strings.Contains(styles.Body.String(), "align-items: flex-end;") ||
-		!strings.Contains(styles.Body.String(), ".admin-ai-alliance-form label {") {
+		!strings.Contains(styles.Body.String(), "grid-template-columns: minmax(7rem, 1fr) minmax(5rem, .7fr) auto;") ||
+		!strings.Contains(styles.Body.String(), ".admin-ai-alliance-form input { width: 100%; min-width: 0; }") {
 		t.Fatalf("the artificial-player action row is not aligned: %q", styles.Body.String())
 	}
 	// The first founds the alliance, the second is invited into it.
