@@ -23,7 +23,8 @@ func TestArtSlotsAlwaysRenderAnImage(t *testing.T) {
 		"/art/building/metal_mine", "/art/research/astrophysics", "/art/ship/light_fighter",
 		"/art/defense/rocket_launcher", "/art/resource/metal", "/art/resource/crystal",
 		"/art/resource/deuterium", "/art/resource/energy", "/art/resource/debris", "/art/body/planet",
-		"/art/body/moon", "/art/banner/overview", "/art/banner/shipyard",
+		"/art/body/moon", "/art/surface/frontier", "/art/surface/metropolis",
+		"/art/banner/overview", "/art/banner/shipyard",
 	} {
 		recorder := fetch(handler, target)
 		if recorder.Code != http.StatusOK {
@@ -88,6 +89,49 @@ func TestEveryPlanetBuildingOfTheCatalogueIsIllustrated(t *testing.T) {
 		slug := strings.TrimSuffix(entry.Name(), path.Ext(entry.Name()))
 		if !known[slug] {
 			t.Fatalf("static/art/building/%s fills no slot of the catalogue", entry.Name())
+		}
+	}
+}
+
+// Every orbital position has its own portrait and every settlement state used
+// by the shell has a real surface illustration. Keep the folders and the slots
+// in lockstep so a renamed or forgotten asset cannot silently fall back to SVG.
+func TestEveryBodyAndSurfaceVariantIsIllustrated(t *testing.T) {
+	handler := artHandler(t)
+	variants := map[string][]string{
+		"body": {
+			"moon", "planet-1", "planet-2", "planet-3", "planet-4", "planet-5",
+			"planet-6", "planet-7", "planet-8", "planet-9", "planet-10",
+			"planet-11", "planet-12", "planet-13", "planet-14", "planet-15",
+		},
+		"surface": {
+			"frontier", "mining", "energy", "industrial", "research", "fortress",
+			"metropolis", "moon",
+		},
+	}
+
+	for category, slugs := range variants {
+		expected := make(map[string]bool, len(slugs))
+		for _, slug := range slugs {
+			expected[slug] = true
+			recorder := fetch(handler, "/art/"+category+"/"+slug)
+			if contentType := recorder.Header().Get("Content-Type"); contentType != "image/webp" {
+				t.Fatalf("/art/%s/%s served %q: the slot has no artwork", category, slug, contentType)
+			}
+		}
+
+		entries, err := fs.ReadDir(webassets.Files, "static/art/"+category)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			slug := strings.TrimSuffix(entry.Name(), path.Ext(entry.Name()))
+			if !expected[slug] {
+				t.Fatalf("static/art/%s/%s fills no known slot", category, entry.Name())
+			}
 		}
 	}
 }

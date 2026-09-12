@@ -1251,6 +1251,8 @@ type bodyLink struct {
 	Current    bool
 	// ArtSlot names the illustration of the body.
 	ArtSlot string
+	// SurfaceArtSlot names the landscape selected from the completed buildings.
+	SurfaceArtSlot string
 	// Resources are metal, crystal and deuterium, in that order, so the column
 	// and the bar always read the same way.
 	Resources       []shellResource
@@ -1360,6 +1362,7 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 			Coordinate: planet.Coordinate.String(),
 			Kind:       bodyKindName(planet.Kind), IsMoon: moon, Current: planet.ID == currentID,
 			ArtSlot:         bodyArtSlot(planet.Coordinate.Position, moon),
+			SurfaceArtSlot:  bodySurfaceArtSlot(planet.Levels, moon),
 			Resources:       bodyResources(planet.Stock, planet.Capacity, planet.Rates, moon),
 			EnergyProduced:  planet.Energy.Produced,
 			EnergyConsumed:  planet.Energy.Consumed,
@@ -1453,6 +1456,42 @@ func bodyArtSlot(position int, moon bool) string {
 		return "moon"
 	}
 	return "planet-" + strconv.Itoa(position)
+}
+
+// bodySurfaceArtSlot turns completed buildings into a visual settlement. It
+// deliberately ignores the construction queue: a landscape changes when the
+// installation exists, at the same instant as its gameplay effects.
+func bodySurfaceArtSlot(levels building.Levels, moon bool) string {
+	if moon {
+		return "moon"
+	}
+	total := 0
+	for _, level := range levels {
+		total += level
+	}
+	if total == 0 {
+		return "frontier"
+	}
+	if levels[building.Terraformer] > 0 || levels[building.NaniteFactory] >= 2 || total >= 90 {
+		return "metropolis"
+	}
+	if levels[building.MissileSilo] >= 4 {
+		return "fortress"
+	}
+	if laboratory := levels[building.ResearchLab]; laboratory >= 6 &&
+		laboratory >= max(levels[building.Shipyard], levels[building.RoboticsFactory]) {
+		return "research"
+	}
+	if levels[building.NaniteFactory] > 0 || levels[building.Shipyard] >= 5 ||
+		levels[building.RoboticsFactory] >= 7 {
+		return "industrial"
+	}
+	strongestMine := max(levels[building.MetalMine], levels[building.CrystalMine],
+		levels[building.DeuteriumSynthesizer])
+	if levels[building.SolarPlant] >= strongestMine+3 {
+		return "energy"
+	}
+	return "mining"
 }
 
 // rememberBody notes which body the player is looking at, so the shell of a page

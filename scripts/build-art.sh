@@ -39,7 +39,7 @@ geometry() {
 	case $1 in
 	building | research | ship | defense) echo 640x480 ;;
 	body) echo 512x512 ;;
-	banner) echo 1920x600 ;;
+	banner | surface) echo 1920x600 ;;
 	resource) echo 64x64 ;;
 	*)
 		echo "build-art: unknown category $1" >&2

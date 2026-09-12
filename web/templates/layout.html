@@ -78,7 +78,8 @@
 
     <main class="game-shell" id="main-content" tabindex="-1">
       <div class="hero">
-        <img class="hero__art" src="/art/banner/{{.Section}}" alt="" width="640" height="200">
+        {{with .Current}}<img class="hero__art" src="/art/surface/{{.SurfaceArtSlot}}" alt="" width="640" height="200">
+        {{else}}<img class="hero__art" src="/art/banner/{{.Section}}" alt="" width="640" height="200">{{end}}
         <div class="hero__plate">
           {{with .Current}}<img class="hero__badge" src="/art/body/{{.ArtSlot}}" alt="" width="44" height="44">{{end}}
           <div>

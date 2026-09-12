@@ -97,7 +97,7 @@ func TestGameShellKeepsItsThreeRegions(t *testing.T) {
 		body := getPage(t, handler, target, session, csrfCookie)
 		for _, region := range []string{
 			`class="resource-bar"`, `class="body-column"`, `class="game-shell"`,
-			`<meter`, `/art/resource/metal`, `/art/body/planet-`,
+			`<meter`, `/art/resource/metal`, `/art/body/planet-`, `/art/surface/frontier`,
 		} {
 			if !strings.Contains(body, region) {
 				t.Fatalf("%s has no %s: %q", target, region, body)

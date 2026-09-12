@@ -30,6 +30,7 @@ var artCategories = map[string]func(seed uint32, slug string) string{
 	"ship":     drawShip,
 	"resource": drawResource,
 	"body":     drawBody,
+	"surface":  drawBanner,
 	"banner":   drawBanner,
 }
 
