@@ -129,6 +129,50 @@ func TestReflectionSchedulesItselfAndSleepsOutsideTheHours(t *testing.T) {
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM ai_profiles WHERE last_think_at IS NOT NULL", 1)
 }
 
+func TestAdministratorCustomizesOneArtificialPlayer(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	profile, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Maraudeur", Archetype: domainai.CautiousMiner,
+		Window: domainai.Window{Start: 8, End: 23}, Interval: 5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom := domainai.Raider.Tuning()
+	custom.Greed = 2.4
+	custom.SearchRadius = 20
+	custom.BatchSize = 40
+	updated, err := universeWorld.AI.Update(ctx, admin, profile.PlayerID, appai.UpdateRequest{
+		Version: profile.Version, Archetype: domainai.Raider,
+		Window: domainai.Window{Start: 6, End: 22}, Interval: 3 * time.Minute, Custom: &custom,
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated.Archetype != domainai.Raider || updated.Custom == nil ||
+		updated.Preferences().Greed != 2.4 || updated.Behaviour().SearchRadius != 20 || updated.Version != 2 {
+		t.Fatalf("updated profile = %+v", updated)
+	}
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM audit_log WHERE action = 'ai_profile_updated'", 1)
+	if _, err := universeWorld.AI.Update(ctx, admin, profile.PlayerID, appai.UpdateRequest{
+		Version: profile.Version, Archetype: domainai.Raider,
+		Window: profile.Window, Interval: profile.Interval, Custom: &custom,
+	}); !errors.Is(err, appai.ErrConflict) {
+		t.Fatalf("Update(stale) error = %v, want ErrConflict", err)
+	}
+	reset, err := universeWorld.AI.Update(ctx, admin, profile.PlayerID, appai.UpdateRequest{
+		Version: updated.Version, Archetype: domainai.Scout,
+		Window: updated.Window, Interval: updated.Interval,
+	})
+	if err != nil {
+		t.Fatalf("Update(reset) error = %v", err)
+	}
+	if reset.Custom != nil || reset.Behaviour() != domainai.Scout.Tuning() {
+		t.Fatalf("archetype defaults were not restored: %+v", reset)
+	}
+}
+
 // TestRetiringAnArtificialPlayerStopsItForGood proves a retired player thinks
 // no more and leaves no pending event behind.
 func TestRetiringAnArtificialPlayerStopsItForGood(t *testing.T) {

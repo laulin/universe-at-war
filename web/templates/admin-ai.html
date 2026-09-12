@@ -20,7 +20,7 @@
       {{range .Players}}
         <tr>
           <th scope="row"><a href="/admin/ai/{{.PlayerID}}">{{.Name}}</a></th>
-          <td>{{.Archetype}}</td>
+          <td>{{.Archetype}}{{if .Custom}} <span class="muted">(personnalisé)</span>{{end}}</td>
           <td>{{.Window.Start}} h – {{.Window.End}} h UTC{{if .Awake}} (éveillé){{else}} (endormi){{end}}</td>
           <td>{{if .Retired}}retiré{{else}}actif{{end}}</td>
           <td>{{with .Team}}{{.Tag}}{{if .Role}} ({{.Role}}){{end}}{{else}}<span class="muted">aucune</span>{{end}}</td>

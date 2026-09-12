@@ -19,6 +19,51 @@
       <dt>État</dt><dd>{{if .Player.Retired}}retiré{{else}}actif{{end}}</dd>
     </dl>
 
+    {{if not .Player.Retired}}
+    <h3 id="behaviour-title">Personnalité et comportement</h3>
+    <p class="muted">
+      {{if .Player.Custom}}Réglages personnalisés actifs.{{else}}Cette IA suit encore les valeurs de son archétype.{{end}}
+      Les changements prennent effet à sa prochaine réflexion et ne lui accordent aucune ressource.
+    </p>
+    <form class="ai-settings-form" method="post" action="/admin/ai/{{.Player.PlayerID}}/settings" aria-labelledby="behaviour-title">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="version" value="{{.Player.Version}}">
+      <fieldset><legend>Rythme</legend>
+        <label>Archétype<select name="archetype">
+          {{range .Archetypes}}<option value="{{.}}" {{if eq . $.Player.Archetype}}selected{{end}}>{{.}}</option>{{end}}
+        </select></label>
+        <label>Début d'activité UTC<input name="start_hour" type="number" min="0" max="23" value="{{.Player.Window.Start}}" required></label>
+        <label>Fin d'activité UTC<input name="end_hour" type="number" min="0" max="23" value="{{.Player.Window.End}}" required></label>
+        <label>Intervalle de réflexion (minutes)<input name="interval_minutes" type="number" min="1" max="1440" value="{{.IntervalMinutes}}" required></label>
+      </fieldset>
+      <fieldset><legend>Arbitrages</legend>
+        <label>Priorité économique (0–1)<input name="economy" type="number" min="0" max="1" step="0.01" value="{{.Tuning.Economy}}" required></label>
+        <label>Appétit pour le butin (0–10)<input name="greed" type="number" min="0" max="10" step="0.05" value="{{.Tuning.Greed}}" required></label>
+        <label>Prudence face aux défenses (0–10)<input name="caution" type="number" min="0" max="10" step="0.05" value="{{.Tuning.Caution}}" required></label>
+        <label>Marge de force avant attaque<input name="safety_margin" type="number" min="0.01" max="100" step="0.05" value="{{.Tuning.SafetyMargin}}" required></label>
+        <label>Score minimal d'un raid<input name="raid_threshold" type="number" min="0" step="100" value="{{.Tuning.RaidThreshold}}" required></label>
+        <label>Part de production défensive (0–1)<input name="defence_share" type="number" min="0" max="1" step="0.01" value="{{.Tuning.DefenceShare}}" required></label>
+      </fieldset>
+      <fieldset><legend>Opérations</legend>
+        <label>Nombre de sondes par mission<input name="probes" type="number" min="1" max="100" value="{{.Tuning.Probes}}" required></label>
+        <label>Rayon d'exploration (systèmes)<input name="search_radius" type="number" min="1" max="100" value="{{.Tuning.SearchRadius}}" required></label>
+        <label>Taille maximale d'un lot au chantier<input name="batch_size" type="number" min="1" max="1000" value="{{.Tuning.BatchSize}}" required></label>
+        <label>Protection de flotte<select name="fleetsave">
+          <option value="always" {{if eq .Tuning.Fleetsave "always"}}selected{{end}}>Toujours avant le sommeil</option>
+          <option value="loaded" {{if eq .Tuning.Fleetsave "loaded"}}selected{{end}}>Si la flotte transporte des ressources</option>
+          <option value="never" {{if eq .Tuning.Fleetsave "never"}}selected{{end}}>Jamais</option>
+        </select></label>
+        <label class="check"><input type="checkbox" name="attack_enabled" {{if .Tuning.AttackEnabled}}checked{{end}}> Autoriser les attaques</label>
+        <label class="check"><input type="checkbox" name="espionage_enabled" {{if .Tuning.EspionageEnabled}}checked{{end}}> Autoriser l'espionnage</label>
+        <label class="check"><input type="checkbox" name="recycle_enabled" {{if .Tuning.RecycleEnabled}}checked{{end}}> Autoriser le recyclage</label>
+      </fieldset>
+      <div class="ai-settings-actions">
+        <button type="submit" name="mode" value="custom">Enregistrer la personnalité</button>
+        <button class="ghost" type="submit" name="mode" value="archetype">Revenir aux valeurs de l'archétype</button>
+      </div>
+    </form>
+    {{end}}
+
     {{with .Player.Team}}
     <h3 id="team-title">Alliance {{.Name}} [{{.Tag}}]</h3>
     <dl class="summary">

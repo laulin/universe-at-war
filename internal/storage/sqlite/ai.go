@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -161,12 +162,16 @@ func (r *AIRepository) CreateProfile(ctx context.Context, accountID int64, profi
 		if err != nil {
 			return err
 		}
+		tuning, err := encodeAITuning(profile.Custom)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO ai_profiles(player_id, account_id, archetype, activity_start_hour, activity_end_hour,
-				think_interval_seconds, seed, next_think_at, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				think_interval_seconds, seed, next_think_at, tuning, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, playerID, accountID, string(profile.Archetype), profile.Window.Start, profile.Window.End,
-			int64(profile.Interval/time.Second), profile.Seed, timestamp(first), timestamp(now)); err != nil {
+			int64(profile.Interval/time.Second), profile.Seed, timestamp(first), tuning, timestamp(now)); err != nil {
 			return fmt.Errorf("ai repository: create profile: %w", err)
 		}
 		if err := scheduleThink(ctx, tx, playerID, 0, 0, first, now); err != nil {
@@ -179,6 +184,49 @@ func (r *AIRepository) CreateProfile(ctx context.Context, accountID int64, profi
 		return appai.Profile{}, err
 	}
 	return created, nil
+}
+
+// UpdateProfile changes only the character and rhythm of an active artificial
+// player. Its next already-scheduled reflection remains the boundary; the new
+// interval and activity window govern every schedule after it.
+func (r *AIRepository) UpdateProfile(ctx context.Context, actorID, expectedVersion int64,
+	profile domainai.Profile, now time.Time) error {
+	tuning, err := encodeAITuning(profile.Custom)
+	if err != nil {
+		return err
+	}
+	return withWriteTx(ctx, r.write, "ai repository: update profile", func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `
+			UPDATE ai_profiles SET archetype = ?, activity_start_hour = ?, activity_end_hour = ?,
+				think_interval_seconds = ?, tuning = ?, version = version + 1,
+				configuration_version = configuration_version + 1
+			WHERE player_id = ? AND configuration_version = ? AND state = 'active'
+		`, string(profile.Archetype), profile.Window.Start, profile.Window.End,
+			int64(profile.Interval/time.Second), tuning, profile.PlayerID, expectedVersion)
+		if err != nil {
+			return fmt.Errorf("ai repository: update profile: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			var exists bool
+			if err := tx.QueryRowContext(ctx,
+				"SELECT EXISTS(SELECT 1 FROM ai_profiles WHERE player_id = ? AND state = 'active')",
+				profile.PlayerID).Scan(&exists); err != nil {
+				return fmt.Errorf("ai repository: inspect profile update: %w", err)
+			}
+			if !exists {
+				return appai.ErrNotFound
+			}
+			return appai.ErrConflict
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO audit_log(actor_account_id, action, target_type, target_id, occurred_at, details)
+			VALUES (?, 'ai_profile_updated', 'player', ?, ?,
+				json_object('archetype', ?, 'custom', json(?) <> json('{}')))
+		`, actorID, profile.PlayerID, timestamp(now), string(profile.Archetype), tuning); err != nil {
+			return fmt.Errorf("ai repository: audit profile update: %w", err)
+		}
+		return nil
+	})
 }
 
 // Retire stops an artificial player and cancels the reflection it was owed.
@@ -351,20 +399,22 @@ func insertDecision(ctx context.Context, tx *sql.Tx, playerID int64, at time.Tim
 
 // aiProfileRow is the persisted shape of an artificial player.
 type aiProfileRow struct {
-	playerID    int64
-	accountID   int64
-	name        string
-	archetype   string
-	window      domainai.Window
-	interval    time.Duration
-	seed        int64
-	tick        int64
-	retired     bool
-	nextThinkAt *time.Time
-	dueThinkAt  *time.Time
-	lastThinkAt *time.Time
-	createdAt   time.Time
-	version     int64
+	playerID             int64
+	accountID            int64
+	name                 string
+	archetype            string
+	window               domainai.Window
+	interval             time.Duration
+	seed                 int64
+	tick                 int64
+	retired              bool
+	nextThinkAt          *time.Time
+	dueThinkAt           *time.Time
+	lastThinkAt          *time.Time
+	createdAt            time.Time
+	version              int64
+	configurationVersion int64
+	custom               *domainai.Tuning
 }
 
 func (row aiProfileRow) profile() domainai.Profile {
@@ -372,6 +422,7 @@ func (row aiProfileRow) profile() domainai.Profile {
 		PlayerID: row.playerID, AccountID: row.accountID, Name: row.name,
 		Archetype: domainai.Archetype(row.archetype), Window: row.window,
 		Interval: row.interval, Seed: row.seed, Tick: row.tick, Retired: row.retired,
+		Version: row.configurationVersion, Custom: row.custom,
 	}
 }
 
@@ -404,17 +455,18 @@ type rowQuerier interface {
 
 func profileRow(ctx context.Context, tx rowQuerier, playerID int64) (aiProfileRow, bool, error) {
 	var row aiProfileRow
-	var state, createdText string
+	var state, createdText, tuning string
 	var seconds int64
 	var nextText, dueText, lastText sql.NullString
 	err := tx.QueryRowContext(ctx, `
 		SELECT p.player_id, p.account_id, pl.display_name, p.archetype, p.activity_start_hour, p.activity_end_hour,
 			p.think_interval_seconds, p.seed, p.tick, p.state, p.next_think_at, p.due_think_at, p.last_think_at,
-			p.created_at, p.version
+			p.created_at, p.version, p.tuning, p.configuration_version
 		FROM ai_profiles p JOIN players pl ON pl.id = p.player_id
 		WHERE p.player_id = ?
 	`, playerID).Scan(&row.playerID, &row.accountID, &row.name, &row.archetype, &row.window.Start, &row.window.End,
-		&seconds, &row.seed, &row.tick, &state, &nextText, &dueText, &lastText, &createdText, &row.version)
+		&seconds, &row.seed, &row.tick, &state, &nextText, &dueText, &lastText, &createdText,
+		&row.version, &tuning, &row.configurationVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return aiProfileRow{}, false, nil
 	}
@@ -423,6 +475,10 @@ func profileRow(ctx context.Context, tx rowQuerier, playerID int64) (aiProfileRo
 	}
 	row.interval = time.Duration(seconds) * time.Second
 	row.retired = state == "retired"
+	row.custom, err = decodeAITuning(tuning)
+	if err != nil {
+		return aiProfileRow{}, false, fmt.Errorf("ai repository: decode tuning: %w", err)
+	}
 	row.createdAt, err = time.Parse(time.RFC3339Nano, createdText)
 	if err != nil {
 		return aiProfileRow{}, false, fmt.Errorf("ai repository: parse creation: %w", err)
@@ -441,6 +497,34 @@ func profileRow(ctx context.Context, tx rowQuerier, playerID int64) (aiProfileRo
 		*moment.field = &parsed
 	}
 	return row, true, nil
+}
+
+func encodeAITuning(tuning *domainai.Tuning) (string, error) {
+	if tuning == nil {
+		return "{}", nil
+	}
+	if err := tuning.Validate(); err != nil {
+		return "", err
+	}
+	document, err := json.Marshal(tuning)
+	if err != nil {
+		return "", fmt.Errorf("ai repository: encode tuning: %w", err)
+	}
+	return string(document), nil
+}
+
+func decodeAITuning(document string) (*domainai.Tuning, error) {
+	if document == "" || document == "{}" {
+		return nil, nil
+	}
+	var tuning domainai.Tuning
+	if err := json.Unmarshal([]byte(document), &tuning); err != nil {
+		return nil, err
+	}
+	if err := tuning.Validate(); err != nil {
+		return nil, err
+	}
+	return &tuning, nil
 }
 
 // loadProfile builds the administration view of one artificial player.

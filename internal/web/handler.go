@@ -384,6 +384,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("GET /admin/ai", handler.artificialPage)
 	handler.mux.HandleFunc("POST /admin/ai", handler.createArtificial)
 	handler.mux.HandleFunc("GET /admin/ai/{player}", handler.artificialDetailPage)
+	handler.mux.HandleFunc("POST /admin/ai/{player}/settings", handler.updateArtificial)
 	handler.mux.HandleFunc("POST /admin/ai/{player}/retire", handler.retireArtificial)
 	handler.mux.HandleFunc("POST /admin/ai/{player}/alliance", handler.enlistArtificial)
 	handler.mux.HandleFunc("POST /planets/{planet}/defense/{unit}", handler.orderDefenses)

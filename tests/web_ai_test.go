@@ -77,6 +77,27 @@ func TestWebArtificialAdministrationIsReservedToAdministrators(t *testing.T) {
 	if !strings.Contains(detail, "Aucun joueur n'y a accès") {
 		t.Fatalf("the debug view is not marked as reserved: %q", detail)
 	}
+	for _, expected := range []string{"Personnalité et comportement", "Rayon d'exploration", "Autoriser les attaques"} {
+		if !strings.Contains(detail, expected) {
+			t.Fatalf("the AI settings miss %q: %q", expected, detail)
+		}
+	}
+	postForm(t, admin, "/admin/ai/3/settings", url.Values{
+		"csrf_token": {"csrf-token"}, "version": {hiddenValue(t, detail, "version")},
+		"archetype": {"raider"}, "start_hour": {"6"}, "end_hour": {"22"}, "interval_minutes": {"3"},
+		"economy": {"0.35"}, "greed": {"2.5"}, "caution": {"0.5"}, "safety_margin": {"1.2"},
+		"raid_threshold": {"500"}, "defence_share": {"0.05"}, "probes": {"4"},
+		"search_radius": {"20"}, "batch_size": {"40"}, "fleetsave": {"loaded"},
+		"attack_enabled": {"on"}, "espionage_enabled": {"on"}, "recycle_enabled": {"on"},
+		"mode": {"custom"},
+	}, http.StatusSeeOther, session, csrfCookie)
+	assertSingleText(t, database, "SELECT archetype FROM ai_profiles WHERE player_id = 3", "raider")
+	assertSingleValue(t, database,
+		"SELECT json_extract(tuning, '$.search_radius') FROM ai_profiles WHERE player_id = 3", 20)
+	customized := getPage(t, admin, "/admin/ai/3?saved=1", session, csrfCookie)
+	if !strings.Contains(customized, "Réglages personnalisés actifs") || !strings.Contains(customized, "comportement de cette IA a été mis à jour") {
+		t.Fatalf("the customized personality is not reported: %q", customized)
+	}
 
 	postForm(t, admin, "/admin/ai/3/retire", url.Values{"csrf_token": {"csrf-token"}},
 		http.StatusSeeOther, session, csrfCookie)

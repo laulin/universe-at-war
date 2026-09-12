@@ -22,6 +22,7 @@ var (
 	ErrNotFound       = errors.New("ai: no such artificial player")
 	ErrInvalidRequest = errors.New("ai: invalid request")
 	ErrNameTaken      = errors.New("ai: this name is already used")
+	ErrConflict       = errors.New("ai: profile was modified concurrently")
 )
 
 // Decision is one line of the diary of an artificial player, as an
@@ -83,6 +84,16 @@ type Request struct {
 	Home universe.Coordinate
 }
 
+// UpdateRequest is the editable character of an existing artificial player.
+// A nil Custom returns it to the defaults of its archetype.
+type UpdateRequest struct {
+	Version   int64
+	Archetype domainai.Archetype
+	Window    domainai.Window
+	Interval  time.Duration
+	Custom    *domainai.Tuning
+}
+
 // Seeds hands out the unpredictable seed each artificial player keeps for life.
 type Seeds interface {
 	Seed() (int64, error)
@@ -103,6 +114,7 @@ type Repository interface {
 	Enlistment(context.Context, int64, string) (Enlistment, error)
 	List(context.Context, time.Time) ([]Profile, error)
 	Inspect(context.Context, int64, int, time.Time) (Profile, error)
+	UpdateProfile(context.Context, int64, int64, domainai.Profile, time.Time) error
 }
 
 // Service runs the administration use cases of the artificial players.
@@ -236,6 +248,29 @@ func (s Service) Inspect(ctx context.Context, principal appauth.Principal, playe
 	}
 	if playerID <= 0 {
 		return Profile{}, ErrNotFound
+	}
+	return s.Repository.Inspect(ctx, playerID, DiaryLength, s.Clock.Now().UTC())
+}
+
+// Update changes how one active artificial player behaves from its next
+// reflection. It changes neither its empire nor its accumulated memory.
+func (s Service) Update(ctx context.Context, principal appauth.Principal, playerID int64,
+	request UpdateRequest) (Profile, error) {
+	if err := s.validate(principal); err != nil {
+		return Profile{}, err
+	}
+	if playerID <= 0 || request.Version <= 0 {
+		return Profile{}, ErrInvalidRequest
+	}
+	profile := domainai.Profile{
+		PlayerID: playerID, Archetype: request.Archetype, Window: request.Window,
+		Interval: request.Interval, Custom: request.Custom,
+	}
+	if err := profile.Validate(); err != nil {
+		return Profile{}, err
+	}
+	if err := s.Repository.UpdateProfile(ctx, principal.AccountID, request.Version, profile, s.Clock.Now().UTC()); err != nil {
+		return Profile{}, err
 	}
 	return s.Repository.Inspect(ctx, playerID, DiaryLength, s.Clock.Now().UTC())
 }

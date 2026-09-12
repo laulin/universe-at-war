@@ -23,6 +23,7 @@ type artificialService interface {
 	Enlist(ctx context.Context, principal appauth.Principal, playerID int64, name, tag string) error
 	List(ctx context.Context, principal appauth.Principal) ([]appai.Profile, error)
 	Inspect(ctx context.Context, principal appauth.Principal, playerID int64) (appai.Profile, error)
+	Update(ctx context.Context, principal appauth.Principal, playerID int64, request appai.UpdateRequest) (appai.Profile, error)
 	Configured(ctx context.Context, principal appauth.Principal) (int, error)
 }
 
@@ -39,7 +40,10 @@ type artificialPageData struct {
 // is reserved for administrators and never served to a player.
 type artificialDetailPageData struct {
 	pageShell
-	Player appai.Profile
+	Player          appai.Profile
+	Tuning          domainai.Tuning
+	Archetypes      []domainai.Archetype
+	IntervalMinutes int64
 }
 
 // requireAdministrator resolves the caller and refuses anybody who is not an
@@ -203,6 +207,11 @@ func (h *Handler) artificialDetailPage(response http.ResponseWriter, request *ht
 		http.Error(response, "artificial player unavailable", http.StatusInternalServerError)
 		return
 	}
+	h.renderArtificialDetail(response, request, http.StatusOK, principal, player, "")
+}
+
+func (h *Handler) renderArtificialDetail(response http.ResponseWriter, request *http.Request, status int,
+	principal appauth.Principal, player appai.Profile, message string) {
 	planets, err := h.economy.Planets(request.Context(), principal)
 	if err != nil && !errors.Is(err, appeconomy.ErrNoEmpire) {
 		http.Error(response, "artificial player unavailable", http.StatusInternalServerError)
@@ -212,10 +221,117 @@ func (h *Handler) artificialDetailPage(response http.ResponseWriter, request *ht
 	if !ok {
 		return
 	}
-	h.render(response, http.StatusOK, "admin-ai-detail", artificialDetailPageData{
-		pageShell: h.gameShell(request.Context(), token, principal, "admin", planets, h.rememberedBody(request)),
-		Player:    player,
+	shell := h.gameShell(request.Context(), token, principal, "admin", planets, h.rememberedBody(request))
+	shell.Error = message
+	if request.URL.Query().Get("saved") == "1" {
+		shell.Notice = "Le comportement de cette IA a été mis à jour."
+	}
+	h.render(response, status, "admin-ai-detail", artificialDetailPageData{
+		pageShell: shell, Player: player, Tuning: player.Behaviour(), Archetypes: domainai.Archetypes(),
+		IntervalMinutes: int64(player.Interval / time.Minute),
 	})
+}
+
+func (h *Handler) updateArtificial(response http.ResponseWriter, request *http.Request) {
+	principal, ok := h.requireAdministrator(response, request)
+	if !ok || h.artificials == nil || !h.validCSRF(response, request) {
+		return
+	}
+	playerID, err := strconv.ParseInt(request.PathValue("player"), 10, 64)
+	if err != nil {
+		http.NotFound(response, request)
+		return
+	}
+	current, err := h.artificials.Inspect(request.Context(), principal, playerID)
+	if errors.Is(err, appai.ErrNotFound) {
+		http.NotFound(response, request)
+		return
+	}
+	if err != nil {
+		http.Error(response, "artificial player unavailable", http.StatusInternalServerError)
+		return
+	}
+	version, versionErr := strconv.ParseInt(request.PostFormValue("version"), 10, 64)
+	start, startErr := strconv.Atoi(request.PostFormValue("start_hour"))
+	end, endErr := strconv.Atoi(request.PostFormValue("end_hour"))
+	minutes, intervalErr := strconv.Atoi(request.PostFormValue("interval_minutes"))
+	if versionErr != nil || startErr != nil || endErr != nil || intervalErr != nil {
+		h.renderArtificialDetail(response, request, http.StatusBadRequest, principal, current, "Formulaire invalide.")
+		return
+	}
+	var custom *domainai.Tuning
+	if request.PostFormValue("mode") != "archetype" {
+		parsed, parseErr := artificialTuningFromForm(request)
+		if parseErr != nil {
+			h.renderArtificialDetail(response, request, http.StatusBadRequest, principal, current, parseErr.Error()+".")
+			return
+		}
+		custom = &parsed
+	}
+	_, err = h.artificials.Update(request.Context(), principal, playerID, appai.UpdateRequest{
+		Version: version, Archetype: domainai.Archetype(request.PostFormValue("archetype")),
+		Window: domainai.Window{Start: start, End: end}, Interval: time.Duration(minutes) * time.Minute,
+		Custom: custom,
+	})
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, appai.ErrConflict) {
+			status = http.StatusConflict
+			if latest, loadErr := h.artificials.Inspect(request.Context(), principal, playerID); loadErr == nil {
+				current = latest
+			}
+		}
+		h.renderArtificialDetail(response, request, status, principal, current, artificialError(err))
+		return
+	}
+	http.Redirect(response, request, "/admin/ai/"+strconv.FormatInt(playerID, 10)+"?saved=1", http.StatusSeeOther)
+}
+
+func artificialTuningFromForm(request *http.Request) (domainai.Tuning, error) {
+	float := func(name string) (float64, error) {
+		value, err := strconv.ParseFloat(request.PostFormValue(name), 64)
+		if err != nil {
+			return 0, errors.New("Le champ " + name + " doit être un nombre")
+		}
+		return value, nil
+	}
+	var tuning domainai.Tuning
+	var err error
+	if tuning.Economy, err = float("economy"); err != nil {
+		return domainai.Tuning{}, err
+	}
+	if tuning.Greed, err = float("greed"); err != nil {
+		return domainai.Tuning{}, err
+	}
+	if tuning.Caution, err = float("caution"); err != nil {
+		return domainai.Tuning{}, err
+	}
+	if tuning.SafetyMargin, err = float("safety_margin"); err != nil {
+		return domainai.Tuning{}, err
+	}
+	if tuning.DefenceShare, err = float("defence_share"); err != nil {
+		return domainai.Tuning{}, err
+	}
+	if tuning.RaidThreshold, err = float("raid_threshold"); err != nil {
+		return domainai.Tuning{}, err
+	}
+	if tuning.Probes, err = strconv.ParseInt(request.PostFormValue("probes"), 10, 64); err != nil {
+		return domainai.Tuning{}, errors.New("Le nombre de sondes doit être entier")
+	}
+	if tuning.SearchRadius, err = strconv.Atoi(request.PostFormValue("search_radius")); err != nil {
+		return domainai.Tuning{}, errors.New("Le rayon d'exploration doit être entier")
+	}
+	if tuning.BatchSize, err = strconv.ParseInt(request.PostFormValue("batch_size"), 10, 64); err != nil {
+		return domainai.Tuning{}, errors.New("La taille des lots doit être entière")
+	}
+	tuning.Fleetsave = domainai.Fleetsave(request.PostFormValue("fleetsave"))
+	tuning.AttackEnabled = request.PostFormValue("attack_enabled") == "on"
+	tuning.EspionageEnabled = request.PostFormValue("espionage_enabled") == "on"
+	tuning.RecycleEnabled = request.PostFormValue("recycle_enabled") == "on"
+	if err := tuning.Validate(); err != nil {
+		return domainai.Tuning{}, err
+	}
+	return tuning, nil
 }
 
 // artificialError turns a refusal into a sentence an administrator can act on.
@@ -231,6 +347,10 @@ func artificialError(err error) string {
 		return "Les heures d'activité vont de 0 à 23."
 	case errors.Is(err, domainai.ErrInvalidInterval):
 		return "L'intervalle de réflexion doit être positif."
+	case errors.Is(err, appai.ErrConflict):
+		return "Cette IA a été modifiée depuis l'ouverture du formulaire. Rechargez ses paramètres."
+	case errors.Is(err, domainai.ErrInvalidTuning):
+		return "Les réglages de personnalité sont hors des limites autorisées."
 	case errors.Is(err, appeconomy.ErrUniverseFull):
 		return "L'univers est plein : aucune position libre."
 	case errors.Is(err, appalliance.ErrNameTaken):
@@ -242,6 +362,6 @@ func artificialError(err error) string {
 	case errors.Is(err, domainalliance.ErrInvalidTag):
 		return "Une étiquette compte de 2 à 8 caractères parmi A-Z et 0-9."
 	default:
-		return "Création impossible."
+		return "Action impossible."
 	}
 }
