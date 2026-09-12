@@ -11,12 +11,15 @@ import (
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	appmoderation "universeatwar/internal/app/moderation"
+	"universeatwar/internal/domain/rules"
 )
 
 // dashboardService is the administration view of a universe.
 type dashboardService interface {
 	Health(context.Context, appauth.Principal) (appadmin.Health, error)
 	Accounts(context.Context, appauth.Principal) ([]appadmin.Account, error)
+	GameSettings(context.Context, appauth.Principal) (appadmin.GameSettings, error)
+	UpdateGameSettings(context.Context, appauth.Principal, int64, rules.Ruleset, string) (appadmin.GameSettings, error)
 	SetRole(context.Context, appauth.Principal, int64, string, bool) error
 	SetStatus(context.Context, appauth.Principal, int64, string) error
 }
@@ -62,6 +65,82 @@ func (h *Handler) dashboardPage(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	h.renderDashboard(response, request, http.StatusOK, principal, "", "")
+}
+
+// gameSettingsPageData carries the live ruleset and its optimistic version.
+type gameSettingsPageData struct {
+	pageShell
+	Settings appadmin.GameSettings
+}
+
+func (h *Handler) gameSettingsPage(response http.ResponseWriter, request *http.Request) {
+	principal, ok := h.requireAdministrator(response, request)
+	if !ok || h.dashboard == nil {
+		if ok {
+			http.NotFound(response, request)
+		}
+		return
+	}
+	settings, err := h.dashboard.GameSettings(request.Context(), principal)
+	if err != nil {
+		http.Error(response, "game settings unavailable", http.StatusInternalServerError)
+		return
+	}
+	h.renderGameSettings(response, request, http.StatusOK, principal, settings, "")
+}
+
+func (h *Handler) renderGameSettings(response http.ResponseWriter, request *http.Request, status int,
+	principal appauth.Principal, settings appadmin.GameSettings, message string) {
+	token, ok := h.ensureCSRF(response, request)
+	if !ok {
+		return
+	}
+	shell := h.gameShell(request.Context(), token, principal, "admin",
+		h.administrationBodies(request, principal), h.rememberedBody(request))
+	shell.Error = message
+	if request.URL.Query().Get("saved") == "1" {
+		shell.Notice = "Les paramètres du jeu ont été publiés dans une nouvelle version."
+	}
+	h.render(response, status, "admin-settings", gameSettingsPageData{pageShell: shell, Settings: settings})
+}
+
+func (h *Handler) updateGameSettings(response http.ResponseWriter, request *http.Request) {
+	principal, ok := h.requireAdministrator(response, request)
+	if !ok || h.dashboard == nil || !h.validCSRF(response, request) {
+		return
+	}
+	current, err := h.dashboard.GameSettings(request.Context(), principal)
+	if err != nil {
+		http.Error(response, "game settings unavailable", http.StatusInternalServerError)
+		return
+	}
+	expectedVersion, err := strconv.ParseInt(request.PostFormValue("version"), 10, 64)
+	if err != nil {
+		h.renderGameSettings(response, request, http.StatusBadRequest, principal, current, "Version de formulaire invalide.")
+		return
+	}
+	updated := current.Rules
+	if err := updateLiveRulesFromForm(request, &updated); err != nil {
+		current.Rules = updated
+		h.renderGameSettings(response, request, http.StatusBadRequest, principal, current, err.Error()+".")
+		return
+	}
+	published, err := h.dashboard.UpdateGameSettings(request.Context(), principal, expectedVersion, updated,
+		request.PostFormValue("justification"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, appadmin.ErrRulesConflict) {
+			status = http.StatusConflict
+			if latest, loadErr := h.dashboard.GameSettings(request.Context(), principal); loadErr == nil {
+				current = latest
+			}
+		} else {
+			current.Rules = updated
+		}
+		h.renderGameSettings(response, request, status, principal, current, gameSettingsError(err))
+		return
+	}
+	http.Redirect(response, request, "/admin/settings?saved=1&version="+strconv.FormatInt(published.Version, 10), http.StatusSeeOther)
 }
 
 // administrationBodies loads the bodies of the reader so that the administration
@@ -318,6 +397,19 @@ func administrationError(err error) string {
 		return "Vous ne pouvez pas retirer vos propres droits."
 	default:
 		return "Action impossible."
+	}
+}
+
+func gameSettingsError(err error) string {
+	switch {
+	case errors.Is(err, appadmin.ErrRulesConflict):
+		return "Les paramètres ont été modifiés depuis l'ouverture du formulaire. La dernière version a été rechargée."
+	case errors.Is(err, appadmin.ErrImmutableRules):
+		return "La topologie, le catalogue et l'exposition réseau ne peuvent pas changer après le démarrage."
+	case errors.Is(err, appadmin.ErrInvalidRulesUpdate):
+		return "Les paramètres sont incohérents ou la justification est manquante."
+	default:
+		return "Impossible de publier ces paramètres."
 	}
 }
 

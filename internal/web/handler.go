@@ -225,7 +225,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "admin-ai", "admin-ai-detail", "admin", "moderation"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "admin-ai", "admin-ai-detail", "admin", "admin-settings", "moderation"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register", "profiles", "closed"}
 )
 
@@ -371,6 +371,8 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/operation", handler.openOperation)
 	handler.mux.HandleFunc("POST /fleets/{fleet}/withdraw", handler.withdrawFromOperation)
 	handler.mux.HandleFunc("GET /admin", handler.dashboardPage)
+	handler.mux.HandleFunc("GET /admin/settings", handler.gameSettingsPage)
+	handler.mux.HandleFunc("POST /admin/settings", handler.updateGameSettings)
 	handler.mux.HandleFunc("POST /admin/accounts/{account}/role", handler.changeRole)
 	handler.mux.HandleFunc("POST /admin/accounts/{account}/status", handler.changeStatus)
 	handler.mux.HandleFunc("POST /admin/backup", handler.takeBackup)

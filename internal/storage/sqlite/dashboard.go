@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appadmin "universeatwar/internal/app/administration"
+	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/server"
 )
 
@@ -150,6 +151,115 @@ func (r *DashboardRepository) Accounts(ctx context.Context, now time.Time) ([]ap
 		return nil, fmt.Errorf("dashboard repository: iterate accounts: %w", err)
 	}
 	return accounts, nil
+}
+
+// ActiveGameSettings reads the immutable document currently in force.
+func (r *DashboardRepository) ActiveGameSettings(ctx context.Context) (appadmin.StoredGameSettings, error) {
+	var stored appadmin.StoredGameSettings
+	var document, effective string
+	if err := r.write.QueryRowContext(ctx, `
+		SELECT document, version, effective_at FROM ruleset_versions
+		WHERE status = 'active' ORDER BY version DESC LIMIT 1
+	`).Scan(&document, &stored.Version, &effective); err != nil {
+		return appadmin.StoredGameSettings{}, fmt.Errorf("dashboard repository: read game settings: %w", err)
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, effective)
+	if err != nil {
+		return appadmin.StoredGameSettings{}, fmt.Errorf("dashboard repository: parse game settings date: %w", err)
+	}
+	stored.Document = []byte(document)
+	stored.EffectiveAt = parsed
+	return stored, nil
+}
+
+// ReplaceGameSettings settles every planet at the version boundary, supersedes
+// the current document and publishes a new immutable active version in one
+// transaction.
+func (r *DashboardRepository) ReplaceGameSettings(ctx context.Context, actorID, expectedVersion int64,
+	document []byte, checksum, justification string, now time.Time) (appadmin.StoredGameSettings, error) {
+	var stored appadmin.StoredGameSettings
+	err := withWriteTx(ctx, r.write, "dashboard repository: replace game settings", func(tx *sql.Tx) error {
+		var activeVersion int64
+		if err := tx.QueryRowContext(ctx, `
+			SELECT version FROM ruleset_versions WHERE status = 'active'
+			ORDER BY version DESC LIMIT 1
+		`).Scan(&activeVersion); err != nil {
+			return fmt.Errorf("dashboard repository: read active ruleset: %w", err)
+		}
+		if activeVersion != expectedVersion {
+			return appadmin.ErrRulesConflict
+		}
+
+		// Lazy production must be materialised under the old rules before the
+		// active document changes, otherwise the new speed would apply to the
+		// whole interval since each planet was last visited.
+		rows, err := tx.QueryContext(ctx, "SELECT id FROM planets ORDER BY id")
+		if err != nil {
+			return fmt.Errorf("dashboard repository: list planets: %w", err)
+		}
+		var planetIDs []int64
+		for rows.Next() {
+			var planetID int64
+			if err := rows.Scan(&planetID); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("dashboard repository: scan planet: %w", err)
+			}
+			planetIDs = append(planetIDs, planetID)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("dashboard repository: iterate planets: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("dashboard repository: close planets: %w", err)
+		}
+		for _, planetID := range planetIDs {
+			planet, _, production, err := loadPlanetByID(ctx, tx, planetID, now, building.DefaultCatalogue())
+			if err != nil {
+				return fmt.Errorf("dashboard repository: settle planet %d: %w", planetID, err)
+			}
+			if err := persistProduction(ctx, tx, planet.ID, production); err != nil {
+				return err
+			}
+		}
+
+		result, err := tx.ExecContext(ctx,
+			"UPDATE ruleset_versions SET status = 'superseded' WHERE status = 'active' AND version = ?",
+			expectedVersion)
+		if err != nil {
+			return fmt.Errorf("dashboard repository: supersede ruleset: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return appadmin.ErrRulesConflict
+		}
+		if err := tx.QueryRowContext(ctx,
+			"SELECT COALESCE(MAX(version), 0) + 1 FROM ruleset_versions").Scan(&stored.Version); err != nil {
+			return fmt.Errorf("dashboard repository: select ruleset version: %w", err)
+		}
+		effectiveAt := now.UTC()
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO ruleset_versions(
+				version, status, document, checksum, author_account_id, justification, effective_at, created_at
+			) VALUES (?, 'active', ?, ?, ?, ?, ?, ?)
+		`, stored.Version, string(document), checksum, actorID, justification,
+			timestamp(effectiveAt), timestamp(effectiveAt)); err != nil {
+			return fmt.Errorf("dashboard repository: publish ruleset: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO audit_log(actor_account_id, action, target_type, target_id, occurred_at, details)
+			VALUES (?, 'ruleset_updated', 'ruleset', ?, ?,
+				json_object('previous_version', ?, 'version', ?, 'justification', ?))
+		`, actorID, stored.Version, timestamp(effectiveAt), expectedVersion, stored.Version, justification); err != nil {
+			return fmt.Errorf("dashboard repository: audit ruleset: %w", err)
+		}
+		stored.Document = append([]byte(nil), document...)
+		stored.EffectiveAt = effectiveAt
+		return nil
+	})
+	if err != nil {
+		return appadmin.StoredGameSettings{}, err
+	}
+	return stored, nil
 }
 
 // SetRole grants or withdraws a role.

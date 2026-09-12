@@ -228,6 +228,108 @@ func updateRulesFromForm(step int, request *http.Request, configured *rules.Rule
 	return nil
 }
 
+// updateLiveRulesFromForm parses every setting that may safely change once the
+// universe is running. The setup steps remain the canonical parser for their
+// categories; the newer rule sections are added below. Topology, catalogue and
+// network exposure are deliberately absent and keep their persisted values.
+func updateLiveRulesFromForm(request *http.Request, configured *rules.Ruleset) error {
+	for _, step := range []int{1, 3, 4, 5, 6, 7, 8, 9} {
+		if err := updateRulesFromForm(step, request, configured); err != nil {
+			return err
+		}
+	}
+
+	var err error
+	if configured.Espionage.ResourcesThreshold, err = intField(request, "espionage_resources_threshold"); err != nil {
+		return err
+	}
+	if configured.Espionage.FleetThreshold, err = intField(request, "espionage_fleet_threshold"); err != nil {
+		return err
+	}
+	if configured.Espionage.DefensesThreshold, err = intField(request, "espionage_defenses_threshold"); err != nil {
+		return err
+	}
+	if configured.Espionage.BuildingsThreshold, err = intField(request, "espionage_buildings_threshold"); err != nil {
+		return err
+	}
+	if configured.Espionage.ResearchThreshold, err = intField(request, "espionage_research_threshold"); err != nil {
+		return err
+	}
+	if configured.Espionage.DetectionBase, err = floatField(request, "espionage_detection_base"); err != nil {
+		return err
+	}
+	if configured.Espionage.RecentReportSeconds, err = intField(request, "espionage_recent_report_seconds"); err != nil {
+		return err
+	}
+
+	if configured.Expansion.BaseMoonFields, err = intField(request, "base_moon_fields"); err != nil {
+		return err
+	}
+	if configured.Expansion.LunarBaseFields, err = intField(request, "lunar_base_fields"); err != nil {
+		return err
+	}
+	if configured.Expansion.PhalanxScanCost, err = int64Field(request, "phalanx_scan_cost"); err != nil {
+		return err
+	}
+	if configured.Expansion.JumpGateCooldownSeconds, err = intField(request, "jump_gate_cooldown_seconds"); err != nil {
+		return err
+	}
+
+	if configured.Progression.QueueLength, err = intField(request, "queue_length"); err != nil {
+		return err
+	}
+	if configured.Team.InvitationLifetimeHours, err = intField(request, "alliance_invitation_lifetime_hours"); err != nil {
+		return err
+	}
+	if configured.Team.MaximumGroupSize, err = intField(request, "maximum_group_size"); err != nil {
+		return err
+	}
+	if configured.Team.MaximumHoldHours, err = intField(request, "maximum_hold_hours"); err != nil {
+		return err
+	}
+
+	configured.Expedition.Enabled = checkbox(request, "expedition_enabled")
+	if configured.Expedition.HoldHours, err = intField(request, "expedition_hold_hours"); err != nil {
+		return err
+	}
+	if configured.Expedition.ResourceFactor, err = floatField(request, "expedition_resource_factor"); err != nil {
+		return err
+	}
+	if configured.Expedition.RareFactor, err = floatField(request, "expedition_rare_factor"); err != nil {
+		return err
+	}
+	if configured.Expedition.ShipFactor, err = floatField(request, "expedition_ship_factor"); err != nil {
+		return err
+	}
+	if configured.Expedition.DelayFactor, err = floatField(request, "expedition_delay_factor"); err != nil {
+		return err
+	}
+	if configured.Expedition.LossShare, err = floatField(request, "expedition_loss_share"); err != nil {
+		return err
+	}
+	weights := []struct {
+		name   string
+		target *int
+	}{
+		{"expedition_weight_resources", &configured.Expedition.Weights.Resources},
+		{"expedition_weight_nothing", &configured.Expedition.Weights.Nothing},
+		{"expedition_weight_ships", &configured.Expedition.Weights.Ships},
+		{"expedition_weight_delay", &configured.Expedition.Weights.Delay},
+		{"expedition_weight_pirates", &configured.Expedition.Weights.Pirates},
+		{"expedition_weight_aliens", &configured.Expedition.Weights.Aliens},
+		{"expedition_weight_losses", &configured.Expedition.Weights.Losses},
+		{"expedition_weight_rare", &configured.Expedition.Weights.Rare},
+	}
+	for _, weight := range weights {
+		value, parseErr := intField(request, weight.name)
+		if parseErr != nil {
+			return parseErr
+		}
+		*weight.target = value
+	}
+	return nil
+}
+
 func requiredText(request *http.Request, name string) string {
 	return strings.TrimSpace(request.PostFormValue(name))
 }

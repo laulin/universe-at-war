@@ -36,6 +36,20 @@
 }
 .bodies .admin-account-actions form { flex: none; flex-wrap: nowrap; }
 .admin-account-actions button { white-space: nowrap; }
+.admin-settings-form { display: grid; gap: var(--space-5); }
+.admin-settings-form fieldset { margin: 0; }
+.admin-settings-form label:not(.check) { display: grid; align-content: start; gap: var(--space-1); }
+.admin-settings-form textarea { min-height: 5rem; resize: vertical; }
+.admin-settings-locked {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+.admin-settings-locked summary { color: var(--accent); cursor: pointer; font-weight: 700; }
+.admin-settings-actions { display: grid; gap: var(--space-2); max-width: 40rem; }
+.admin-settings-actions p { margin: 0; }
+.admin-settings-actions button { justify-self: start; }
 
 .battle-simulation {
   margin-block: var(--space-4);

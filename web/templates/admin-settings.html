@@ -1,0 +1,190 @@
+{{define "title"}}Paramètres du jeu{{end}}
+{{define "content"}}
+  <section class="panel-wide" aria-labelledby="settings-title">
+    <p class="eyebrow">Administration</p>
+    <h2 id="settings-title">Paramètres du jeu</h2>
+    <p>
+      Version active <strong>{{.Settings.Version}}</strong>, publiée le
+      <time datetime="{{.Settings.EffectiveAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.Settings.EffectiveAt.Format "02/01/2006 à 15:04:05"}} UTC</time>.
+    </p>
+    <div class="alert" role="note">
+      Une publication s'applique aux nouvelles actions. Elle ne recalcule pas les flottes,
+      recherches ou constructions déjà lancées. La production de ressources est arrêtée à
+      l'instant du changement avec les anciennes règles, puis repart avec les nouvelles.
+    </div>
+
+    <form class="admin-settings-form" method="post" action="/admin/settings">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="version" value="{{.Settings.Version}}">
+      <input type="hidden" name="network_visibility" value="{{.Settings.Rules.Identity.NetworkVisibility}}">
+
+      <fieldset><legend>Identité et accès</legend>
+        <label>Nom de l'univers<input name="name" value="{{.Settings.Rules.Identity.Name}}" required></label>
+        <label>Langue<input name="language" value="{{.Settings.Rules.Identity.Language}}" required></label>
+        <label>Fuseau horaire<input name="timezone" value="{{.Settings.Rules.Identity.Timezone}}" required></label>
+        <label>Description<textarea name="description">{{.Settings.Rules.Identity.Description}}</textarea></label>
+        <label>Inscriptions<select name="registration_policy">
+          <option value="closed" {{if eq .Settings.Rules.Identity.RegistrationPolicy "closed"}}selected{{end}}>Fermées</option>
+          <option value="open" {{if eq .Settings.Rules.Identity.RegistrationPolicy "open"}}selected{{end}}>Ouvertes</option>
+          <option value="invitation" {{if eq .Settings.Rules.Identity.RegistrationPolicy "invitation"}}selected{{end}}>Sur invitation</option>
+        </select></label>
+      </fieldset>
+
+      <fieldset><legend>Vitesses et temps</legend>
+        <label>Vitesse économie<input type="number" min="0.01" max="1000" step="0.01" name="economy_speed" value="{{.Settings.Rules.Time.EconomySpeed}}" required></label>
+        <label>Vitesse bâtiments<input type="number" min="0.01" max="1000" step="0.01" name="building_speed" value="{{.Settings.Rules.Time.BuildingSpeed}}" required></label>
+        <label>Vitesse recherches<input type="number" min="0.01" max="1000" step="0.01" name="research_speed" value="{{.Settings.Rules.Time.ResearchSpeed}}" required></label>
+        <label>Vitesse chantier<input type="number" min="0.01" max="1000" step="0.01" name="shipyard_speed" value="{{.Settings.Rules.Time.ShipyardSpeed}}" required></label>
+        <label>Vitesse défenses<input type="number" min="0.01" max="1000" step="0.01" name="defense_speed" value="{{.Settings.Rules.Time.DefenseSpeed}}" required></label>
+        <label>Flottes pacifiques<input type="number" min="0.01" max="1000" step="0.01" name="peaceful_fleet_speed" value="{{.Settings.Rules.Time.PeacefulFleetSpeed}}" required></label>
+        <label>Flottes hostiles<input type="number" min="0.01" max="1000" step="0.01" name="hostile_fleet_speed" value="{{.Settings.Rules.Time.HostileFleetSpeed}}" required></label>
+        <label>Flottes en stationnement<input type="number" min="0.01" max="1000" step="0.01" name="holding_fleet_speed" value="{{.Settings.Rules.Time.HoldingFleetSpeed}}" required></label>
+        <label>Expéditions<input type="number" min="0.01" max="1000" step="0.01" name="expedition_speed" value="{{.Settings.Rules.Time.ExpeditionSpeed}}" required></label>
+        <label>Durée minimale de mission (s)<input type="number" min="1" name="minimum_mission_seconds" value="{{.Settings.Rules.Time.MinimumMissionSeconds}}" required></label>
+        <label class="check"><input type="checkbox" name="pause_when_empty" {{if .Settings.Rules.Time.PauseWhenEmpty}}checked{{end}}> Pause lorsque personne n'est connecté</label>
+      </fieldset>
+
+      <fieldset><legend>Économie</legend>
+        <label>Métal de base par heure<input type="number" min="0" step="0.01" name="base_metal_per_hour" value="{{.Settings.Rules.Economy.BaseMetalPerHour}}" required></label>
+        <label>Cristal de base par heure<input type="number" min="0" step="0.01" name="base_crystal_per_hour" value="{{.Settings.Rules.Economy.BaseCrystalPerHour}}" required></label>
+        <label>Deutérium de base par heure<input type="number" min="0" step="0.01" name="base_deuterium_per_hour" value="{{.Settings.Rules.Economy.BaseDeuteriumPerHour}}" required></label>
+        <label>Croissance production des mines<input type="number" min="0.01" step="0.01" name="mine_production_growth" value="{{.Settings.Rules.Economy.MineProductionGrowth}}" required></label>
+        <label>Croissance coût des mines<input type="number" min="1.01" step="0.01" name="mine_cost_growth" value="{{.Settings.Rules.Economy.MineCostGrowth}}" required></label>
+        <label>Croissance consommation énergétique<input type="number" min="0.01" step="0.01" name="energy_consumption_growth" value="{{.Settings.Rules.Economy.EnergyConsumptionGrowth}}" required></label>
+        <label>Stockage de base<input type="number" min="1" name="base_storage" value="{{.Settings.Rules.Economy.BaseStorage}}" required></label>
+        <label>Ratio de pillage<input type="number" min="0" max="1" step="0.01" name="pillage_ratio" value="{{.Settings.Rules.Economy.PillageRatio}}" required></label>
+        <label>Consommation de deutérium<input type="number" min="0" step="0.01" name="deuterium_consumption" value="{{.Settings.Rules.Economy.DeuteriumConsumption}}" required></label>
+        <label>Production à faible énergie<input type="number" min="0" max="1" step="0.01" name="low_energy_production" value="{{.Settings.Rules.Economy.LowEnergyProduction}}" required></label>
+      </fieldset>
+
+      <fieldset><legend>Combat</legend>
+        <label>Nombre maximal de rounds<input type="number" min="1" name="maximum_rounds" value="{{.Settings.Rules.Combat.MaximumRounds}}" required></label>
+        <label>Vaisseaux transformés en débris<input type="number" min="0" max="1" step="0.01" name="ships_to_debris" value="{{.Settings.Rules.Combat.ShipsToDebris}}" required></label>
+        <label>Défenses transformées en débris<input type="number" min="0" max="1" step="0.01" name="defenses_to_debris" value="{{.Settings.Rules.Combat.DefensesToDebris}}" required></label>
+        <label>Chance de reconstruction des défenses<input type="number" min="0" max="1" step="0.01" name="defense_rebuild_chance" value="{{.Settings.Rules.Combat.DefenseRebuildChance}}" required></label>
+        <label>Chance maximale de lune<input type="number" min="0" max="1" step="0.01" name="maximum_moon_chance" value="{{.Settings.Rules.Combat.MaximumMoonChance}}" required></label>
+        <label>Pillage maximal<input type="number" min="0" max="1" step="0.01" name="maximum_pillage" value="{{.Settings.Rules.Combat.MaximumPillage}}" required></label>
+        <label>Capacité d'un recycleur<input type="number" min="1" name="recycler_capacity" value="{{.Settings.Rules.Combat.RecyclerCapacity}}" required></label>
+        <label class="check"><input type="checkbox" name="missiles_enabled" {{if .Settings.Rules.Combat.MissilesEnabled}}checked{{end}}> Missiles activés</label>
+      </fieldset>
+
+      <fieldset><legend>Espionnage</legend>
+        <label>Seuil ressources<input type="number" min="0" name="espionage_resources_threshold" value="{{.Settings.Rules.Espionage.ResourcesThreshold}}" required></label>
+        <label>Seuil flotte<input type="number" min="0" name="espionage_fleet_threshold" value="{{.Settings.Rules.Espionage.FleetThreshold}}" required></label>
+        <label>Seuil défenses<input type="number" min="0" name="espionage_defenses_threshold" value="{{.Settings.Rules.Espionage.DefensesThreshold}}" required></label>
+        <label>Seuil bâtiments<input type="number" min="0" name="espionage_buildings_threshold" value="{{.Settings.Rules.Espionage.BuildingsThreshold}}" required></label>
+        <label>Seuil recherches<input type="number" min="0" name="espionage_research_threshold" value="{{.Settings.Rules.Espionage.ResearchThreshold}}" required></label>
+        <label>Détection de base<input type="number" min="0" max="1" step="0.0001" name="espionage_detection_base" value="{{.Settings.Rules.Espionage.DetectionBase}}" required></label>
+        <label>Fraîcheur d'un rapport (s)<input type="number" min="1" name="espionage_recent_report_seconds" value="{{.Settings.Rules.Espionage.RecentReportSeconds}}" required></label>
+      </fieldset>
+
+      <fieldset><legend>Lunes et installations</legend>
+        <label>Cases de base d'une lune<input type="number" min="1" name="base_moon_fields" value="{{.Settings.Rules.Expansion.BaseMoonFields}}" required></label>
+        <label>Cases par base lunaire<input type="number" min="1" name="lunar_base_fields" value="{{.Settings.Rules.Expansion.LunarBaseFields}}" required></label>
+        <label>Coût d'un scan de phalange<input type="number" min="0" name="phalanx_scan_cost" value="{{.Settings.Rules.Expansion.PhalanxScanCost}}" required></label>
+        <label>Recharge de la porte de saut (s)<input type="number" min="1" name="jump_gate_cooldown_seconds" value="{{.Settings.Rules.Expansion.JumpGateCooldownSeconds}}" required></label>
+      </fieldset>
+
+      <fieldset><legend>Progression</legend>
+        <label>Multiplicateur coût bâtiments<input type="number" min="0.01" step="0.01" name="building_cost_multiplier" value="{{.Settings.Rules.Progression.BuildingCostMultiplier}}" required></label>
+        <label>Multiplicateur coût recherches<input type="number" min="0.01" step="0.01" name="research_cost_multiplier" value="{{.Settings.Rules.Progression.ResearchCostMultiplier}}" required></label>
+        <label>Multiplicateur coût vaisseaux<input type="number" min="0.01" step="0.01" name="ship_cost_multiplier" value="{{.Settings.Rules.Progression.ShipCostMultiplier}}" required></label>
+        <label>Multiplicateur coût défenses<input type="number" min="0.01" step="0.01" name="defense_cost_multiplier" value="{{.Settings.Rules.Progression.DefenseCostMultiplier}}" required></label>
+        <label>Bonus de laboratoire<input type="number" min="0.01" step="0.01" name="laboratory_bonus" value="{{.Settings.Rules.Progression.LaboratoryBonus}}" required></label>
+        <label>Colonies maximales<input type="number" min="1" name="maximum_colonies" value="{{.Settings.Rules.Progression.MaximumColonies}}" required></label>
+        <label>Longueur maximale des files<input type="number" min="1" name="queue_length" value="{{.Settings.Rules.Progression.QueueLength}}" required></label>
+        <label class="check"><input type="checkbox" name="research_network_enabled" {{if .Settings.Rules.Progression.ResearchNetworkEnabled}}checked{{end}}> Réseau de recherche activé</label>
+      </fieldset>
+
+      <fieldset><legend>Jeu d'équipe</legend>
+        <label class="check"><input type="checkbox" name="alliances_enabled" {{if .Settings.Rules.Team.AlliancesEnabled}}checked{{end}}> Alliances activées</label>
+        <label>Taille maximale d'une alliance<input type="number" min="1" name="maximum_alliance_size" value="{{.Settings.Rules.Team.MaximumAllianceSize}}" required></label>
+        <label>Durée d'une invitation d'alliance (h)<input type="number" min="1" name="alliance_invitation_lifetime_hours" value="{{.Settings.Rules.Team.InvitationLifetimeHours}}" required></label>
+        <label>Participants maximaux d'une opération<input type="number" min="1" name="maximum_group_size" value="{{.Settings.Rules.Team.MaximumGroupSize}}" required></label>
+        <label>Stationnement maximal (h)<input type="number" min="1" name="maximum_hold_hours" value="{{.Settings.Rules.Team.MaximumHoldHours}}" required></label>
+        <label class="check"><input type="checkbox" name="acs_enabled" {{if .Settings.Rules.Team.ACSEnabled}}checked{{end}}> Attaques groupées activées</label>
+        <label class="check"><input type="checkbox" name="group_defense_enabled" {{if .Settings.Rules.Team.GroupDefenseEnabled}}checked{{end}}> Défenses groupées activées</label>
+        <label class="check"><input type="checkbox" name="report_sharing_enabled" {{if .Settings.Rules.Team.ReportSharingEnabled}}checked{{end}}> Partage des rapports activé</label>
+        <label class="check"><input type="checkbox" name="intelligence_sharing_enabled" {{if .Settings.Rules.Team.IntelligenceSharingEnabled}}checked{{end}}> Partage du renseignement activé</label>
+        <label class="check"><input type="checkbox" name="diplomacy_enabled" {{if .Settings.Rules.Team.DiplomacyEnabled}}checked{{end}}> Diplomatie activée</label>
+        <label>Mode de départ<select name="start_mode">
+          <option value="free" {{if eq .Settings.Rules.Team.StartMode "free"}}selected{{end}}>Libre</option>
+          <option value="predefined_teams" {{if eq .Settings.Rules.Team.StartMode "predefined_teams"}}selected{{end}}>Équipes prédéfinies</option>
+          <option value="humans_vs_ai" {{if eq .Settings.Rules.Team.StartMode "humans_vs_ai"}}selected{{end}}>Humains contre IA</option>
+          <option value="pvpve" {{if eq .Settings.Rules.Team.StartMode "pvpve"}}selected{{end}}>PvPvE</option>
+        </select></label>
+      </fieldset>
+
+      <fieldset><legend>Intelligence artificielle</legend>
+        <label>Nombre total d'IA<input type="number" min="0" name="ai_total" value="{{.Settings.Rules.AI.Total}}" required></label>
+        <label>IA indépendantes<input type="number" min="0" name="ai_independent_count" value="{{.Settings.Rules.AI.IndependentCount}}" required></label>
+        <label>Alliances d'IA<input type="number" min="0" name="ai_alliance_count" value="{{.Settings.Rules.AI.AllianceCount}}" required></label>
+        <label>IA par alliance<input type="number" min="0" name="ai_alliance_size" value="{{.Settings.Rules.AI.AllianceSize}}" required></label>
+        <label>Difficulté<select name="ai_difficulty">
+          <option value="easy" {{if eq .Settings.Rules.AI.Difficulty "easy"}}selected{{end}}>Facile</option>
+          <option value="normal" {{if eq .Settings.Rules.AI.Difficulty "normal"}}selected{{end}}>Normale</option>
+          <option value="hard" {{if eq .Settings.Rules.AI.Difficulty "hard"}}selected{{end}}>Difficile</option>
+        </select></label>
+        <label>Intervalle de décision (s)<input type="number" min="1" name="ai_think_interval_seconds" value="{{.Settings.Rules.AI.ThinkIntervalSeconds}}" required></label>
+        <label>Début d'activité (heure)<input type="number" min="0" max="23" name="ai_activity_start_hour" value="{{.Settings.Rules.AI.ActivityStartHour}}" required></label>
+        <label>Fin d'activité (heure)<input type="number" min="1" max="24" name="ai_activity_end_hour" value="{{.Settings.Rules.AI.ActivityEndHour}}" required></label>
+        <label>Développement initial<input type="number" min="0" name="ai_initial_development_level" value="{{.Settings.Rules.AI.InitialDevelopmentLevel}}" required></label>
+        <label>Coordination<input type="number" min="0" max="1" step="0.01" name="ai_coordination" value="{{.Settings.Rules.AI.Coordination}}" required></label>
+        <label>Diplomatie<select name="ai_diplomacy">
+          <option value="none" {{if eq .Settings.Rules.AI.Diplomacy "none"}}selected{{end}}>Aucune</option>
+          <option value="static" {{if eq .Settings.Rules.AI.Diplomacy "static"}}selected{{end}}>Statique</option>
+          <option value="dynamic" {{if eq .Settings.Rules.AI.Diplomacy "dynamic"}}selected{{end}}>Dynamique</option>
+        </select></label>
+      </fieldset>
+
+      <fieldset><legend>Expéditions</legend>
+        <label class="check"><input type="checkbox" name="expedition_enabled" {{if .Settings.Rules.Expedition.Enabled}}checked{{end}}> Expéditions activées</label>
+        <label>Durée de stationnement (h)<input type="number" min="1" name="expedition_hold_hours" value="{{.Settings.Rules.Expedition.HoldHours}}" required></label>
+        <label>Facteur ressources<input type="number" min="0" step="0.01" name="expedition_resource_factor" value="{{.Settings.Rules.Expedition.ResourceFactor}}" required></label>
+        <label>Facteur rareté<input type="number" min="0" step="0.01" name="expedition_rare_factor" value="{{.Settings.Rules.Expedition.RareFactor}}" required></label>
+        <label>Facteur vaisseaux<input type="number" min="0" step="0.01" name="expedition_ship_factor" value="{{.Settings.Rules.Expedition.ShipFactor}}" required></label>
+        <label>Facteur retard<input type="number" min="0" step="0.01" name="expedition_delay_factor" value="{{.Settings.Rules.Expedition.DelayFactor}}" required></label>
+        <label>Part de pertes<input type="number" min="0" max="1" step="0.01" name="expedition_loss_share" value="{{.Settings.Rules.Expedition.LossShare}}" required></label>
+        <label>Poids ressources<input type="number" min="0" name="expedition_weight_resources" value="{{.Settings.Rules.Expedition.Weights.Resources}}" required></label>
+        <label>Poids aucun résultat<input type="number" min="0" name="expedition_weight_nothing" value="{{.Settings.Rules.Expedition.Weights.Nothing}}" required></label>
+        <label>Poids vaisseaux<input type="number" min="0" name="expedition_weight_ships" value="{{.Settings.Rules.Expedition.Weights.Ships}}" required></label>
+        <label>Poids retard<input type="number" min="0" name="expedition_weight_delay" value="{{.Settings.Rules.Expedition.Weights.Delay}}" required></label>
+        <label>Poids pirates<input type="number" min="0" name="expedition_weight_pirates" value="{{.Settings.Rules.Expedition.Weights.Pirates}}" required></label>
+        <label>Poids aliens<input type="number" min="0" name="expedition_weight_aliens" value="{{.Settings.Rules.Expedition.Weights.Aliens}}" required></label>
+        <label>Poids pertes<input type="number" min="0" name="expedition_weight_losses" value="{{.Settings.Rules.Expedition.Weights.Losses}}" required></label>
+        <label>Poids trouvaille rare<input type="number" min="0" name="expedition_weight_rare" value="{{.Settings.Rules.Expedition.Weights.Rare}}" required></label>
+      </fieldset>
+
+      <fieldset><legend>Protection et joueurs</legend>
+        <label>Protection débutant (points)<input type="number" min="0" name="beginner_protection_points" value="{{.Settings.Rules.Protection.BeginnerProtectionPoints}}" required></label>
+        <label>Ratio maximal de points<input type="number" min="1" step="0.01" name="maximum_point_ratio" value="{{.Settings.Rules.Protection.MaximumPointRatio}}" required></label>
+        <label>Comptes par installation<input type="number" min="1" name="accounts_per_installation" value="{{.Settings.Rules.Protection.AccountsPerInstallation}}" required></label>
+        <label class="check"><input type="checkbox" name="vacation_mode_enabled" {{if .Settings.Rules.Protection.VacationModeEnabled}}checked{{end}}> Mode vacances activé</label>
+        <label>Inactif après (jours)<input type="number" min="0" name="inactive_after_days" value="{{.Settings.Rules.Protection.InactiveAfterDays}}" required></label>
+        <label>Suppression après (jours)<input type="number" min="0" name="delete_after_days" value="{{.Settings.Rules.Protection.DeleteAfterDays}}" required></label>
+        <label>Limite de joueurs<input type="number" min="1" name="player_limit" value="{{.Settings.Rules.Protection.PlayerLimit}}" required></label>
+      </fieldset>
+
+      <details class="admin-settings-locked">
+        <summary>Paramètres structurels en lecture seule</summary>
+        <p>Ces valeurs structurent les coordonnées ou le contenu persistant et ne peuvent pas être changées à chaud.</p>
+        <dl class="summary">
+          <dt>Topologie</dt><dd>{{.Settings.Rules.Topology.Galaxies}} galaxies, {{.Settings.Rules.Topology.SystemsPerGalaxy}} systèmes par galaxie, {{.Settings.Rules.Topology.PositionsPerSystem}} positions par système</dd>
+          <dt>Champs planétaires</dt><dd>{{.Settings.Rules.Topology.MinPlanetFields}} à {{.Settings.Rules.Topology.MaxPlanetFields}}</dd>
+          <dt>Distances</dt><dd>{{.Settings.Rules.Topology.InterSystemDistance}} inter-systèmes, {{.Settings.Rules.Topology.InterGalaxyDistance}} inter-galaxies</dd>
+          <dt>Catalogue</dt><dd>{{.Settings.Rules.Progression.CatalogueVersion}}</dd>
+          <dt>Exposition réseau</dt><dd>{{.Settings.Rules.Identity.NetworkVisibility}} — l'adresse d'écoute se configure au lancement du serveur</dd>
+        </dl>
+      </details>
+
+      <div class="admin-settings-actions">
+        <label>Justification de la modification
+          <textarea name="justification" maxlength="500" required placeholder="Pourquoi ces paramètres changent-ils ?"></textarea>
+        </label>
+        <p class="muted">Cette justification sera conservée dans l'historique d'administration.</p>
+        <button type="submit">Publier une nouvelle version</button>
+        <a href="/admin">Annuler</a>
+      </div>
+    </form>
+  </section>
+{{end}}
