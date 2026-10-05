@@ -88,7 +88,7 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 	if !behaviour.EspionageEnabled {
 		return []domainai.Decision{skip(domainai.Operational, "spy", "espionage is disabled for this character", home.ID)}
 	}
-	return []domainai.Decision{b.spy(ctx, principal, profile, home, overview, stale, team)}
+	return []domainai.Decision{b.spy(ctx, principal, profile, home, overview, stale, observations, team)}
 }
 
 // observation is one report of the player, read once and used by everything
@@ -198,22 +198,46 @@ func (b *Brain) intelOf(payload report.EspionagePayload, summary appreports.Summ
 // spy sends probes at the most promising body it cannot yet judge, or at a
 // neighbour it has never looked at.
 func (b *Brain) spy(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
-	home appeconomy.Planet, overview appfleet.Overview, stale domainai.Target, team friends) domainai.Decision {
+	home appeconomy.Planet, overview appfleet.Overview, stale domainai.Target,
+	observations []observation, team friends) domainai.Decision {
 	probes := overview.Stationed[unit.EspionageProbe]
 	if probes <= 0 {
 		return skip(domainai.Operational, "spy", "no probe on the ground", home.ID)
 	}
-	target := stale.Coordinate
-	if target.Galaxy == 0 {
-		found, ok := b.neighbour(ctx, principal, profile, home, team)
-		if !ok {
-			return skip(domainai.Operational, "spy", "nobody to look at nearby", home.ID)
+	// A reconnaissance campaign is deliberate rather than a way of filling
+	// every free fleet slot. In particular, a slow probe must not make the next
+	// reflection launch another one at the same body (or at the next body).
+	for _, fleet := range overview.Fleets {
+		if fleet.Mission == domainfleet.MissionEspionage {
+			return skip(domainai.Operational, "spy", "reconnaissance is already underway", home.ID)
 		}
-		target = found
 	}
 	wanted := profile.Preferences().Probes
 	if wanted > probes {
 		wanted = probes
+	}
+	recent := time.Duration(home.Rules.Espionage.RecentReportSeconds) * time.Second
+	now := b.Clock.Now().UTC()
+	// A report the game still calls recent is enough reconnaissance for this
+	// cycle. Without this pause a five-minute thinker produces twelve reports
+	// while the information has not meaningfully changed.
+	for _, seen := range observations {
+		age := now.Sub(seen.intel.ObservedAt)
+		if age >= 0 && age < recent {
+			return skip(domainai.Operational, "spy", "the latest reconnaissance is still recent", home.ID)
+		}
+	}
+	covered := scoutingCoverage(observations, now, recent, wanted)
+	target := stale.Coordinate
+	if covered[target] {
+		target = universe.Coordinate{}
+	}
+	if target.Galaxy == 0 {
+		found, ok := b.neighbour(ctx, principal, profile, home, team, covered)
+		if !ok {
+			return skip(domainai.Operational, "spy", "nearby bodies are already covered by useful intelligence", home.ID)
+		}
+		target = found
 	}
 	request := appfleet.LaunchRequest{
 		Target: target, TargetKind: domainfleet.TargetPlanet, Mission: domainfleet.MissionEspionage,
@@ -229,6 +253,24 @@ func (b *Brain) spy(ctx context.Context, principal appauth.Principal, profile do
 	}
 	decision.Target = &target
 	return decision
+}
+
+// scoutingCoverage marks every body for which another identical mission would
+// add no useful information. Complete reports remain useful while their score
+// has not fully decayed. A partial report can be retried sooner only when the
+// player can now send more probes than it did last time.
+func scoutingCoverage(observations []observation, now time.Time, recent time.Duration,
+	probes int64) map[universe.Coordinate]bool {
+	covered := make(map[universe.Coordinate]bool, len(observations))
+	for _, seen := range observations {
+		if domainai.Fresh(seen.intel.ObservedAt, now, recent) <= 0 {
+			continue
+		}
+		if seen.intel.Complete || probes <= seen.payload.Probes {
+			covered[seen.intel.Coordinate] = true
+		}
+	}
+	return covered
 }
 
 // recycle lifts a debris field of the home system. Fields are public, so this
@@ -277,7 +319,7 @@ func (b *Brain) recycle(ctx context.Context, principal appauth.Principal, profil
 // neighbour picks the closest body of somebody else within the configured
 // exploration radius.
 func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
-	home appeconomy.Planet, team friends) (universe.Coordinate, bool) {
+	home appeconomy.Planet, team friends, covered map[universe.Coordinate]bool) (universe.Coordinate, bool) {
 	if b.Galaxy == nil {
 		return universe.Coordinate{}, false
 	}
@@ -312,7 +354,7 @@ func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, prof
 					continue
 				}
 				at := universe.Coordinate{Galaxy: home.Coordinate.Galaxy, System: system, Position: row.Position}
-				if !team.covers(row.OwnerName, at) {
+				if !team.covers(row.OwnerName, at) && !covered[at] {
 					return at, true
 				}
 			}

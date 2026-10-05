@@ -157,6 +157,81 @@ func TestArtificialPlayerBuildsScoutsAndFindsADistantTarget(t *testing.T) {
 		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'attack' AND target_system = 3", 1, profile.PlayerID)
 }
 
+// TestArtificialPlayerSpacesOutReconnaissanceAndRotatesTargets is the
+// regression for an AI probing the same uninteresting planet at every thought.
+// One mission is allowed at a time, a recent report pauses the campaign, and a
+// still-useful report makes the scout move on to another body.
+func TestArtificialPlayerSpacesOutReconnaissanceAndRotatesTargets(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+
+	profile, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Observateur", Archetype: domainai.Raider,
+		Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Alice has two poor planets in the AI's home system. Neither justifies an
+	// attack, but both are legitimate discoveries.
+	if _, err := database.Write().ExecContext(ctx, `
+		INSERT INTO planets(owner_player_id, name, galaxy, system, position, total_fields,
+			minimum_temperature, maximum_temperature, created_at)
+		VALUES (1, 'Avant-poste', 1, 1, 2, 150, 10, 50, '2042-09-10T12:00:00Z')
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Write().ExecContext(ctx,
+		"INSERT INTO planet_resources(planet_id, produced_at) VALUES (3, '2042-09-10T12:00:00Z')"); err != nil {
+		t.Fatal(err)
+	}
+	setUnits(t, ctx, database, 2, "espionage_probe", 6)
+	setResearch(t, ctx, database, profile.PlayerID, "espionage_technology", 3)
+	setResearch(t, ctx, database, profile.PlayerID, "computer_technology", 3)
+	setResources(t, ctx, database, 2, 200000, 200000, 200000)
+
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'espionage'", 1, profile.PlayerID)
+	var returnsText string
+	if err := database.Read().QueryRowContext(ctx, `
+		SELECT returns_at FROM fleets WHERE owner_player_id = ? AND mission = 'espionage'
+		ORDER BY id LIMIT 1
+	`, profile.PlayerID).Scan(&returnsText); err != nil {
+		t.Fatal(err)
+	}
+	returnsAt, err := time.Parse(time.RFC3339Nano, returnsText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Even with spare probes and slots, the next thought does not fan out more
+	// missions while the first reconnaissance is underway.
+	now := universeWorld.Clock.Now()
+	setClock(t, universeWorld.Clock, now.Add(returnsAt.Sub(now)/2))
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'espionage'", 1, profile.PlayerID)
+
+	setClock(t, universeWorld.Clock, returnsAt)
+	if _, err := universeWorld.Events.CompleteDue(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'espionage'", 1, profile.PlayerID)
+
+	// Once the one-hour reconnaissance cadence has elapsed, the known planet
+	// is still covered, so the next probe goes to Alice's other planet.
+	setClock(t, universeWorld.Clock, returnsAt.Add(time.Hour+time.Minute))
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'espionage'", 2, profile.PlayerID)
+	assertSingleValue(t, database, `
+		SELECT COUNT(DISTINCT target_position) FROM fleets
+		WHERE owner_player_id = ? AND mission = 'espionage'`, 2, profile.PlayerID)
+}
+
 func advanceToProduction(t *testing.T, ctx context.Context, database *storagesqlite.Database,
 	universeWorld *world, unitID string) {
 	t.Helper()
