@@ -1,202 +1,173 @@
-# Universe At War
+<div align="center">
 
-Universe At War est un jeu de stratégie spatiale persistant, local et autonome,
-inspiré des mécaniques temporelles d'OGame. Le serveur est développé en Go et
-utilise SQLite sans service externe.
+<h1>Universe At War</h1>
 
-Le socle et les deux premiers milestones fournissent les migrations SQLite
-embarquées, le bootstrap administrateur, l'authentification, les sessions
-opaques, l'assistant de configuration versionné et une progression économique
-jouable. Après le démarrage de l'univers, un compte peut fonder son empire,
-produire des ressources hors ligne et construire les premiers bâtiments depuis
-l'interface SSR. La spécification complète se trouve dans
-[`SPECIFICATION_OGAME_LOCAL_GO.md`](SPECIFICATION_OGAME_LOCAL_GO.md).
+**Build an empire. Read your rivals. Own the stars.**
 
-## Prérequis de développement
+A persistent, self-hosted space strategy game inspired by the timeless progression of OGame.
 
-- Go 1.27.x ou plus récent ;
-- aucune installation SQLite ou CGO ;
-- ImageMagick et libwebp uniquement pour regénérer les illustrations
-  (`make art`) : ni la compilation ni les tests n'en ont besoin.
+[![CI](https://github.com/laulin/universe-at-war/actions/workflows/ci.yml/badge.svg)](https://github.com/laulin/universe-at-war/actions/workflows/ci.yml)
+[![Go 1.27](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
+[![SQLite](https://img.shields.io/badge/storage-SQLite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 
-## Commandes disponibles
+[Play now](#launch-your-universe) · [Explore the game](#command-your-empire) · [Read the rules](docs/rules/) · [Run your own server](docs/operations/release.md)
+
+</div>
+
+![A capital ship crossing deep space](web/static/art/banner/shipyard.webp)
+
+Universe At War is a living galaxy you can run on your own machine. Extract resources, unlock technologies, build specialized fleets, spy on neighboring worlds, and turn carefully gathered intelligence into decisive attacks. The universe keeps moving while you are away—and survives every restart.
+
+No external database. No cloud dependency. Just one Go server, one SQLite file, and a galaxy that belongs to you.
+
+## The galaxy is waiting
+
+Every empire begins with a single planet and a handful of choices:
+
+1. **Grow** your economy without exhausting energy or storage.
+2. **Research** the technologies that unlock new ships, defenses, and strategic options.
+3. **Scout** nearby systems and decide which reports are worth acting on.
+4. **Strike, trade, colonize, or cooperate** with fleets that travel in real time.
+5. **Adapt** as human and AI empires expand, ally, retaliate, and compete for the same space.
+
+Production continues offline, construction queues finish on schedule, and fleets reach their destinations even if the server restarts. Your decisions leave a lasting mark.
+
+## Command your empire
+
+| | |
+|---|---|
+| **Build a real economy**<br>Balance metal, crystal, deuterium, energy, storage, and limited planetary fields. Queue buildings, research, ships, and defenses with transparent costs and completion times. | **Design your fleet doctrine**<br>Choose from probes, cargo ships, recyclers, colony ships, fighters, cruisers, battleships, bombers, destroyers, battlecruisers, and the Deathstar. Propulsion research changes their real speed and fuel use. |
+| **Fight with intelligence**<br>Espionage reveals only what your probe strength can uncover. Simulate attacks from the information you actually possess, then risk your ships in probabilistic combat with rapid fire, loot, debris, and persistent reports. | **Expand beyond one world**<br>Colonize open coordinates, develop distinct planets, harvest debris fields, and create moons through sufficiently destructive battles. Sensor phalanxes expose movement; jump gates reshape logistics. |
+| **Build alliances that matter**<br>Create ranks, invite players, manage diplomacy, share selected reports, defend allies, and coordinate multiplayer attacks that resolve as one battle. Resources always remain under each player's control. | **Venture into the unknown**<br>Send expeditions beyond the edge of a system. You may discover resources or ships, suffer delays, meet pirates or aliens, lose everything—or find nothing at all. |
+
+### A galaxy that fights back
+
+Server-controlled empires are not passive resource farms. They build, research, colonize, scout before attacking, remember what they have learned, lose fleets, and sleep outside their configured hours. They use the same application rules as human players and never read secret opponent state.
+
+AI commanders can also form alliances, share intelligence, select common targets, launch coordinated attacks, and answer calls to defend an ally. Configure their number, personalities, schedules, difficulty, and alliances when creating the universe—or manage them later from the administration panel.
+
+### Strategy with consequences
+
+- Fleet composition, propulsion research, distance, cargo space, fuel, arrival time, and return time all matter.
+- Espionage and combat reports are immutable snapshots; hidden information never leaks to the browser.
+- A recalled fleet turns around instead of teleporting home.
+- Colonization succeeds only if the destination is still free when the colony ship arrives.
+- Group attacks share loot according to the surviving fleets' remaining cargo capacity.
+- Every expedition outcome is generated once and persisted, making event processing safe to replay.
+
+## See your empire take shape
+
+<table>
+  <tr>
+    <td width="33%"><img src="web/static/art/body/planet-8.webp" alt="A developed planet in deep space"></td>
+    <td width="33%"><img src="web/static/art/building/research_lab.webp" alt="A futuristic research laboratory"></td>
+    <td width="33%"><img src="web/static/art/ship/battlecruiser.webp" alt="A battlecruiser in space"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Shape new worlds</strong></td>
+    <td align="center"><strong>Unlock new possibilities</strong></td>
+    <td align="center"><strong>Project your power</strong></td>
+  </tr>
+</table>
+
+The server-rendered command center keeps your current world's resources, queues, fleets, and empire within reach. Live counters and completion timers enhance the interface, while every essential action remains available without JavaScript.
+
+## Launch your universe
+
+### Requirements
+
+- [Go 1.27](https://go.dev/dl/) or newer
+- Git
+
+SQLite and CGO are **not** required.
+
+### Start playing
 
 ```sh
+git clone https://github.com/laulin/universe-at-war.git
+cd universe-at-war
 go run ./cmd/universe-at-war serve
-go run ./cmd/universe-at-war migrate --database universe-at-war.db
-go run ./cmd/universe-at-war doctor --database universe-at-war.db
-go run ./cmd/universe-at-war backup --database universe-at-war.db --keep 14
-go run ./cmd/universe-at-war admin reset-password --database universe-at-war.db --username admin
-go run ./cmd/universe-at-war version
 ```
 
-Au premier `serve`, le terminal affiche une seule fois l'identifiant et le mot
-de passe aléatoire de l'administrateur initial. Après connexion sur
-`http://127.0.0.1:8080`, ce mot de passe doit être remplacé avant de parcourir
-les dix étapes de création de l'univers.
+On the first launch, the terminal prints a randomly generated administrator username and password **once**. Then:
 
-Si la politique d'inscription de l'univers vaut `open`, la page de connexion
-propose de créer un compte joueur ; sinon le parcours reste totalement fermé.
+1. Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
+2. Sign in with the bootstrap credentials and choose a new password.
+3. Complete the universe setup wizard.
+4. Found your empire and make your first move.
 
-Une fois l'univers lancé, la page principale liste les corps de l'empire et
-propose de fonder un empire si le compte n'en a pas encore. Chaque planète a sa
-page de bâtiments, une page de recherche, un chantier spatial et une page de
-défense. Chacune tient une file d'attente : jusqu'à dix ordres par type, qui
-avancent en parallèle d'un type à l'autre. Le coût est débité à la commande, si
-bien qu'un ordre entré dans la file ne peut jamais caler faute de ressources ;
-seule sa durée est décidée quand vient son tour. L'ordre en cours affiche une
-barre de progression animée et un compte à rebours, ceux qui attendent affichent
-la prévision de leur tour, et n'importe lequel s'annule avec remboursement
-intégral. Achèvement par événement planifié et reprise après redémarrage restent
-les mêmes que pour tout le reste du jeu.
+Your entire universe is stored in `universe-at-war.db`. Stop the process with <kbd>Ctrl</kbd>+<kbd>C</kbd>; start the same command later to continue exactly where you left off.
 
-Au chantier et à la défense, une carte déplie ses caractéristiques dès qu'on la
-survole, ou que le clavier s'y pose : arme, bouclier, coque, fret, vitesse et
-consommation, puis les feux rapides dans les deux sens — ce que l'unité
-déchiquette et ce qui la déchiquette. La vitesse affichée est celle que donnent
-les propulsions déjà recherchées, pas celle du catalogue. Une défense n'inflige
-aucun feu rapide : sa carte ne montre donc que ses prédateurs.
+> [!TIP]
+> Want to invite other players? Enable open registration during setup and follow the [deployment guide](docs/operations/release.md) before exposing the server outside your machine.
 
-La page Flotte liste les vaisseaux stationnés, les emplacements disponibles et
-les missions en vol avec leurs horaires absolus. L'assistant d'envoi calcule
-distance, carburant, capacité, arrivée et retour avant confirmation. Une flotte
-partie est engagée : seul le rappel, tant que la mission le permet, la fait
-revenir.
+## Built for private universes
 
-La carte galaxie n'affiche que le public : noms de planètes, joueurs et champs
-de débris. Ses coordonnées de système sont directement éditables. Chaque ligne
-ouvre l'assistant de flotte sur la bonne cible et la bonne mission : espionnage
-ou attaque d'un adversaire, transport ou stationnement sur ses propres mondes,
-et recyclage avec tous les recycleurs disponibles déjà sélectionnés. Les
-rapports d'espionnage, de combat et de recyclage sont immuables et filtrés à
-leur création : une section non révélée n'est pas envoyée au navigateur. Les
-rapports hostiles non lus sont signalés par un compteur et un texte, jamais par
-la seule couleur.
+- **Self-contained:** a single cross-platform binary with embedded migrations, web assets, and gameplay rules.
+- **Persistent:** durable scheduled events recover automatically after a graceful or unexpected restart.
+- **Configurable:** tune speed, economy, fleet travel, combat, registration, AI population, and more through a versioned setup wizard.
+- **Operable:** built-in database diagnostics, verified backups, structured logs, account recovery, and an administration dashboard.
+- **Accessible:** semantic server-rendered pages, keyboard-friendly interactions, textual alerts, and progressive enhancement.
+- **Portable:** release builds target Linux, macOS, and Windows on AMD64 and ARM64 where supported.
 
-Un rapport d'espionnage ou d'attaque permet de préparer immédiatement une
-nouvelle offensive. Après le choix des vaisseaux, la confirmation exécute une
-simulation probabiliste avec les technologies et les défenses effectivement
-connues : chances de victoire, pertes, butin, débris et bilan sont affichés sans
-jamais consulter l'état secret actuel de la cible. Les règles détaillées sont
-décrites dans [`docs/rules/combat-simulation.md`](docs/rules/combat-simulation.md).
+## Operations
 
-L'empire s'étend : une mission de colonisation fonde une planète si la position
-est encore libre à l'arrivée, un combat assez destructeur peut agréger une lune,
-et chaque lune a ses propres cases, bâtiments et vaisseaux. Une phalange de
-capteurs donne les horaires des flottes alentour sans jamais révéler leur
-composition, et une porte de saut transfère des vaisseaux entre deux lunes avec
-un temps de recharge durable. La
-planète mère affiche les productions, stockages, énergie et cases, ainsi que le
-catalogue de bâtiments. Les constructions et leurs échéances sont durables : le
-worker reprend automatiquement les événements après un redémarrage.
-
-L'interface est un centre de commandement en trois colonnes : la navigation à
-gauche, la barre des ressources du corps courant en haut, la liste des corps de
-l'empire à droite avec leurs stocks et les totaux. Sur la page Ressources, un
-clic sur le nom du corps dans le bandeau permet de le modifier directement ;
-Entrée enregistre le nouveau nom. Un stock arrivé à sa capacité passe en alerte,
-car il ne produit plus.
-
-Les compteurs ne restent pas figés entre deux chargements : le navigateur
-prolonge chaque stock au taux que la page affiche déjà, de la barre du haut aux
-totaux, et l'alerte de capacité s'allume à la seconde où le plafond est atteint.
-C'est une estimation et rien de plus — un débit venu d'ailleurs n'est réglé
-qu'au chargement suivant, que la page réclame d'elle-même dès qu'un compte à
-rebours expire. Sans JavaScript, les chiffres restent ceux que le serveur a
-rendus, donc justes à l'instant du chargement.
-
-Les cartes suivent le même mouvement. Une construction à laquelle il ne manque
-que des ressources porte son bouton dès le rendu, désactivé, et la page le lève
-à la seconde où le compte y est ; au chantier elle recalcule aussi la taille du
-lot que le stock couvre. Un prérequis manquant, lui, ne se lève jamais tout
-seul, pas plus qu'un manque d'énergie, qui ne se remplit pas avec le temps. Le
-serveur revérifie tout à la commande : la page ne fait que cesser de barrer la
-route.
-
-Chaque illustration est demandée par un slot stable, `/art/{catégorie}/{slug}`,
-où le slug est l'identifiant du domaine. Le serveur dessine un placeholder
-déterministe tant que le slot est vide, et sert le fichier dès qu'il existe dans
-`web/static/art/{catégorie}/`. Ajouter du vrai artwork ne demande donc aucune
-modification de gabarit ni de feuille de style : voir
-[`docs/adr/0002-illustration-slots.md`](docs/adr/0002-illustration-slots.md).
-
-Les vaisseaux sont désormais illustrés pour de bon, du chantier spatial aux
-écrans de flotte. Les images d'origine vivent dans [`images/`](images/), hors
-du binaire, et `make art` en tire les fichiers embarqués : voir
-[`docs/adr/0003-masters-et-derives-d-illustration.md`](docs/adr/0003-masters-et-derives-d-illustration.md).
-Les autres catégories gardent leur placeholder tant que leurs illustrations
-n'existent pas.
-
-Les joueurs font équipe sans jamais mettre leurs ressources en commun. Une
-alliance a des rangs, des invitations qui expirent, une diplomatie déclarative
-et un historique. Un rapport ne parvient à l'alliance que si son propriétaire le
-partage explicitement. Une attaque groupée réunit plusieurs flottes alliées sur
-une même cible à la même seconde : la page de préparation montre les
-participants et dit si la flotte que l'on ajoute retarde toute l'équipe. Le
-combat qui en résulte est unique et multi-acteurs, et le butin se répartit entre
-les flottes survivantes selon la place qui leur reste. Une flotte envoyée en
-défense alliée attend sur place jusqu'à la fin de sa garde, se bat pour la
-planète, puis rentre.
-
-L'univers est peuplé des joueurs contrôlés par le serveur que sa configuration
-commande. Le nombre, les alliances, les horaires et la fréquence de réflexion se
-règlent à l'étape 8 de l'assistant ; le serveur comble ensuite l'écart entre ce
-qui a été demandé et ce qui existe, quelques joueurs à chaque passage, et une
-partie déjà lancée se remplit de la même façon. Un administrateur en ajoute à la
-main depuis la page Administration, retire ceux dont il ne veut plus — un retrait
-est définitif, personne ne renaît à sa place — et suit leur santé, leur prochaine
-réflexion et le journal de leurs décisions. Une intelligence artificielle possède un compte sans mot de
-passe, fonde son empire, paie ses constructions, attend ses files, espionne
-avant d'attaquer, nomme ses nouvelles colonies, perd ses flottes et dort en
-dehors de ses heures. Elle passe par les mêmes cas d'usage que vous : un test structurel garantit qu'elle
-n'atteint aucune base de données ni aucune vérité adverse.
-
-Les machines peuvent aussi faire équipe. Un administrateur les affecte à une
-alliance ; elles s'y partagent alors leurs rapports, se répartissent des rôles
-selon ce que chacune déclare posséder, choisissent une cible commune, l'espionnent
-avant d'y aller et résolvent ensemble une attaque groupée. Une alliée attaquée
-appelle à l'aide et celles qui ont des vaisseaux viennent stationner chez elle.
-Chaque croyance de cette mémoire commune porte son auteur, sa date et son
-expiration : retirer le partage d'un rapport la fait disparaître aussitôt.
-
-Le serveur écrit des journaux structurés sur la sortie d'erreur. Chaque requête
-porte un identifiant de corrélation renvoyé dans l'en-tête `X-Request-Id` ;
-aucun secret, jeton ni cookie n'y figure. `UAW_LOG_LEVEL` choisit le niveau
-(`debug`, `info`, `warn`, `error`).
-
-La commande `migrate` applique les migrations embarquées. `doctor` vérifie la
-version du schéma, l'intégrité SQLite et les clés étrangères sans modifier les
-données. `admin reset-password` constitue la récupération locale : elle génère
-un nouveau secret, invalide toutes les sessions du compte et exige un nouveau
-changement de mot de passe.
-
-Une flotte peut aussi partir en expédition au-delà de la dernière planète d'un
-système : elle y attend, et ce qu'elle trouve — ressources, vaisseaux, retard,
-pirates, aliens, pertes ou rien du tout — est tiré une fois depuis une seed
-persistée, donc rejouable.
-
-Un administrateur dispose d'un tableau de bord (état, base, arriéré, débit,
-population, sanctions, dernière sauvegarde), de la gestion des comptes, des
-rôles et des invitations, de la modération, des joueurs artificiels et d'une
-sauvegarde vérifiée en un clic. La mise en service complète, la matrice de
-builds et les procédures de restauration sont décrites dans
-[`docs/operations/`](docs/operations/release.md).
-
-## Plans d'implémentation
-
-Les jalons restants sont découpés en tâches exécutables dans
-[`docs/plans/`](docs/plans/README.md) : feuille de route, socle transverse et
-plans détaillés des recherches, du moteur de flotte et du combat.
-
-## Qualité
+Common commands are available from the same executable:
 
 ```sh
-make test
-make test-race
-make vet
+# Build a local binary
 make build
+./bin/universe-at-war serve
+
+# Choose another database or listen address
+./bin/universe-at-war serve --database campaign.db --listen 127.0.0.1:9090
+
+# Check database integrity and foreign keys
+./bin/universe-at-war doctor --database campaign.db
+
+# Create a verified snapshot and retain the latest 14 backups
+./bin/universe-at-war backup --database campaign.db --keep 14
+
+# Recover an administrator account
+./bin/universe-at-war admin reset-password --database campaign.db --username admin
 ```
 
-La CI ajoute `staticcheck`, `govulncheck` et les compilations Linux, Windows et
-macOS. Les fonctionnalités métier sont développées en TDD, par tranches
-transactionnelles.
+For TLS, public hosting, release builds, restores, and service management, see the [operations guide](docs/operations/release.md). Detailed backup procedures live in [docs/operations/backups.md](docs/operations/backups.md).
+
+## Under the hood
+
+Universe At War deliberately favors a small, dependable stack:
+
+- Go standard-library HTTP server and server-rendered HTML
+- Embedded static assets and SQL migrations
+- Pure-Go SQLite driver with WAL-backed storage
+- Transactional application services and durable scheduled events
+- Structured logs with per-request correlation IDs
+- Deterministic clocks and random sources for reproducible tests
+
+The AI reaches the game exclusively through the same application services available to human actions. A structural test enforces that boundary: artificial players cannot access repositories, the database, or hidden enemy state.
+
+Start with the [architecture overview](docs/architecture/overview.md), browse the complete [game rules](docs/rules/), or read the original [game specification](SPECIFICATION_OGAME_LOCAL_GO.md).
+
+## Development
+
+```sh
+make check       # full test suite, go vet, and formatting check
+make test-race   # race detector suite
+make build       # local optimized binary
+make release     # cross-platform release matrix
+```
+
+The project is developed with transaction-level tests and end-to-end acceptance scenarios for the economy, research, fleets, combat, expansion, alliances, AI, and expeditions. CI also runs Staticcheck, `govulncheck`, and cross-platform builds.
+
+ImageMagick and `libwebp` are needed only to regenerate embedded artwork with `make art`; neither is required to build, test, or play the game. Artwork masters live in [`images/`](images/).
+
+## Contributing
+
+Issues, balancing feedback, bug reports, and pull requests are welcome. Before opening a pull request:
+
+1. Keep gameplay behavior documented under [`docs/rules/`](docs/rules/).
+2. Add or update tests for behavioral changes.
+3. Run `make check` locally.
+
+The universe is playable today and still evolving. If persistent strategy games are your thing, start a campaign, tell us where the tension works, and help shape what comes next.
