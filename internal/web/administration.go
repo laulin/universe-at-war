@@ -263,7 +263,8 @@ func (h *Handler) updateArtificial(response http.ResponseWriter, request *http.R
 	if request.PostFormValue("mode") != "archetype" {
 		parsed, parseErr := artificialTuningFromForm(request)
 		if parseErr != nil {
-			h.renderArtificialDetail(response, request, http.StatusBadRequest, principal, current, parseErr.Error()+".")
+			h.renderArtificialDetail(response, request, http.StatusBadRequest, principal, current,
+				"Paramètre invalide : "+parseErr.Error()+".")
 			return
 		}
 		custom = &parsed
@@ -291,7 +292,7 @@ func artificialTuningFromForm(request *http.Request) (domainai.Tuning, error) {
 	float := func(name string) (float64, error) {
 		value, err := strconv.ParseFloat(request.PostFormValue(name), 64)
 		if err != nil {
-			return 0, errors.New("Le champ " + name + " doit être un nombre")
+			return 0, errors.New("le champ " + name + " doit être un nombre")
 		}
 		return value, nil
 	}
@@ -316,13 +317,13 @@ func artificialTuningFromForm(request *http.Request) (domainai.Tuning, error) {
 		return domainai.Tuning{}, err
 	}
 	if tuning.Probes, err = strconv.ParseInt(request.PostFormValue("probes"), 10, 64); err != nil {
-		return domainai.Tuning{}, errors.New("Le nombre de sondes doit être entier")
+		return domainai.Tuning{}, errors.New("le nombre de sondes doit être entier")
 	}
 	if tuning.SearchRadius, err = strconv.Atoi(request.PostFormValue("search_radius")); err != nil {
-		return domainai.Tuning{}, errors.New("Le rayon d'exploration doit être entier")
+		return domainai.Tuning{}, errors.New("le rayon d'exploration doit être entier")
 	}
 	if tuning.BatchSize, err = strconv.ParseInt(request.PostFormValue("batch_size"), 10, 64); err != nil {
-		return domainai.Tuning{}, errors.New("La taille des lots doit être entière")
+		return domainai.Tuning{}, errors.New("la taille des lots doit être entière")
 	}
 	tuning.Fleetsave = domainai.Fleetsave(request.PostFormValue("fleetsave"))
 	tuning.AttackEnabled = request.PostFormValue("attack_enabled") == "on"

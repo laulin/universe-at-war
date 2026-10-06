@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -80,6 +81,31 @@ func TestWebArtificialAdministrationIsReservedToAdministrators(t *testing.T) {
 	for _, expected := range []string{"Personnalité et comportement", "Rayon d'exploration", "Autoriser les attaques"} {
 		if !strings.Contains(detail, expected) {
 			t.Fatalf("the AI settings miss %q: %q", expected, detail)
+		}
+	}
+	for _, test := range []struct {
+		field string
+		want  string
+	}{
+		{field: "economy", want: "Paramètre invalide : le champ economy doit être un nombre."},
+		{field: "probes", want: "Paramètre invalide : le nombre de sondes doit être entier."},
+		{field: "search_radius", want: "Paramètre invalide : le rayon d'exploration doit être entier."},
+		{field: "batch_size", want: "Paramètre invalide : la taille des lots doit être entière."},
+	} {
+		form := url.Values{
+			"csrf_token": {"csrf-token"}, "version": {hiddenValue(t, detail, "version")},
+			"archetype": {"raider"}, "start_hour": {"6"}, "end_hour": {"22"}, "interval_minutes": {"3"},
+			"economy": {"0.35"}, "greed": {"2.5"}, "caution": {"0.5"}, "safety_margin": {"1.2"},
+			"raid_threshold": {"500"}, "defence_share": {"0.05"}, "probes": {"4"},
+			"search_radius": {"20"}, "batch_size": {"40"}, "fleetsave": {"loaded"},
+			"attack_enabled": {"on"}, "espionage_enabled": {"on"}, "recycle_enabled": {"on"},
+			"mode": {"custom"},
+		}
+		form.Set(test.field, "invalid")
+		body := html.UnescapeString(postForm(t, admin, "/admin/ai/3/settings", form,
+			http.StatusBadRequest, session, csrfCookie))
+		if !strings.Contains(body, test.want) {
+			t.Fatalf("invalid %s message = %q, want %q", test.field, body, test.want)
 		}
 	}
 	postForm(t, admin, "/admin/ai/3/settings", url.Values{
