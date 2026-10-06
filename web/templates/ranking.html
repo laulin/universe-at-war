@@ -1,0 +1,44 @@
+{{define "title"}}Classement{{end}}
+{{define "content"}}
+  <section class="panel-wide ranking" aria-labelledby="ranking-title">
+    <p class="eyebrow">Puissances de l'univers</p>
+    <div class="ranking-heading">
+      <div>
+        <h2 id="ranking-title">Classement {{.CategoryName}}</h2>
+        <p class="muted">Un point représente 1.000 ressources investies dans des actifs terminés.</p>
+      </div>
+      {{with .Own}}<p class="ranking-own"><span>Votre position</span><strong>{{.Position}}</strong><span>{{figure .Points}} points</span></p>{{end}}
+    </div>
+
+    <nav class="ranking-tabs" aria-label="Catégorie du classement">
+      {{range .Categories}}<a href="/ranking?category={{.ID}}"{{if .Selected}} aria-current="page"{{end}}>{{.Name}}</a>{{end}}
+    </nav>
+
+    {{if .Entries}}
+    <div class="ranking-table-wrap">
+      <table class="bodies ranking-table">
+        <caption>Positions {{.RangeStart}} à {{.RangeEnd}} sur {{.Players}} joueurs.</caption>
+        <thead><tr><th scope="col">Position</th><th scope="col">Joueur</th><th scope="col">Alliance</th><th scope="col">Points</th></tr></thead>
+        <tbody>
+        {{range .Entries}}
+          <tr{{if .Own}} class="ranking-row--own"{{end}}>
+            <th scope="row">{{.Position}}</th>
+            <td data-label="Joueur"><span class="ranking-player">{{.Name}}{{if .Artificial}} <span class="ranking-ai" title="Joueur artificiel">IA</span>{{end}}{{if .Own}} <span class="own-marker">(vous)</span>{{end}}</span></td>
+            <td data-label="Alliance">{{if .Alliance}}<span title="{{.Alliance}}">[{{.AllianceTag}}] {{.Alliance}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td data-label="Points" class="ranking-points">{{figure .Points}}</td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}<p class="muted">Aucun empire ne figure encore au classement.</p>{{end}}
+
+    {{if gt .Pages 1}}
+    <nav class="ranking-pagination" aria-label="Pages du classement">
+      {{if .PreviousLink}}<a href="{{.PreviousLink}}">← Positions précédentes</a>{{else}}<span></span>{{end}}
+      <span>Page {{.Page}} / {{.Pages}}</span>
+      {{if .NextLink}}<a href="{{.NextLink}}">Positions suivantes →</a>{{else}}<span></span>{{end}}
+    </nav>
+    {{end}}
+  </section>
+{{end}}

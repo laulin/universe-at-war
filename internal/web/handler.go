@@ -28,6 +28,7 @@ import (
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appjumpgate "universeatwar/internal/app/jumpgate"
 	appphalanx "universeatwar/internal/app/phalanx"
+	appranking "universeatwar/internal/app/ranking"
 	appregistration "universeatwar/internal/app/registration"
 	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
@@ -138,6 +139,10 @@ type galaxyService interface {
 	System(context.Context, appauth.Principal, int, int) (appgalaxy.View, error)
 }
 
+type rankingService interface {
+	List(context.Context, appauth.Principal, appranking.Category) ([]appranking.Entry, error)
+}
+
 type reportsService interface {
 	List(context.Context, appauth.Principal, appreports.Filter) ([]appreports.Summary, error)
 	Get(context.Context, appauth.Principal, int64) (appreports.Detail, error)
@@ -186,6 +191,7 @@ type Dependencies struct {
 	Fleet            fleetService
 	Activity         activityService
 	Galaxy           galaxyService
+	Ranking          rankingService
 	Reports          reportsService
 	BattleSimulation battleSimulationService
 	Phalanx          phalanxService
@@ -218,6 +224,7 @@ type Handler struct {
 	fleet            fleetService
 	activity         activityService
 	galaxy           galaxyService
+	ranking          rankingService
 	reports          reportsService
 	battleSimulation battleSimulationService
 	phalanx          phalanxService
@@ -242,7 +249,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "chat", "admin-chats", "admin-ai", "admin-ai-detail", "admin", "admin-settings", "moderation"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "ranking", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "chat", "admin-chats", "admin-ai", "admin-ai-detail", "admin", "admin-settings", "moderation"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register", "profiles", "closed"}
 )
 
@@ -311,6 +318,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		fleet:            dependencies.Fleet,
 		activity:         dependencies.Activity,
 		galaxy:           dependencies.Galaxy,
+		ranking:          dependencies.Ranking,
 		reports:          dependencies.Reports,
 		battleSimulation: dependencies.BattleSimulation,
 		phalanx:          dependencies.Phalanx,
@@ -369,6 +377,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /planets/{planet}/jump", handler.jumpShips)
 	handler.mux.HandleFunc("GET /galaxy", handler.navigateGalaxy)
 	handler.mux.HandleFunc("GET /galaxy/{galaxy}/{system}", handler.galaxyPage)
+	handler.mux.HandleFunc("GET /ranking", handler.rankingPage)
 	handler.mux.HandleFunc("GET /reports", handler.reportsPage)
 	handler.mux.HandleFunc("GET /reports/{report}", handler.reportPage)
 	handler.mux.HandleFunc("POST /reports/{report}/read", handler.markReportRead)

@@ -20,6 +20,7 @@ import (
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appjumpgate "universeatwar/internal/app/jumpgate"
 	appphalanx "universeatwar/internal/app/phalanx"
+	appranking "universeatwar/internal/app/ranking"
 	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
 	appshipyard "universeatwar/internal/app/shipyard"
@@ -46,6 +47,7 @@ type world struct {
 	Shipyard         appshipyard.Service
 	Fleet            appfleet.Service
 	Galaxy           appgalaxy.Service
+	Ranking          appranking.Service
 	Reports          appreports.Service
 	BattleSimulation appbattlesimulation.Service
 	Phalanx          appphalanx.Service
@@ -106,6 +108,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Completer:  events,
 	}
 	galaxyService := appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())}
+	rankingService := appranking.Service{Repository: storagesqlite.NewRankingRepository(database.Read()), Catalogues: catalogues}
 	reportsService := appreports.Service{
 		Clock:      clock,
 		Repository: storagesqlite.NewReportsRepository(database.Read(), database.Write()),
@@ -143,6 +146,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Shipyard:         shipyard,
 		Fleet:            fleetService,
 		Galaxy:           galaxyService,
+		Ranking:          rankingService,
 		Reports:          reportsService,
 		BattleSimulation: battleSimulation,
 		Phalanx:          appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},

@@ -21,7 +21,7 @@ func TestEveryPlayerScreenHoldsItsAccessibilityBasics(t *testing.T) {
 	handler, session, csrfCookie := accessibleUniverse(t)
 	routes := []string{
 		"/", "/planets/1", "/planets/1/research", "/planets/1/shipyard", "/planets/1/defense",
-		"/planets/1/fleet", "/planets/1/fleet/send", "/galaxy/1/1", "/reports", "/alliance",
+		"/planets/1/fleet", "/planets/1/fleet/send", "/galaxy/1/1", "/ranking", "/reports", "/alliance",
 	}
 	labelled := regexp.MustCompile(`<label for="([^"]+)"`)
 	inputs := regexp.MustCompile(`<(?:input|select|textarea)[^>]*\sid="([^"]+)"`)
@@ -136,7 +136,7 @@ func accessibleUniverse(t *testing.T) (http.Handler, *http.Cookie, *http.Cookie)
 		Economy: universeWorld.Economy, Research: universeWorld.Research, Shipyard: universeWorld.Shipyard,
 		Fleet: universeWorld.Fleet, Galaxy: universeWorld.Galaxy, Reports: universeWorld.Reports,
 		Phalanx: universeWorld.Phalanx, JumpGate: universeWorld.JumpGate,
-		Alliance: universeWorld.Alliance, ACS: universeWorld.ACS,
+		Alliance: universeWorld.Alliance, ACS: universeWorld.ACS, Ranking: universeWorld.Ranking,
 	})
 	if err != nil {
 		t.Fatal(err)

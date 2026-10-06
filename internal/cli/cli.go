@@ -31,6 +31,7 @@ import (
 	appjumpgate "universeatwar/internal/app/jumpgate"
 	appmoderation "universeatwar/internal/app/moderation"
 	appphalanx "universeatwar/internal/app/phalanx"
+	appranking "universeatwar/internal/app/ranking"
 	appregistration "universeatwar/internal/app/registration"
 	appreports "universeatwar/internal/app/reports"
 	appresearch "universeatwar/internal/app/research"
@@ -371,6 +372,10 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Completer:  events,
 	}
 	galaxy := appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())}
+	ranking := appranking.Service{
+		Repository: storagesqlite.NewRankingRepository(database.Read()),
+		Catalogues: catalogues,
+	}
 	sensors := appphalanx.Service{
 		Clock:      clock,
 		Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues),
@@ -434,6 +439,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Fleet:            fleet,
 		Activity:         activity,
 		Galaxy:           galaxy,
+		Ranking:          ranking,
 		Reports:          reports,
 		BattleSimulation: battleSimulation,
 		Phalanx:          sensors,
