@@ -104,8 +104,10 @@ d'acceptation ; la matrice de traçabilité vers les tests et les écrans est da
 
 ## Ce que cette version ne fait pas
 
-- **Pas de canal temps réel.** Les pages affichent des horodatages serveur
-  autoritatifs et demandent un rechargement ciblé quand une échéance passe.
-  Sans JavaScript tout reste correct. Un flux SSE reste possible plus tard.
+- **Pas de canal push persistant.** Le chat récupère ses nouveautés par requête
+  incrémentale toutes les deux secondes ; les autres pages affichent des
+  horodatages serveur autoritatifs et demandent un rechargement ciblé quand une
+  échéance passe. Sans JavaScript tout reste correct. Un flux SSE reste possible
+  plus tard si la charge le justifie.
 - **Pas de TLS intégré.** Servez derrière un reverse proxy pour exposer la
   partie hors de la machine.

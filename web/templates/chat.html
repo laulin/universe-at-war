@@ -1,0 +1,81 @@
+{{define "title"}}Messagerie{{end}}
+{{define "content"}}
+  <section class="chat-layout" aria-labelledby="chat-title">
+    <aside class="chat-sidebar" aria-label="Conversations">
+      <p class="eyebrow">Communications</p>
+      <h2 id="chat-title">Messagerie</h2>
+      {{if .Inbox.HasAlliance}}
+      <a class="chat-thread chat-thread--alliance" href="/chat/alliance">
+        <span class="chat-thread__avatar" aria-hidden="true">◎</span>
+        <span><strong>Canal d'alliance</strong><small>Tous les membres</small></span>
+      </a>
+      {{end}}
+      {{range .Inbox.Conversations}}
+      <a class="chat-thread{{if and $.Conversation (eq $.Conversation.ID .ID)}} chat-thread--active{{end}}" href="/chat/conversations/{{.ID}}">
+        <span class="chat-thread__avatar" aria-hidden="true">{{if eq .Kind "alliance"}}◎{{else}}✦{{end}}</span>
+        <span><strong>{{.Title}}</strong><small>{{.LastMessage}}</small></span>
+        <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.UpdatedAt.Format "02/01 15:04"}}</time>
+      </a>
+      {{else}}
+      {{if not .Inbox.HasAlliance}}<p class="muted chat-empty">Aucune conversation. Ouvrez-en une depuis la galaxie.</p>{{end}}
+      {{end}}
+    </aside>
+
+    {{with .Conversation}}
+    <div class="chat-room" data-chat data-chat-updates="/chat/conversations/{{.ID}}/updates" data-chat-typing="/chat/conversations/{{.ID}}/typing">
+      <header class="chat-room__header">
+        <div>
+          <p class="eyebrow">{{if eq .Kind "alliance"}}Canal commun{{else}}Conversation privée{{end}}</p>
+          <h2>{{.Title}}</h2>
+        </div>
+        <a href="/chat" class="ghost button">Toutes les conversations</a>
+      </header>
+
+      <ol class="chat-messages" data-chat-messages data-last-id="{{$.LastMessage}}" aria-live="polite" aria-label="Messages avec {{.Title}}">
+        {{range .Messages}}
+        <li class="chat-message{{if .Own}} chat-message--own{{end}}" data-message-id="{{.ID}}">
+          <article>
+            <header><strong>{{.AuthorName}}</strong><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.CreatedAt.Format "15:04"}}</time></header>
+            {{if .Body}}<p>{{.Body}}</p>{{end}}
+            {{if .GIFURL}}<img class="chat-message__gif" src="{{.GIFURL}}" alt="GIF envoyé par {{.AuthorName}}" loading="lazy" referrerpolicy="no-referrer">{{end}}
+          </article>
+        </li>
+        {{else}}
+        <li class="chat-welcome" data-chat-empty>Commencez la conversation.</li>
+        {{end}}
+      </ol>
+
+      <p class="chat-typing" data-chat-typing-status role="status" aria-live="polite"></p>
+      <p class="chat-error" data-chat-error role="alert" hidden></p>
+
+      <form class="chat-composer" method="post" action="/chat/conversations/{{.ID}}/messages" data-chat-form>
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <input type="hidden" name="client_key" value="{{$.FormKey}}" data-chat-client-key>
+        <input type="hidden" name="return_to" value="{{$.ReturnTo}}">
+        <label class="visually-hidden" for="chat-body">Message</label>
+        <textarea id="chat-body" name="body" rows="2" maxlength="2000" placeholder="Votre message…" data-chat-input></textarea>
+        <div class="chat-composer__tools">
+          <div class="chat-emoji" data-chat-emoji hidden aria-label="Emoji rapides">
+            {{range $emoji := emojis}}<button type="button" class="ghost" data-emoji="{{$emoji}}" aria-label="Ajouter {{$emoji}}">{{$emoji}}</button>{{end}}
+          </div>
+          <details class="chat-gif">
+            <summary>GIF</summary>
+            <label for="chat-gif-url">URL HTTPS du GIF</label>
+            <input id="chat-gif-url" name="gif_url" type="url" maxlength="2048" inputmode="url" placeholder="https://…" data-chat-gif>
+            <img alt="Aperçu du GIF" data-chat-gif-preview hidden referrerpolicy="no-referrer">
+          </details>
+          <button type="submit" class="chat-send">Envoyer</button>
+        </div>
+      </form>
+    </div>
+    {{else}}
+    <div class="chat-room chat-room--empty">
+      <div>
+        <span class="chat-room__empty-icon" aria-hidden="true">✉</span>
+        <h2>Vos communications</h2>
+        <p class="muted">Choisissez une conversation ou utilisez l'enveloppe à côté d'un joueur dans la galaxie.</p>
+      </div>
+    </div>
+    {{end}}
+  </section>
+{{end}}

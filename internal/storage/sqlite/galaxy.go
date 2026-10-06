@@ -40,7 +40,7 @@ func (r *GalaxyRepository) System(ctx context.Context, accountID int64, galaxy, 
 	}
 
 	planets, err := r.read.QueryContext(ctx, `
-		SELECT p.position, p.id, p.name, pl.display_name, pl.account_id
+		SELECT p.position, p.id, p.name, pl.id, pl.display_name, pl.account_id
 		FROM planets p JOIN players pl ON pl.id = p.owner_player_id
 		WHERE p.galaxy = ? AND p.system = ?
 	`, galaxy, system)
@@ -50,9 +50,9 @@ func (r *GalaxyRepository) System(ctx context.Context, accountID int64, galaxy, 
 	defer planets.Close()
 	for planets.Next() {
 		var position int
-		var planetID, ownerAccountID int64
+		var planetID, ownerPlayerID, ownerAccountID int64
 		var planetName, ownerName string
-		if err := planets.Scan(&position, &planetID, &planetName, &ownerName, &ownerAccountID); err != nil {
+		if err := planets.Scan(&position, &planetID, &planetName, &ownerPlayerID, &ownerName, &ownerAccountID); err != nil {
 			return appgalaxy.View{}, fmt.Errorf("galaxy repository: scan planet: %w", err)
 		}
 		if position < 1 || position > limits.Positions {
@@ -60,6 +60,7 @@ func (r *GalaxyRepository) System(ctx context.Context, accountID int64, galaxy, 
 		}
 		rows[position-1].PlanetID = planetID
 		rows[position-1].PlanetName = planetName
+		rows[position-1].OwnerPlayerID = ownerPlayerID
 		rows[position-1].OwnerName = ownerName
 		rows[position-1].Own = ownerAccountID == accountID
 	}

@@ -23,6 +23,7 @@ type galaxyPageRow struct {
 	Coordinate    string
 	ArtSlot       string
 	PlanetName    string
+	OwnerPlayerID int64
 	OwnerName     string
 	Own           bool
 	Occupied      bool
@@ -44,6 +45,7 @@ type galaxyPageData struct {
 	NextLink     string
 	HomePlanet   int64
 	CanAct       bool
+	CanChat      bool
 	GalaxyMax    int
 	SystemMax    int
 }
@@ -248,13 +250,14 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 	rows := make([]galaxyPageRow, 0, len(view.Rows))
 	for _, row := range view.Rows {
 		display := galaxyPageRow{
-			Position:   row.Position,
-			Coordinate: fmt.Sprintf("%d:%d:%d", view.Galaxy, view.System, row.Position),
-			ArtSlot:    bodyArtSlot(row.Position, false),
-			PlanetName: row.PlanetName,
-			OwnerName:  row.OwnerName,
-			Own:        row.Own,
-			Occupied:   row.PlanetID > 0,
+			Position:      row.Position,
+			Coordinate:    fmt.Sprintf("%d:%d:%d", view.Galaxy, view.System, row.Position),
+			ArtSlot:       bodyArtSlot(row.Position, false),
+			PlanetName:    row.PlanetName,
+			OwnerPlayerID: row.OwnerPlayerID,
+			OwnerName:     row.OwnerName,
+			Own:           row.Own,
+			Occupied:      row.PlanetID > 0,
 			IsOrigin: origin.Galaxy == view.Galaxy && origin.System == view.System &&
 				origin.Position == row.Position,
 		}
@@ -269,7 +272,7 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 		pageShell: shell, Galaxy: view.Galaxy, System: view.System, Rows: rows,
 		PreviousLink: systemLink(view.Galaxy, view.System-1, view.Limits),
 		NextLink:     systemLink(view.Galaxy, view.System+1, view.Limits),
-		HomePlanet:   homePlanet, CanAct: homePlanet > 0,
+		HomePlanet:   homePlanet, CanAct: homePlanet > 0, CanChat: shell.Messaging,
 		GalaxyMax: view.Limits.Galaxies, SystemMax: view.Limits.Systems,
 	}
 	h.render(response, status, "galaxy", data)

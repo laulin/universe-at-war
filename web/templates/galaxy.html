@@ -47,6 +47,9 @@
               {{if and $.CanAct (not .Occupied)}}
               <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=colonize">Coloniser</a>
               {{else if and $.CanAct .Occupied (not .Own)}}
+              {{if $.CanChat}}<a class="galaxy-chat" href="/chat/players/{{.OwnerPlayerID}}" aria-label="Écrire à {{.OwnerName}}" title="Écrire à {{.OwnerName}}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3zM3 7l9 7 9-7"/></svg>
+              </a>{{end}}
               <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=espionage">Espionner</a>
               <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=attack">Attaquer</a>
               {{else if and $.CanAct .Own (not .IsOrigin)}}

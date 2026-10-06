@@ -9,7 +9,10 @@ import (
 // templateFuncs are the few helpers the views need. Everything else is computed
 // in Go: a template that does arithmetic is a template nobody can test.
 var templateFuncs = template.FuncMap{
-	"decimal":  decimal,
+	"decimal": decimal,
+	"emojis": func() []string {
+		return []string{"😀", "😂", "😍", "👍", "🚀", "🛰️", "⚔️", "🛡️", "🔥", "🎉"}
+	},
 	"figure":   figure,
 	"signed":   signed,
 	"unitName": unitName,

@@ -1,0 +1,39 @@
+{{define "title"}}Conversations{{end}}
+{{define "content"}}
+  <section class="chat-layout chat-layout--admin" aria-labelledby="admin-chats-title">
+    <aside class="chat-sidebar" aria-label="Toutes les conversations">
+      <p class="eyebrow">Administration</p>
+      <h2 id="admin-chats-title">Conversations</h2>
+      <p class="muted chat-admin-note">Vue globale en lecture seule, réservée aux administrateurs.</p>
+      {{range .Conversations}}
+      <a class="chat-thread{{if and $.Conversation (eq $.Conversation.ID .ID)}} chat-thread--active{{end}}" href="/admin/chats/{{.ID}}">
+        <span class="chat-thread__avatar" aria-hidden="true">{{if eq .Kind "alliance"}}◎{{else}}✦{{end}}</span>
+        <span><strong>{{.Title}}</strong><small>{{.LastMessage}}</small></span>
+        <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.UpdatedAt.Format "02/01 15:04"}}</time>
+      </a>
+      {{else}}<p class="muted chat-empty">Aucune conversation enregistrée.</p>{{end}}
+    </aside>
+
+    {{with .Conversation}}
+    <div class="chat-room">
+      <header class="chat-room__header">
+        <div><p class="eyebrow">Lecture seule</p><h2>{{.Title}}</h2></div>
+        <a href="/admin/chats" class="ghost button">Toutes les conversations</a>
+      </header>
+      <ol class="chat-messages" aria-label="Conversation {{.Title}}">
+        {{range .Messages}}
+        <li class="chat-message">
+          <article>
+            <header><strong>{{.AuthorName}}</strong><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.CreatedAt.Format "02/01/2006 15:04"}}</time></header>
+            {{if .Body}}<p>{{.Body}}</p>{{end}}
+            {{if .GIFURL}}<img class="chat-message__gif" src="{{.GIFURL}}" alt="GIF envoyé par {{.AuthorName}}" loading="lazy" referrerpolicy="no-referrer">{{end}}
+          </article>
+        </li>
+        {{else}}<li class="chat-welcome">Cette conversation ne contient encore aucun message.</li>{{end}}
+      </ol>
+    </div>
+    {{else}}
+    <div class="chat-room chat-room--empty"><div><span class="chat-room__empty-icon" aria-hidden="true">◉</span><h2>Supervision</h2><p class="muted">Sélectionnez une conversation pour consulter son contenu.</p></div></div>
+    {{end}}
+  </section>
+{{end}}

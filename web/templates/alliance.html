@@ -7,7 +7,7 @@
     <h3>{{.Profile.Name}} [{{.Profile.Tag}}]</h3>
     <p>{{.Profile.Description}}</p>
     <p class="muted">Votre rang : {{.Profile.Role}} — {{len .Profile.Members}} membres sur {{.Profile.MaximumSize}}.</p>
-    <p><a href="/alliance/operations">Opérations groupées</a></p>
+    <p><a href="/alliance/operations">Opérations groupées</a>{{if .Messaging}} · <a href="/chat/alliance">Canal de discussion</a>{{end}}</p>
 
     <h3 id="members-title">Membres</h3>
     <table class="bodies" aria-labelledby="members-title">

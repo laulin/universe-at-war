@@ -18,12 +18,13 @@ var (
 
 // Row is one position of a system, as everybody may see it.
 type Row struct {
-	Position   int
-	PlanetID   int64
-	PlanetName string
-	OwnerName  string
-	Own        bool
-	Debris     *debris.Field
+	Position      int
+	PlanetID      int64
+	PlanetName    string
+	OwnerPlayerID int64
+	OwnerName     string
+	Own           bool
+	Debris        *debris.Field
 }
 
 // View is one system of the map.

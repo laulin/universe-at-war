@@ -38,7 +38,7 @@ Production continues offline, construction queues finish on schedule, and fleets
 |---|---|
 | **Build a real economy**<br>Balance metal, crystal, deuterium, energy, storage, and limited planetary fields. Queue buildings, research, ships, and defenses with transparent costs and completion times. | **Design your fleet doctrine**<br>Choose from probes, cargo ships, recyclers, colony ships, fighters, cruisers, battleships, bombers, destroyers, battlecruisers, and the Deathstar. Propulsion research changes their real speed and fuel use. |
 | **Fight with intelligence**<br>Espionage reveals only what your probe strength can uncover. Simulate attacks from the information you actually possess, then risk your ships in probabilistic combat with rapid fire, loot, debris, and persistent reports. | **Expand beyond one world**<br>Colonize open coordinates, develop distinct planets, harvest debris fields, and create moons through sufficiently destructive battles. Sensor phalanxes expose movement; jump gates reshape logistics. |
-| **Build alliances that matter**<br>Create ranks, invite players, manage diplomacy, share selected reports, defend allies, and coordinate multiplayer attacks that resolve as one battle. Resources always remain under each player's control. | **Venture into the unknown**<br>Send expeditions beyond the edge of a system. You may discover resources or ships, suffer delays, meet pirates or aliens, lose everything—or find nothing at all. |
+| **Build alliances that matter**<br>Create ranks, invite players, manage diplomacy, chat in a shared alliance channel, share selected reports, defend allies, and coordinate multiplayer attacks that resolve as one battle. | **Venture into the unknown**<br>Send expeditions beyond the edge of a system. You may discover resources or ships, suffer delays, meet pirates or aliens, lose everything—or find nothing at all. |
 
 ### A galaxy that fights back
 
@@ -54,6 +54,7 @@ AI commanders can also form alliances, share intelligence, select common targets
 - Colonization succeeds only if the destination is still free when the colony ship arrives.
 - Group attacks share loot according to the surviving fleets' remaining cargo capacity.
 - Every expedition outcome is generated once and persisted, making event processing safe to replay.
+- Private and alliance conversations update dynamically with Unicode emoji, HTTPS GIFs, and ephemeral typing indicators.
 
 ## See your empire take shape
 

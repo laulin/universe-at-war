@@ -14,6 +14,7 @@ import (
 	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
 	appbattlesimulation "universeatwar/internal/app/battlesimulation"
+	appchat "universeatwar/internal/app/chat"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
@@ -50,6 +51,7 @@ type world struct {
 	Phalanx          appphalanx.Service
 	JumpGate         appjumpgate.Service
 	Alliance         appalliance.Service
+	Chat             appchat.Service
 	ACS              appacs.Service
 	AI               appai.Service
 	Population       appai.Populating
@@ -111,6 +113,10 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 	}
 	battleSimulation := appbattlesimulation.Service{Reports: reportsService, Economy: economy, Catalogues: catalogues}
 	alliance := appalliance.Service{Clock: clock, Repository: storagesqlite.NewAllianceRepository(database.Write())}
+	chat := appchat.Service{
+		Clock: clock, Repository: storagesqlite.NewChatRepository(database.Read(), database.Write()),
+		Typing: &appchat.TypingTracker{},
+	}
 	operations := appacs.Service{
 		Clock:      clock,
 		Repository: acsRepository,
@@ -142,6 +148,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Phalanx:          appphalanx.Service{Clock: clock, Repository: storagesqlite.NewPhalanxRepository(database.Write(), catalogues), Completer: events},
 		JumpGate:         appjumpgate.Service{Clock: clock, Repository: storagesqlite.NewJumpGateRepository(database.Write(), catalogues), Completer: events},
 		Alliance:         alliance,
+		Chat:             chat,
 		ACS:              operations,
 		AI:               artificials,
 		Population:       appai.Populating{Clock: clock, Service: artificials, Census: aiRepository},

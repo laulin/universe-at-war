@@ -24,6 +24,7 @@ import (
 	appauth "universeatwar/internal/app/authentication"
 	appbattlesimulation "universeatwar/internal/app/battlesimulation"
 	appbootstrap "universeatwar/internal/app/bootstrap"
+	appchat "universeatwar/internal/app/chat"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
@@ -348,6 +349,11 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Clock:      clock,
 		Repository: storagesqlite.NewAllianceRepository(database.Write()),
 	}
+	chat := appchat.Service{
+		Clock:      clock,
+		Repository: storagesqlite.NewChatRepository(database.Read(), database.Write()),
+		Typing:     &appchat.TypingTracker{},
+	}
 	operations := appacs.Service{
 		Clock:      clock,
 		Repository: acsRepository,
@@ -433,6 +439,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Phalanx:          sensors,
 		JumpGate:         gates,
 		Alliance:         alliance,
+		Chat:             chat,
 		ACS:              operations,
 		Artificials:      artificials,
 		Dashboard:        dashboard,

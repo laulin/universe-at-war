@@ -67,12 +67,14 @@
       <hr>
       <a href="/galaxy/1/1"{{if eq .Section "galaxy"}} aria-current="page"{{end}}>Galaxie</a>
       <a href="/reports"{{if eq .Section "reports"}} aria-current="page"{{end}}>Rapports{{if .Alerts}} <span class="hostile">⚠ {{.Alerts}}</span>{{end}}</a>
+      {{if .Messaging}}<a href="/chat"{{if eq .Section "chat"}} aria-current="page"{{end}}>Messagerie</a>{{end}}
       <a href="/alliance"{{if eq .Section "alliance"}} aria-current="page"{{end}}>Alliance</a>
       {{if .Administrator}}<a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>{{end}}
     </nav>
     {{else if .Administrator}}
     <nav aria-label="Navigation administrateur">
       <a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>
+      {{if .ChatAdministration}}<a href="/admin/chats">Conversations</a>{{end}}
     </nav>
     {{end}}
 

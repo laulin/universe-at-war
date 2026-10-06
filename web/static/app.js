@@ -167,6 +167,197 @@
     showHold();
   }
 
+  // Messaging remains a normal server-rendered form without JavaScript. With
+  // enhancement available, new messages arrive incrementally, sending no
+  // longer reloads the page, emoji buttons become usable and short-lived
+  // typing presence is announced to the other participants.
+  const chat = document.querySelector("[data-chat]");
+  if (chat) {
+    const messages = chat.querySelector("[data-chat-messages]");
+    const form = chat.querySelector("[data-chat-form]");
+    const input = chat.querySelector("[data-chat-input]");
+    const clientKey = chat.querySelector("[data-chat-client-key]");
+    const gif = chat.querySelector("[data-chat-gif]");
+    const gifPreview = chat.querySelector("[data-chat-gif-preview]");
+    const typingStatus = chat.querySelector("[data-chat-typing-status]");
+    const error = chat.querySelector("[data-chat-error]");
+    let lastID = Number(messages.dataset.lastId || 0);
+    let polling = false;
+    let lastTypingNotice = 0;
+
+    const scrollToLatest = () => {
+      messages.scrollTop = messages.scrollHeight;
+    };
+    const freshKey = () => {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return `chat:${window.crypto.randomUUID()}`;
+      }
+      return `chat:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    };
+    const showError = (message) => {
+      error.textContent = message || "Le message n'a pas pu être envoyé.";
+      error.hidden = false;
+    };
+    const clearError = () => {
+      error.textContent = "";
+      error.hidden = true;
+    };
+    const appendMessage = (message) => {
+      if (messages.querySelector(`[data-message-id="${message.id}"]`)) {
+        lastID = Math.max(lastID, Number(message.id));
+        return;
+      }
+      const empty = messages.querySelector("[data-chat-empty]");
+      if (empty) {
+        empty.remove();
+      }
+      const item = document.createElement("li");
+      item.className = `chat-message${message.own ? " chat-message--own" : ""}`;
+      item.dataset.messageId = String(message.id);
+      const article = document.createElement("article");
+      const header = document.createElement("header");
+      const author = document.createElement("strong");
+      author.textContent = message.author_name;
+      const sent = document.createElement("time");
+      const instant = new Date(message.created_at);
+      sent.dateTime = message.created_at;
+      sent.textContent = Number.isNaN(instant.getTime())
+        ? ""
+        : instant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      header.append(author, sent);
+      article.append(header);
+      if (message.body) {
+        const body = document.createElement("p");
+        body.textContent = message.body;
+        article.append(body);
+      }
+      if (message.gif_url) {
+        const image = document.createElement("img");
+        image.className = "chat-message__gif";
+        image.src = message.gif_url;
+        image.alt = `GIF envoyé par ${message.author_name}`;
+        image.loading = "lazy";
+        image.referrerPolicy = "no-referrer";
+        article.append(image);
+      }
+      item.append(article);
+      messages.append(item);
+      lastID = Math.max(lastID, Number(message.id));
+    };
+    const showTyping = (names) => {
+      if (!Array.isArray(names) || names.length === 0) {
+        typingStatus.textContent = "";
+      } else if (names.length === 1) {
+        typingStatus.textContent = `${names[0]} est en train d'écrire…`;
+      } else {
+        typingStatus.textContent = `${names.join(", ")} sont en train d'écrire…`;
+      }
+    };
+    const poll = async () => {
+      if (polling || document.hidden) {
+        return;
+      }
+      polling = true;
+      try {
+        const response = await fetch(`${chat.dataset.chatUpdates}?after=${lastID}`, {
+          headers: { Accept: "application/json" },
+          credentials: "same-origin",
+        });
+        if (!response.ok) {
+          return;
+        }
+        const update = await response.json();
+        const nearBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 100;
+        for (const message of update.messages || []) {
+          appendMessage(message);
+        }
+        showTyping(update.typing);
+        if (nearBottom) {
+          scrollToLatest();
+        }
+      } catch (_) {
+        // A transient network failure is retried by the next poll. The page and
+        // its normal form remain fully usable throughout.
+      } finally {
+        polling = false;
+      }
+    };
+    const announceTyping = () => {
+      if (!input.value.trim() || Date.now() - lastTypingNotice < 1800) {
+        return;
+      }
+      lastTypingNotice = Date.now();
+      const payload = new FormData();
+      payload.set("csrf_token", form.elements.csrf_token.value);
+      fetch(chat.dataset.chatTyping, { method: "POST", body: payload, credentials: "same-origin" }).catch(() => {});
+    };
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError();
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      try {
+        const response = await fetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+          headers: { Accept: "application/json" },
+          credentials: "same-origin",
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          showError(result.error);
+          return;
+        }
+        appendMessage(result);
+        input.value = "";
+        gif.value = "";
+        gifPreview.hidden = true;
+        gifPreview.removeAttribute("src");
+        clientKey.value = freshKey();
+        showTyping([]);
+        scrollToLatest();
+        input.focus();
+      } catch (_) {
+        showError("Connexion interrompue. Le message peut être renvoyé sans être dupliqué.");
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    input.addEventListener("input", announceTyping);
+
+    const emoji = chat.querySelector("[data-chat-emoji]");
+    if (emoji) {
+      emoji.hidden = false;
+      for (const button of emoji.querySelectorAll("[data-emoji]")) {
+        button.addEventListener("click", () => {
+          const start = input.selectionStart;
+          const end = input.selectionEnd;
+          input.setRangeText(button.dataset.emoji, start, end, "end");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.focus();
+        });
+      }
+    }
+    gif.addEventListener("input", () => {
+      const valid = gif.value.trim().startsWith("https://");
+      gifPreview.hidden = !valid;
+      if (valid) {
+        gifPreview.src = gif.value.trim();
+      } else {
+        gifPreview.removeAttribute("src");
+      }
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        poll();
+      }
+    });
+    scrollToLatest();
+    window.setInterval(poll, 2000);
+    window.setTimeout(poll, 400);
+  }
+
   if (countdowns.length === 0 && bars.length === 0 && counters.length === 0 && awaiting.length === 0) {
     return;
   }

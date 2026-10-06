@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"slices"
@@ -21,6 +22,7 @@ import (
 	appactivity "universeatwar/internal/app/activity"
 	appauth "universeatwar/internal/app/authentication"
 	appbattlesimulation "universeatwar/internal/app/battlesimulation"
+	appchat "universeatwar/internal/app/chat"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
@@ -158,6 +160,18 @@ type jumpGateService interface {
 	Jump(context.Context, appauth.Principal, int64, int64, domainfleet.Composition, string) (appjumpgate.Transfer, error)
 }
 
+type chatService interface {
+	Inbox(context.Context, appauth.Principal) (appchat.Inbox, error)
+	Direct(context.Context, appauth.Principal, int64) (appchat.Conversation, error)
+	Alliance(context.Context, appauth.Principal) (appchat.Conversation, error)
+	Conversation(context.Context, appauth.Principal, int64) (appchat.Conversation, error)
+	Updates(context.Context, appauth.Principal, int64, int64) (appchat.Update, error)
+	Send(context.Context, appauth.Principal, int64, appchat.Draft) (appchat.Message, error)
+	IsTyping(context.Context, appauth.Principal, int64) error
+	AdministrativeInbox(context.Context, appauth.Principal) ([]appchat.Summary, error)
+	AdministrativeConversation(context.Context, appauth.Principal, int64) (appchat.Conversation, error)
+}
+
 // Dependencies are the application services required by the HTTP adapter.
 type Dependencies struct {
 	Authentication   authenticationService
@@ -183,6 +197,7 @@ type Dependencies struct {
 	Moderation       moderationService
 	Backups          backupService
 	Registration     registrationService
+	Chat             chatService
 	Logger           *slog.Logger
 	Metrics          *observability.Metrics
 	SecureCookies    bool
@@ -215,6 +230,7 @@ type Handler struct {
 	backups          backupService
 	metrics          *observability.Metrics
 	registration     registrationService
+	chat             chatService
 	secureCookies    bool
 	loginLimiter     loginRateLimiter
 	registerLimiter  loginRateLimiter
@@ -225,7 +241,7 @@ type Handler struct {
 
 // gamePages share the navigation shell; the others keep a bare centred panel.
 var (
-	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "admin-ai", "admin-ai-detail", "admin", "admin-settings", "moderation"}
+	gamePages  = []string{"overview", "economy", "research", "production", "fleet", "fleet-send", "fleet-confirm", "galaxy", "reports", "report", "phalanx", "jump-gate", "alliance", "operations", "chat", "admin-chats", "admin-ai", "admin-ai-detail", "admin", "admin-settings", "moderation"}
 	plainPages = []string{"login", "password-change", "empire", "setup", "register", "profiles", "closed"}
 )
 
@@ -306,6 +322,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		moderation:       dependencies.Moderation,
 		backups:          dependencies.Backups,
 		registration:     dependencies.Registration,
+		chat:             dependencies.Chat,
 		secureCookies:    dependencies.SecureCookies,
 		loginLimiter:     limiter,
 		// Signing up forgives a few typos before it starts slowing down.
@@ -370,7 +387,16 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /alliance/operations/{group}/join", handler.joinOperation)
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/operation", handler.openOperation)
 	handler.mux.HandleFunc("POST /fleets/{fleet}/withdraw", handler.withdrawFromOperation)
+	handler.mux.HandleFunc("GET /chat", handler.chatInboxPage)
+	handler.mux.HandleFunc("GET /chat/players/{player}", handler.directChatPage)
+	handler.mux.HandleFunc("GET /chat/alliance", handler.allianceChatPage)
+	handler.mux.HandleFunc("GET /chat/conversations/{conversation}", handler.conversationChatPage)
+	handler.mux.HandleFunc("GET /chat/conversations/{conversation}/updates", handler.chatUpdates)
+	handler.mux.HandleFunc("POST /chat/conversations/{conversation}/messages", handler.sendChatMessage)
+	handler.mux.HandleFunc("POST /chat/conversations/{conversation}/typing", handler.chatTyping)
 	handler.mux.HandleFunc("GET /admin", handler.dashboardPage)
+	handler.mux.HandleFunc("GET /admin/chats", handler.administrativeChatsPage)
+	handler.mux.HandleFunc("GET /admin/chats/{conversation}", handler.administrativeChatPage)
 	handler.mux.HandleFunc("GET /admin/settings", handler.gameSettingsPage)
 	handler.mux.HandleFunc("POST /admin/settings", handler.updateGameSettings)
 	handler.mux.HandleFunc("POST /admin/accounts/{account}/role", handler.changeRole)
@@ -1156,7 +1182,17 @@ func (h *Handler) formKey(response http.ResponseWriter, purpose string) (string,
 
 func (h *Handler) validCSRF(response http.ResponseWriter, request *http.Request) bool {
 	request.Body = http.MaxBytesReader(response, request.Body, maxFormBytes)
-	if err := request.ParseForm(); err != nil {
+	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil {
+		http.Error(response, "invalid form", http.StatusBadRequest)
+		return false
+	}
+	if mediaType == "multipart/form-data" {
+		err = request.ParseMultipartForm(maxFormBytes)
+	} else {
+		err = request.ParseForm()
+	}
+	if err != nil {
 		http.Error(response, "invalid form", http.StatusBadRequest)
 		return false
 	}
@@ -1204,7 +1240,7 @@ func (h *Handler) render(response http.ResponseWriter, status int, name string, 
 
 func (h *Handler) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		response.Header().Set("Content-Security-Policy", "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		response.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		response.Header().Set("X-Content-Type-Options", "nosniff")
 		response.Header().Set("X-Frame-Options", "DENY")
 		response.Header().Set("Referrer-Policy", "no-referrer")
@@ -1235,7 +1271,9 @@ type pageShell struct {
 	Totals empireTotals
 	// Administrator opens the administration pages in the navigation. It never
 	// grants anything by itself: every route checks the role again.
-	Administrator bool
+	Administrator      bool
+	Messaging          bool
+	ChatAdministration bool
 }
 
 // bodyLink is one entry of the celestial body column: identity plus the settled
@@ -1325,7 +1363,9 @@ type loginPageData struct {
 func (h *Handler) gameShell(ctx context.Context, token string, principal appauth.Principal, section string, planets []appeconomy.Planet, currentID int64) pageShell {
 	shell := pageShell{
 		CSRFToken: token, Username: principal.Username, Section: section, Now: h.clock(),
-		Administrator: principal.HasRole(appauth.RoleAdmin),
+		Administrator:      principal.HasRole(appauth.RoleAdmin),
+		Messaging:          h.chat != nil && principal.HasRole(appauth.RolePlayer),
+		ChatAdministration: h.chat != nil && principal.HasRole(appauth.RoleAdmin),
 	}
 	if h.reports != nil {
 		if alerts, err := h.reports.UnreadHostile(ctx, principal); err == nil {
