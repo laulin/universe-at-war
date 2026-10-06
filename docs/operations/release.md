@@ -22,6 +22,21 @@ make release VERSION=0.10.0        # la matrice complète dans bin/
 Tous sont construits avec `CGO_ENABLED=0` : le pilote SQLite est en Go pur, il
 n'y a rien à lier. `universe-at-war version` dit quelle version tourne.
 
+## Publier une GitHub Release
+
+Une fois le commit de version présent sur GitHub, poussez un tag sémantique
+préfixé par `v` :
+
+```sh
+git tag -a v0.10.0 -m "Universe At War 0.10.0"
+git push origin v0.10.0
+```
+
+Le workflow `Release` construit alors les cinq cibles ci-dessus, injecte
+`0.10.0` dans les binaires, produit le fichier `SHA256SUMS` et publie une
+GitHub Release accompagnée de notes générées automatiquement. Les tags de
+préversion comme `v0.10.0-rc.1` sont également acceptés.
+
 ## Démarrer depuis une base vide
 
 ```sh
