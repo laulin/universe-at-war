@@ -4,6 +4,7 @@
 {{define "activity-defense-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3 8-8 10-5-2-8-5-8-10V6l8-3Zm0 5v8m-4-4h8"/></svg>{{end}}
 {{define "activity-fleet-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17 17 4m-7 0h7v7M5 7h3M4 11h3M3 15h3"/></svg>{{end}}
 {{define "activity-danger-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 22 21H2L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg>{{end}}
+{{define "message-unread-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3zM3 7l9 7 9-7"/></svg>{{end}}
 {{define "layout"}}<!doctype html>
 <html lang="fr">
 <head>
@@ -67,7 +68,7 @@
       <hr>
       <a href="/galaxy/1/1"{{if eq .Section "galaxy"}} aria-current="page"{{end}}>Galaxie</a>
       <a href="/reports"{{if eq .Section "reports"}} aria-current="page"{{end}}>Rapports{{if .Alerts}} <span class="hostile">⚠ {{.Alerts}}</span>{{end}}</a>
-      {{if .Messaging}}<a href="/chat"{{if eq .Section "chat"}} aria-current="page"{{end}}>Messagerie</a>{{end}}
+      {{if .Messaging}}<a href="/chat" data-chat-navigation{{if eq .Section "chat"}} aria-current="page"{{end}}{{if .UnreadMessages}} aria-label="Messagerie, nombre de messages non lus : {{.UnreadMessages}}"{{end}}><span>Messagerie</span><span class="nav-unread" data-chat-unread{{if not .UnreadMessages}} hidden{{end}}>{{template "message-unread-icon"}}<b data-chat-unread-count>{{.UnreadMessages}}</b></span></a>{{end}}
       <a href="/alliance"{{if eq .Section "alliance"}} aria-current="page"{{end}}>Alliance</a>
       {{if .Administrator}}<a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>Administration</a>{{end}}
     </nav>

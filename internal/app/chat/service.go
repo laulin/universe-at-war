@@ -53,6 +53,7 @@ type Message struct {
 	GIFURL         string    `json:"gif_url,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	Own            bool      `json:"own"`
+	FromInitiator  bool      `json:"from_initiator,omitempty"`
 }
 
 // Conversation is a room and the requested window of its messages.
@@ -104,9 +105,11 @@ type Member struct {
 // Repository is the persistence and authorization boundary of messaging.
 type Repository interface {
 	ListForAccount(context.Context, int64) (Inbox, error)
+	UnreadCount(context.Context, int64) (int, error)
 	OpenDirect(context.Context, int64, int64, time.Time, int) (Conversation, error)
 	OpenAlliance(context.Context, int64, time.Time, int) (Conversation, error)
 	ConversationForAccount(context.Context, int64, int64, int64, int) (Conversation, error)
+	MarkReadThrough(context.Context, int64, int64, int64, time.Time) error
 	Append(context.Context, int64, int64, Draft, time.Time) (Message, error)
 	MemberForConversation(context.Context, int64, int64) (Member, error)
 	ListAll(context.Context) ([]Summary, error)
@@ -127,6 +130,15 @@ func (s Service) Inbox(ctx context.Context, principal appauth.Principal) (Inbox,
 	return s.Repository.ListForAccount(ctx, principal.AccountID)
 }
 
+// UnreadCount reports messages authored by somebody else in conversations the
+// player can currently access.
+func (s Service) UnreadCount(ctx context.Context, principal appauth.Principal) (int, error) {
+	if err := s.player(principal); err != nil {
+		return 0, err
+	}
+	return s.Repository.UnreadCount(ctx, principal.AccountID)
+}
+
 func (s Service) Direct(ctx context.Context, principal appauth.Principal, targetPlayerID int64) (Conversation, error) {
 	if err := s.player(principal); err != nil {
 		return Conversation{}, err
@@ -134,14 +146,24 @@ func (s Service) Direct(ctx context.Context, principal appauth.Principal, target
 	if targetPlayerID <= 0 {
 		return Conversation{}, ErrNoSuchPlayer
 	}
-	return s.Repository.OpenDirect(ctx, principal.AccountID, targetPlayerID, s.Clock.Now().UTC(), messageLimit)
+	now := s.Clock.Now().UTC()
+	conversation, err := s.Repository.OpenDirect(ctx, principal.AccountID, targetPlayerID, now, messageLimit)
+	if err != nil {
+		return Conversation{}, err
+	}
+	return conversation, s.markRead(ctx, principal.AccountID, conversation, now)
 }
 
 func (s Service) Alliance(ctx context.Context, principal appauth.Principal) (Conversation, error) {
 	if err := s.player(principal); err != nil {
 		return Conversation{}, err
 	}
-	return s.Repository.OpenAlliance(ctx, principal.AccountID, s.Clock.Now().UTC(), messageLimit)
+	now := s.Clock.Now().UTC()
+	conversation, err := s.Repository.OpenAlliance(ctx, principal.AccountID, now, messageLimit)
+	if err != nil {
+		return Conversation{}, err
+	}
+	return conversation, s.markRead(ctx, principal.AccountID, conversation, now)
 }
 
 func (s Service) Conversation(ctx context.Context, principal appauth.Principal, conversationID int64) (Conversation, error) {
@@ -151,7 +173,11 @@ func (s Service) Conversation(ctx context.Context, principal appauth.Principal, 
 	if conversationID <= 0 {
 		return Conversation{}, ErrNotFound
 	}
-	return s.Repository.ConversationForAccount(ctx, principal.AccountID, conversationID, 0, messageLimit)
+	conversation, err := s.Repository.ConversationForAccount(ctx, principal.AccountID, conversationID, 0, messageLimit)
+	if err != nil {
+		return Conversation{}, err
+	}
+	return conversation, s.markRead(ctx, principal.AccountID, conversation, s.Clock.Now().UTC())
 }
 
 func (s Service) Updates(ctx context.Context, principal appauth.Principal, conversationID, afterID int64) (Update, error) {
@@ -166,7 +192,18 @@ func (s Service) Updates(ctx context.Context, principal appauth.Principal, conve
 	if err != nil {
 		return Update{}, err
 	}
+	if err := s.markRead(ctx, principal.AccountID, conversation, s.Clock.Now().UTC()); err != nil {
+		return Update{}, err
+	}
 	return Update{Messages: conversation.Messages, Typing: s.typing().Active(conversationID, member.PlayerID, s.Clock.Now().UTC())}, nil
+}
+
+func (s Service) markRead(ctx context.Context, accountID int64, conversation Conversation, now time.Time) error {
+	if len(conversation.Messages) == 0 {
+		return nil
+	}
+	return s.Repository.MarkReadThrough(ctx, accountID, conversation.ID,
+		conversation.Messages[len(conversation.Messages)-1].ID, now)
 }
 
 func (s Service) Send(ctx context.Context, principal appauth.Principal, conversationID int64, draft Draft) (Message, error) {

@@ -102,6 +102,29 @@
 }
 .app > nav hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-2) var(--space-1); }
 .app > nav .nav-group { color: var(--faint); font-size: var(--text-xs); letter-spacing: 0.14em; text-transform: uppercase; padding: var(--space-2) var(--space-3) 0; }
+.app > nav .nav-unread {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 1.25rem;
+  padding: 0.08rem 0.35rem;
+  color: #07101d;
+  background: var(--accent-strong);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+.app > nav .nav-unread[hidden] { display: none; }
+.app > nav .nav-unread svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.app > nav .nav-unread b { color: currentColor; font-weight: 900; }
 
 /* ---------- Main column ---------- */
 

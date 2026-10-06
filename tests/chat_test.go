@@ -102,6 +102,116 @@ func TestPrivateAndAllianceChatsStayInsideTheirAudience(t *testing.T) {
 	}
 }
 
+func TestChatUnreadStateIsPerPlayerMonotonicAndAllianceAware(t *testing.T) {
+	ctx := context.Background()
+	database := economyDatabase(t, ctx, 4)
+	universeWorld := newWorld(t, database, appclock.NewFake(time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)))
+	alice := appauth.Principal{AccountID: 1, Username: "player1", Roles: []appauth.Role{appauth.RolePlayer}}
+	bob := appauth.Principal{AccountID: 2, Username: "player2", Roles: []appauth.Role{appauth.RolePlayer}}
+	charlie := appauth.Principal{AccountID: 3, Username: "player3", Roles: []appauth.Role{appauth.RolePlayer}}
+	for _, player := range []struct {
+		principal appauth.Principal
+		name      string
+	}{{alice, "Alice"}, {bob, "Bob"}, {charlie, "Charlie"}} {
+		if _, err := universeWorld.Economy.CreateEmpire(ctx, player.principal, player.name); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	direct, err := universeWorld.Chat.Direct(ctx, alice, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := universeWorld.Chat.Send(ctx, alice, direct.ID, appchat.Draft{
+		Body: "Premier", ClientKey: "unread-direct-first",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := universeWorld.Chat.Send(ctx, alice, direct.ID, appchat.Draft{
+		Body: "Deuxième", ClientKey: "unread-direct-second",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, alice); err != nil || got != 0 {
+		t.Fatalf("Alice unread = %d, %v; want 0", got, err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 2 {
+		t.Fatalf("Bob unread = %d, %v; want 2", got, err)
+	}
+	if _, err := universeWorld.Chat.Inbox(ctx, bob); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 2 {
+		t.Fatalf("listing the inbox marked messages read: %d, %v", got, err)
+	}
+	if _, err := universeWorld.Chat.Conversation(ctx, bob, direct.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 0 {
+		t.Fatalf("Bob unread after opening = %d, %v; want 0", got, err)
+	}
+
+	third, err := universeWorld.Chat.Send(ctx, alice, direct.ID, appchat.Draft{
+		Body: "Troisième", ClientKey: "unread-direct-third",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 1 {
+		t.Fatalf("Bob unread after another message = %d, %v; want 1", got, err)
+	}
+	update, err := universeWorld.Chat.Updates(ctx, bob, direct.ID, second.ID)
+	if err != nil || len(update.Messages) != 1 || update.Messages[0].ID != third.ID {
+		t.Fatalf("Bob update = %#v, %v", update, err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 0 {
+		t.Fatalf("Bob unread after visible update = %d, %v; want 0", got, err)
+	}
+	if err := universeWorld.Chat.Repository.MarkReadThrough(ctx, bob.AccountID, direct.ID, first.ID, universeWorld.Clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 0 {
+		t.Fatalf("an old cursor moved backwards: %d, %v", got, err)
+	}
+	if err := universeWorld.Chat.Repository.MarkReadThrough(ctx, charlie.AccountID, direct.ID, first.ID, universeWorld.Clock.Now()); !errors.Is(err, appchat.ErrNotFound) {
+		t.Fatalf("stranger mark-read error = %v, want not found", err)
+	}
+
+	if _, err := universeWorld.Alliance.Create(ctx, alice, "Les Veilleurs", "veil", ""); err != nil {
+		t.Fatal(err)
+	}
+	allianceRoom, err := universeWorld.Chat.Alliance(ctx, alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universeWorld.Chat.Send(ctx, alice, allianceRoom.ID, appchat.Draft{
+		Body: "Avant Bob", ClientKey: "unread-alliance-before",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	universeWorld.Clock.Advance(time.Second)
+	joinAlliance(t, ctx, universeWorld, alice, bob, "Bob")
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 0 {
+		t.Fatalf("pre-membership alliance unread = %d, %v; want 0", got, err)
+	}
+	if _, err := universeWorld.Chat.Send(ctx, alice, allianceRoom.ID, appchat.Draft{
+		Body: "Après Bob", ClientKey: "unread-alliance-after",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 1 {
+		t.Fatalf("alliance unread = %d, %v; want 1", got, err)
+	}
+	if err := universeWorld.Alliance.Leave(ctx, bob); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := universeWorld.Chat.UnreadCount(ctx, bob); err != nil || got != 0 {
+		t.Fatalf("former member unread = %d, %v; want 0", got, err)
+	}
+}
+
 func TestOnlyAdministratorsCanSuperviseEveryChat(t *testing.T) {
 	ctx := context.Background()
 	database := economyDatabase(t, ctx, 4)
@@ -125,6 +235,11 @@ func TestOnlyAdministratorsCanSuperviseEveryChat(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := universeWorld.Chat.Send(ctx, bob, conversation.ID, appchat.Draft{
+		Body: "Bien reçu.", ClientKey: "admin-visible-reply",
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	admin := appauth.Principal{AccountID: 4, Username: "admin", Roles: []appauth.Role{appauth.RoleAdmin}}
 	moderator := appauth.Principal{AccountID: 3, Username: "moderator", Roles: []appauth.Role{appauth.RoleModerator}}
@@ -134,7 +249,8 @@ func TestOnlyAdministratorsCanSuperviseEveryChat(t *testing.T) {
 		t.Fatalf("AdministrativeInbox() = %#v, %v", listed, err)
 	}
 	inspected, err := universeWorld.Chat.AdministrativeConversation(ctx, admin, conversation.ID)
-	if err != nil || len(inspected.Messages) != 1 || inspected.Messages[0].Body != "Coordonnées confirmées." {
+	if err != nil || len(inspected.Messages) != 2 || inspected.Messages[0].Body != "Coordonnées confirmées." ||
+		!inspected.Messages[0].FromInitiator || inspected.Messages[1].FromInitiator {
 		t.Fatalf("AdministrativeConversation() = %#v, %v", inspected, err)
 	}
 	for name, principal := range map[string]appauth.Principal{"moderator": moderator, "player": player} {
@@ -204,6 +320,11 @@ func TestWebChatOpensFromTheGalaxyAndUpdatesWithoutReloading(t *testing.T) {
 			t.Fatalf("Bob page misses %s: %q", expected, bobPage)
 		}
 	}
+	if _, err := universeWorld.Chat.Send(ctx, bob, 1, appchat.Draft{
+		Body: "Bien reçu.", ClientKey: "web-message-reply",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	joinAlliance(t, ctx, universeWorld, alice, bob, "Bob")
 	alliancePage := getPage(t, playerHandler, "/chat/alliance", session, csrf)
 	for _, expected := range []string{"Canal commun", "Alliance [COR] Les Corsaires", `href="/chat/alliance"`} {
@@ -214,12 +335,104 @@ func TestWebChatOpensFromTheGalaxyAndUpdatesWithoutReloading(t *testing.T) {
 
 	admin := appauth.Principal{AccountID: 4, Username: "admin", Roles: []appauth.Role{appauth.RoleAdmin}}
 	adminPage := getPage(t, chatHandler(t, universeWorld, admin), "/admin/chats/1", session, csrf)
-	if !strings.Contains(adminPage, "Vue globale en lecture seule") || !strings.Contains(adminPage, "À l&#39;attaque ! ⚔️") {
-		t.Fatalf("administrator chat page = %q", adminPage)
+	for _, expected := range []string{
+		"Vue globale en lecture seule", "À l&#39;attaque ! ⚔️", "Bien reçu.",
+		`class="chat-message">`, `class="chat-message chat-message--right"`,
+	} {
+		if !strings.Contains(adminPage, expected) {
+			t.Fatalf("administrator chat page misses %s: %q", expected, adminPage)
+		}
 	}
 	moderator := appauth.Principal{AccountID: 3, Username: "moderator", Roles: []appauth.Role{appauth.RoleModerator}}
 	if status := statusOf(t, chatHandler(t, universeWorld, moderator), "/admin/chats", session, csrf); status != http.StatusNotFound {
 		t.Fatalf("moderator GET /admin/chats = %d, want 404", status)
+	}
+}
+
+func TestWebNavigationShowsAndClearsUnreadMessages(t *testing.T) {
+	ctx := context.Background()
+	database := economyDatabase(t, ctx, 2)
+	universeWorld := newWorld(t, database, appclock.NewFake(time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)))
+	alice := appauth.Principal{AccountID: 1, Username: "player1", Roles: []appauth.Role{appauth.RolePlayer}}
+	bob := appauth.Principal{AccountID: 2, Username: "player2", Roles: []appauth.Role{appauth.RolePlayer}}
+	for _, player := range []struct {
+		principal appauth.Principal
+		name      string
+	}{{alice, "Alice"}, {bob, "Bob"}} {
+		if _, err := universeWorld.Economy.CreateEmpire(ctx, player.principal, player.name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	conversation, err := universeWorld.Chat.Direct(ctx, alice, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universeWorld.Chat.Send(ctx, alice, conversation.ID, appchat.Draft{
+		Body: "Message en attente", ClientKey: "web-unread-message",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	session := &http.Cookie{Name: "uaw_session", Value: "session"}
+	csrf := &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
+	bobHandler := chatHandler(t, universeWorld, bob)
+	page := getPage(t, bobHandler, "/galaxy/1/1", session, csrf)
+	for _, expected := range []string{
+		`data-chat-navigation`, `data-chat-unread`, `data-chat-unread-count>1</b>`,
+		`aria-label="Messagerie, nombre de messages non lus : 1"`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("navigation misses %s: %q", expected, page)
+		}
+	}
+
+	unreadResponse := httptest.NewRecorder()
+	unreadRequest := httptest.NewRequest(http.MethodGet, "/chat/unread", nil)
+	unreadRequest.Header.Set("Accept", "application/json")
+	unreadRequest.AddCookie(session)
+	bobHandler.ServeHTTP(unreadResponse, unreadRequest)
+	if unreadResponse.Code != http.StatusOK || unreadResponse.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("GET /chat/unread = %d, cache %q", unreadResponse.Code, unreadResponse.Header().Get("Cache-Control"))
+	}
+	var unread struct {
+		Count int `json:"count"`
+	}
+	if err := json.Unmarshal(unreadResponse.Body.Bytes(), &unread); err != nil || unread.Count != 1 {
+		t.Fatalf("unread response = %#v, %v", unread, err)
+	}
+
+	opened := getPage(t, bobHandler, "/chat/conversations/1", session, csrf)
+	if !strings.Contains(opened, `data-chat-unread hidden`) {
+		t.Fatalf("opening the conversation kept the unread marker: %q", opened)
+	}
+	if strings.Contains(opened, `aria-label="Messagerie, nombre de messages non lus`) {
+		t.Fatalf("opening the conversation kept the unread label: %q", opened)
+	}
+}
+
+func TestChatKeyboardUsesEnterToSendAndShiftEnterForANewline(t *testing.T) {
+	handler, err := webhandler.New(webhandler.Dependencies{
+		Authentication: webAuthenticationStub{}, ServerState: runningStateStub{},
+		CSRFSecrets: sequenceSecret{value: "csrf-token"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/static/app.js", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /static/app.js = %d", response.Code)
+	}
+	script := response.Body.String()
+	for _, expected := range []string{
+		`input.addEventListener("keydown"`,
+		`event.key !== "Enter" || event.shiftKey || event.isComposing || submit.disabled`,
+		`event.preventDefault()`,
+		`form.requestSubmit(submit)`,
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("chat keyboard behavior misses %q", expected)
+		}
 	}
 }
 

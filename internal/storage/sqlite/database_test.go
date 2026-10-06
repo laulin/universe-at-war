@@ -81,6 +81,83 @@ func TestMigrateRejectsFutureSchema(t *testing.T) {
 	}
 }
 
+func TestChatReadMigrationTreatsExistingHistoryAsRead(t *testing.T) {
+	ctx := context.Background()
+	database, err := Open(ctx, filepath.Join(t.TempDir(), "chat-upgrade.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	available, err := loadMigrations(migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Write().ExecContext(ctx, migrationTable); err != nil {
+		t.Fatal(err)
+	}
+	var readMigration migration
+	for _, candidate := range available {
+		if candidate.version == 22 {
+			readMigration = candidate
+			break
+		}
+		if err := applyMigration(ctx, database.Write(), candidate); err != nil {
+			t.Fatalf("apply migration %d: %v", candidate.version, err)
+		}
+	}
+	if readMigration.version == 0 {
+		t.Fatal("chat read migration is missing")
+	}
+	statements := []string{
+		`INSERT INTO accounts(id, username, username_normalized, created_at, updated_at) VALUES
+			(1, 'player1', 'player1', '2042-09-10T11:00:00Z', '2042-09-10T11:00:00Z'),
+			(2, 'player2', 'player2', '2042-09-10T11:00:00Z', '2042-09-10T11:00:00Z')`,
+		`INSERT INTO players(id, account_id, display_name, created_at) VALUES
+			(1, 1, 'Alice', '2042-09-10T11:00:00Z'),
+			(2, 2, 'Bob', '2042-09-10T11:00:00Z')`,
+		`INSERT INTO alliances(id, name, name_normalized, tag, founder_player_id, created_at)
+			VALUES (1, 'Les Veilleurs', 'les veilleurs', 'VEIL', 1, '2042-09-10T11:00:00Z')`,
+		`INSERT INTO alliance_members(player_id, alliance_id, role, joined_at) VALUES
+			(1, 1, 'founder', '2042-09-10T11:00:00Z'),
+			(2, 1, 'member', '2042-09-10T11:00:00Z')`,
+		`INSERT INTO chat_conversations(id, kind, player_one_id, player_two_id, created_at, updated_at)
+			VALUES (1, 'direct', 1, 2, '2042-09-10T11:00:00Z', '2042-09-10T11:02:00Z')`,
+		`INSERT INTO chat_conversations(id, kind, alliance_id, created_at, updated_at)
+			VALUES (2, 'alliance', 1, '2042-09-10T11:00:00Z', '2042-09-10T11:03:00Z')`,
+		`INSERT INTO chat_messages(id, conversation_id, author_player_id, author_name, body, client_key, created_at) VALUES
+			(1, 1, 1, 'Alice', 'ancien direct', 'upgrade-message-1', '2042-09-10T11:01:00Z'),
+			(2, 1, 2, 'Bob', 'réponse ancienne', 'upgrade-message-2', '2042-09-10T11:02:00Z'),
+			(3, 2, 1, 'Alice', 'ancienne alliance', 'upgrade-message-3', '2042-09-10T11:03:00Z')`,
+	}
+	for _, statement := range statements {
+		if _, err := database.Write().ExecContext(ctx, statement); err != nil {
+			t.Fatalf("seed chat upgrade: %v", err)
+		}
+	}
+	if err := applyMigration(ctx, database.Write(), readMigration); err != nil {
+		t.Fatalf("apply chat read migration: %v", err)
+	}
+	var states int
+	if err := database.Read().QueryRowContext(ctx, "SELECT COUNT(*) FROM chat_read_states").Scan(&states); err != nil || states != 4 {
+		t.Fatalf("read states after upgrade = %d, %v; want 4", states, err)
+	}
+	repository := NewChatRepository(database.Read(), database.Write())
+	for _, accountID := range []int64{1, 2} {
+		if unread, err := repository.UnreadCount(ctx, accountID); err != nil || unread != 0 {
+			t.Fatalf("account %d historical unread = %d, %v; want 0", accountID, unread, err)
+		}
+	}
+	if _, err := database.Write().ExecContext(ctx, `
+		INSERT INTO chat_messages(id, conversation_id, author_player_id, author_name, body, client_key, created_at)
+		VALUES (4, 1, 1, 'Alice', 'nouveau direct', 'upgrade-message-4', '2042-09-10T11:04:00Z')
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if unread, err := repository.UnreadCount(ctx, 2); err != nil || unread != 1 {
+		t.Fatalf("new unread after upgrade = %d, %v; want 1", unread, err)
+	}
+}
+
 func TestIntegrityCheck(t *testing.T) {
 	ctx := context.Background()
 	database, err := Open(ctx, filepath.Join(t.TempDir(), "universe.db"))

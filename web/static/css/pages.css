@@ -295,7 +295,7 @@
     radial-gradient(circle at 80% 75%, rgba(111, 208, 140, 0.025), transparent 25%);
 }
 .chat-message { display: flex; justify-content: flex-start; }
-.chat-message--own { justify-content: flex-end; }
+.chat-message--own, .chat-message--right { justify-content: flex-end; }
 .chat-message article {
   max-width: min(78%, 36rem);
   padding: var(--space-2) var(--space-3);
@@ -304,7 +304,7 @@
   background: var(--surface-raised);
   box-shadow: 0 .2rem .6rem rgba(0, 0, 0, .25);
 }
-.chat-message--own article {
+.chat-message--own article, .chat-message--right article {
   border-color: #2d6684;
   border-radius: .75rem .75rem .2rem .75rem;
   background: #12344b;

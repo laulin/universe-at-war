@@ -162,6 +162,7 @@ type jumpGateService interface {
 
 type chatService interface {
 	Inbox(context.Context, appauth.Principal) (appchat.Inbox, error)
+	UnreadCount(context.Context, appauth.Principal) (int, error)
 	Direct(context.Context, appauth.Principal, int64) (appchat.Conversation, error)
 	Alliance(context.Context, appauth.Principal) (appchat.Conversation, error)
 	Conversation(context.Context, appauth.Principal, int64) (appchat.Conversation, error)
@@ -388,6 +389,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /planets/{planet}/fleet/operation", handler.openOperation)
 	handler.mux.HandleFunc("POST /fleets/{fleet}/withdraw", handler.withdrawFromOperation)
 	handler.mux.HandleFunc("GET /chat", handler.chatInboxPage)
+	handler.mux.HandleFunc("GET /chat/unread", handler.chatUnread)
 	handler.mux.HandleFunc("GET /chat/players/{player}", handler.directChatPage)
 	handler.mux.HandleFunc("GET /chat/alliance", handler.allianceChatPage)
 	handler.mux.HandleFunc("GET /chat/conversations/{conversation}", handler.conversationChatPage)
@@ -1274,6 +1276,7 @@ type pageShell struct {
 	Administrator      bool
 	Messaging          bool
 	ChatAdministration bool
+	UnreadMessages     int
 }
 
 // bodyLink is one entry of the celestial body column: identity plus the settled
@@ -1370,6 +1373,11 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 	if h.reports != nil {
 		if alerts, err := h.reports.UnreadHostile(ctx, principal); err == nil {
 			shell.Alerts = alerts
+		}
+	}
+	if shell.Messaging {
+		if unread, err := h.chat.UnreadCount(ctx, principal); err == nil {
+			shell.UnreadMessages = unread
 		}
 	}
 	activities := appactivity.Snapshot{Bodies: map[int64]appactivity.Body{}}

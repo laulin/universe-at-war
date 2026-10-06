@@ -181,6 +181,7 @@
     const gifPreview = chat.querySelector("[data-chat-gif-preview]");
     const typingStatus = chat.querySelector("[data-chat-typing-status]");
     const error = chat.querySelector("[data-chat-error]");
+    const submit = form.querySelector('button[type="submit"]');
     let lastID = Number(messages.dataset.lastId || 0);
     let polling = false;
     let lastTypingNotice = 0;
@@ -295,7 +296,6 @@
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       clearError();
-      const submit = form.querySelector('button[type="submit"]');
       submit.disabled = true;
       try {
         const response = await fetch(form.action, {
@@ -325,6 +325,15 @@
       }
     });
     input.addEventListener("input", announceTyping);
+    input.addEventListener("keydown", (event) => {
+      // Enter sends; Shift+Enter keeps the textarea's native newline. During
+      // an IME composition Enter only confirms the composed character.
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing || submit.disabled) {
+        return;
+      }
+      event.preventDefault();
+      form.requestSubmit(submit);
+    });
 
     const emoji = chat.querySelector("[data-chat-emoji]");
     if (emoji) {
@@ -356,6 +365,52 @@
     scrollToLatest();
     window.setInterval(poll, 2000);
     window.setTimeout(poll, 400);
+  }
+
+  // The server renders the first unread count, then this small global poll
+  // keeps the navigation useful while the player stays on an economy screen.
+  // A hidden tab makes no requests and refreshes as soon as it is visible.
+  const chatNavigation = document.querySelector("[data-chat-navigation]");
+  const chatUnread = document.querySelector("[data-chat-unread]");
+  if (chatNavigation && chatUnread) {
+    const count = chatUnread.querySelector("[data-chat-unread-count]");
+    let checkingUnread = false;
+    const showUnread = (value) => {
+      const unread = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+      count.textContent = String(unread);
+      chatUnread.hidden = unread === 0;
+      if (unread > 0) {
+        chatNavigation.setAttribute("aria-label", `Messagerie, nombre de messages non lus : ${unread}`);
+      } else {
+        chatNavigation.removeAttribute("aria-label");
+      }
+    };
+    const refreshUnread = async () => {
+      if (checkingUnread || document.hidden) {
+        return;
+      }
+      checkingUnread = true;
+      try {
+        const response = await fetch("/chat/unread", {
+          headers: { Accept: "application/json" },
+          credentials: "same-origin",
+        });
+        if (response.ok) {
+          const result = await response.json();
+          showUnread(Number(result.count));
+        }
+      } catch (_) {
+        // The server-rendered value remains valid enough until the next retry.
+      } finally {
+        checkingUnread = false;
+      }
+    };
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        refreshUnread();
+      }
+    });
+    window.setInterval(refreshUnread, 10000);
   }
 
   if (countdowns.length === 0 && bars.length === 0 && counters.length === 0 && awaiting.length === 0) {

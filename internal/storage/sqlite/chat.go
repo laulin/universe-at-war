@@ -75,6 +75,39 @@ func (r *ChatRepository) ListForAccount(ctx context.Context, accountID int64) (a
 	return appchat.Inbox{Conversations: summaries, HasAlliance: allianceID > 0}, nil
 }
 
+// UnreadCount counts incoming messages after the player's cursor in every room
+// they can currently access. Alliance history from before the current
+// membership is visible in the room but does not become a fresh notification.
+func (r *ChatRepository) UnreadCount(ctx context.Context, accountID int64) (int, error) {
+	playerID, _, err := chatPlayerByAccount(ctx, r.read, accountID)
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	err = r.read.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM chat_messages m
+		JOIN chat_conversations c ON c.id = m.conversation_id
+		LEFT JOIN chat_read_states state
+			ON state.conversation_id = c.id AND state.player_id = ?
+		LEFT JOIN alliance_members membership
+			ON c.kind = 'alliance' AND membership.alliance_id = c.alliance_id
+			AND membership.player_id = ?
+		WHERE (
+			(c.kind = 'direct' AND (c.player_one_id = ? OR c.player_two_id = ?))
+			OR
+			(c.kind = 'alliance' AND membership.player_id IS NOT NULL
+				AND m.created_at >= membership.joined_at)
+		)
+		AND (m.author_player_id IS NULL OR m.author_player_id <> ?)
+		AND m.id > COALESCE(state.last_read_message_id, 0)
+	`, playerID, playerID, playerID, playerID, playerID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("chat repository: count unread: %w", err)
+	}
+	return count, nil
+}
+
 func (r *ChatRepository) OpenDirect(ctx context.Context, accountID, targetPlayerID int64, now time.Time, limit int) (appchat.Conversation, error) {
 	var conversation appchat.Conversation
 	err := withWriteTx(ctx, r.write, "chat repository: open direct", func(tx *sql.Tx) error {
@@ -156,6 +189,51 @@ func (r *ChatRepository) ConversationForAccount(ctx context.Context, accountID, 
 		return appchat.Conversation{}, err
 	}
 	return conversationForPlayer(ctx, r.read, conversationID, playerID, afterID, limit)
+}
+
+// MarkReadThrough advances one player's cursor without ever allowing an older
+// request to move it backwards. Authorization and message ownership are checked
+// in the same transaction as the update.
+func (r *ChatRepository) MarkReadThrough(ctx context.Context, accountID, conversationID, messageID int64, now time.Time) error {
+	if messageID <= 0 {
+		return nil
+	}
+	return withWriteTx(ctx, r.write, "chat repository: mark read", func(tx *sql.Tx) error {
+		playerID, _, err := chatPlayerByAccount(ctx, tx, accountID)
+		if err != nil {
+			return err
+		}
+		meta, err := readConversationMeta(ctx, tx, conversationID)
+		if err != nil {
+			return err
+		}
+		if err := authorizeConversation(ctx, tx, meta, playerID); err != nil {
+			return err
+		}
+		var belongs int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM chat_messages WHERE id = ? AND conversation_id = ?
+			)
+		`, messageID, conversationID).Scan(&belongs); err != nil {
+			return fmt.Errorf("chat repository: inspect read cursor: %w", err)
+		}
+		if belongs == 0 {
+			return appchat.ErrNotFound
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO chat_read_states(conversation_id, player_id, last_read_message_id, read_at)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(conversation_id, player_id) DO UPDATE SET
+				last_read_message_id = MAX(chat_read_states.last_read_message_id, excluded.last_read_message_id),
+				read_at = CASE
+					WHEN excluded.last_read_message_id > chat_read_states.last_read_message_id
+					THEN excluded.read_at ELSE chat_read_states.read_at END
+		`, conversationID, playerID, messageID, timestamp(now)); err != nil {
+			return fmt.Errorf("chat repository: advance read cursor: %w", err)
+		}
+		return nil
+	})
 }
 
 func (r *ChatRepository) Append(ctx context.Context, accountID, conversationID int64, draft appchat.Draft, now time.Time) (appchat.Message, error) {
@@ -249,7 +327,43 @@ func (r *ChatRepository) ConversationForAdministrator(ctx context.Context, conve
 	}
 	conversation := conversationFromMeta(meta, 0, true)
 	conversation.Messages, err = loadChatMessages(ctx, r.read, conversationID, afterID, limit, 0)
-	return conversation, err
+	if err != nil {
+		return appchat.Conversation{}, err
+	}
+	initiatorID, initiatorName, err := conversationInitiator(ctx, r.read, conversationID)
+	if err != nil {
+		return appchat.Conversation{}, err
+	}
+	for index := range conversation.Messages {
+		message := &conversation.Messages[index]
+		if initiatorID > 0 {
+			message.FromInitiator = message.AuthorPlayerID == initiatorID
+		} else {
+			// A deleted author leaves their immutable display name on each
+			// message, which still keeps the historical sides stable.
+			message.FromInitiator = initiatorName != "" && message.AuthorName == initiatorName
+		}
+	}
+	return conversation, nil
+}
+
+func conversationInitiator(ctx context.Context, query chatQueryer, conversationID int64) (int64, string, error) {
+	var authorID sql.NullInt64
+	var authorName string
+	err := query.QueryRowContext(ctx, `
+		SELECT author_player_id, author_name
+		FROM chat_messages
+		WHERE conversation_id = ?
+		ORDER BY id
+		LIMIT 1
+	`, conversationID).Scan(&authorID, &authorName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, "", nil
+	}
+	if err != nil {
+		return 0, "", fmt.Errorf("chat repository: read conversation initiator: %w", err)
+	}
+	return authorID.Int64, authorName, nil
 }
 
 func chatPlayerByAccount(ctx context.Context, query chatQueryer, accountID int64) (int64, string, error) {

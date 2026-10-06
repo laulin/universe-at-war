@@ -22,7 +22,7 @@
       </header>
       <ol class="chat-messages" aria-label="Conversation {{.Title}}">
         {{range .Messages}}
-        <li class="chat-message">
+        <li class="chat-message{{if not .FromInitiator}} chat-message--right{{end}}">
           <article>
             <header><strong>{{.AuthorName}}</strong><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.CreatedAt.Format "02/01/2006 15:04"}}</time></header>
             {{if .Body}}<p>{{.Body}}</p>{{end}}

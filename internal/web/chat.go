@@ -35,6 +35,25 @@ func (h *Handler) chatInboxPage(response http.ResponseWriter, request *http.Requ
 	h.renderChat(response, request, principal, nil, "/chat")
 }
 
+func (h *Handler) chatUnread(response http.ResponseWriter, request *http.Request) {
+	principal, _, ok := h.requirePrincipal(response, request)
+	if !ok {
+		return
+	}
+	if h.chat == nil {
+		http.NotFound(response, request)
+		return
+	}
+	count, err := h.chat.UnreadCount(request.Context(), principal)
+	if err != nil {
+		handleChatReadError(response, request, err)
+		return
+	}
+	writeChatJSON(response, http.StatusOK, struct {
+		Count int `json:"count"`
+	}{Count: count})
+}
+
 func (h *Handler) directChatPage(response http.ResponseWriter, request *http.Request) {
 	principal, _, ok := h.requirePrincipal(response, request)
 	if !ok {
