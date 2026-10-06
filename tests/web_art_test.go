@@ -151,39 +151,44 @@ func TestArtPlaceholdersAreDeterministic(t *testing.T) {
 }
 
 // A missing illustration is invisible: the slot quietly falls back to a
-// placeholder and no screen ever says so. The shipyard is the first family to
-// be illustrated in full, so the catalogue and the folder are held against each
-// other in both directions.
-func TestEveryShipOfTheCatalogueIsIllustrated(t *testing.T) {
+// placeholder and no screen ever says so. The catalogue and the folders are
+// therefore held against each other in both directions for every fully
+// illustrated unit family.
+func TestEveryShipAndDefenseOfTheCatalogueIsIllustrated(t *testing.T) {
 	handler := artHandler(t)
 
-	illustrated := map[string]bool{}
-	for _, definition := range unit.DefaultCatalogue().Definitions(unit.Ship) {
-		slug := string(definition.ID)
-		illustrated[slug] = true
-		recorder := fetch(handler, "/art/ship/"+slug)
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("GET /art/ship/%s = %d", slug, recorder.Code)
-		}
-		if contentType := recorder.Header().Get("Content-Type"); contentType != "image/webp" {
-			t.Fatalf("/art/ship/%s served %q: the slot has no artwork", slug, contentType)
-		}
-		if cache := recorder.Header().Get("Cache-Control"); !strings.Contains(cache, "immutable") {
-			t.Fatalf("/art/ship/%s cache control = %q", slug, cache)
-		}
-	}
+	for _, family := range []unit.Family{unit.Ship, unit.Defense} {
+		category := string(family)
+		t.Run(category, func(t *testing.T) {
+			illustrated := map[string]bool{}
+			for _, definition := range unit.DefaultCatalogue().Definitions(family) {
+				slug := string(definition.ID)
+				illustrated[slug] = true
+				recorder := fetch(handler, "/art/"+category+"/"+slug)
+				if recorder.Code != http.StatusOK {
+					t.Fatalf("GET /art/%s/%s = %d", category, slug, recorder.Code)
+				}
+				if contentType := recorder.Header().Get("Content-Type"); contentType != "image/webp" {
+					t.Fatalf("/art/%s/%s served %q: the slot has no artwork", category, slug, contentType)
+				}
+				if cache := recorder.Header().Get("Cache-Control"); !strings.Contains(cache, "immutable") {
+					t.Fatalf("/art/%s/%s cache control = %q", category, slug, cache)
+				}
+			}
 
-	// The other way round: a file the catalogue does not name would travel in
-	// every binary and be requested by nobody.
-	entries, err := fs.ReadDir(webassets.Files, "static/art/ship")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		slug := strings.TrimSuffix(entry.Name(), path.Ext(entry.Name()))
-		if !illustrated[slug] {
-			t.Fatalf("static/art/ship/%s fills no slot of the catalogue", entry.Name())
-		}
+			// The other way round: a file the catalogue does not name would travel
+			// in every binary and be requested by nobody.
+			entries, err := fs.ReadDir(webassets.Files, "static/art/"+category)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				slug := strings.TrimSuffix(entry.Name(), path.Ext(entry.Name()))
+				if !illustrated[slug] {
+					t.Fatalf("static/art/%s/%s fills no slot of the catalogue", category, entry.Name())
+				}
+			}
+		})
 	}
 }
 

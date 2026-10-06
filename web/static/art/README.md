@@ -12,7 +12,7 @@ and no stylesheet changes.
 | `building` | the building identifier       | 640 x 480      | all 13 planetary buildings |
 | `research` | the research identifier       | 640 x 480      | all 16 technologies |
 | `ship`     | the unit identifier           | 640 x 480      | all 14 |
-| `defense`  | the unit identifier           | 640 x 480      | no     |
+| `defense`  | the unit identifier           | 640 x 480      | all 10 |
 | `body`     | `planet-1` … `planet-15`, or `moon` | 512 x 512 | all 16 orbital bodies |
 | `surface`  | settlement selected from completed buildings | 1920 x 600 | all 8 settlements |
 | `banner`   | the section name              | 1920 x 600     | shipyard |
