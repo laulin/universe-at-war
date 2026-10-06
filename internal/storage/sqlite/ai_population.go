@@ -12,8 +12,8 @@ import (
 )
 
 // Census reports what the population reconciler compares its standing order
-// against: whether the universe runs, the ruleset in force, and how many slots
-// the artificial population has already spent.
+// against: whether the universe runs, the ruleset in force, how many players
+// are active and how many identities have already been provisioned.
 //
 // A universe with no active ruleset is not broken, it is not started: it
 // reports itself as not running rather than as an error.
@@ -39,7 +39,11 @@ func (r *AIRepository) Census(ctx context.Context) (appai.Census, error) {
 	// which a retirement keeps, or its empire, which nothing removes. Only an
 	// account left behind by a birth that never reached either is free to be
 	// tried again.
-	var provisioned int
+	var active, provisioned int
+	if err := r.write.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM ai_profiles WHERE state = 'active'").Scan(&active); err != nil {
+		return appai.Census{}, fmt.Errorf("ai repository: count active artificial population: %w", err)
+	}
 	if err := r.write.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM accounts a
 		WHERE a.kind = 'ai' AND (
@@ -49,7 +53,42 @@ func (r *AIRepository) Census(ctx context.Context) (appai.Census, error) {
 	`).Scan(&provisioned); err != nil {
 		return appai.Census{}, fmt.Errorf("ai repository: count artificial population: %w", err)
 	}
-	return appai.Census{Running: true, Rules: configured, Provisioned: provisioned}, nil
+	return appai.Census{Running: true, Rules: configured, Active: active, Provisioned: provisioned}, nil
+}
+
+// Departures finds objective exits: an active profile which owns no world any
+// more. It also exposes stale memberships of already retired players so an
+// upgraded universe repairs them through the same idempotent retirement path.
+func (r *AIRepository) Departures(ctx context.Context, limit int) ([]appai.Departure, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows, err := r.write.QueryContext(ctx, `
+		SELECT p.player_id, p.state = 'active'
+		FROM ai_profiles p
+		WHERE (p.state = 'active' AND NOT EXISTS (
+			SELECT 1 FROM planets b WHERE b.owner_player_id = p.player_id
+		)) OR (p.state = 'retired' AND EXISTS (
+			SELECT 1 FROM alliance_members m WHERE m.player_id = p.player_id
+		))
+		ORDER BY p.player_id LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("ai repository: read artificial departures: %w", err)
+	}
+	defer rows.Close()
+	var departures []appai.Departure
+	for rows.Next() {
+		var departure appai.Departure
+		if err := rows.Scan(&departure.PlayerID, &departure.Active); err != nil {
+			return nil, fmt.Errorf("ai repository: scan artificial departure: %w", err)
+		}
+		departures = append(departures, departure)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ai repository: iterate artificial departures: %w", err)
+	}
+	return departures, nil
 }
 
 // Teams reports the strength of the named alliances, one entry per tag and in

@@ -201,6 +201,15 @@ func (s Service) Retire(ctx context.Context, principal appauth.Principal, player
 	if err := s.validate(principal); err != nil {
 		return err
 	}
+	return s.retire(ctx, playerID)
+}
+
+// retire is the common departure path for an administrator and for the
+// population reconciler noticing an empire with no world left.
+func (s Service) retire(ctx context.Context, playerID int64) error {
+	if s.Clock == nil || s.Repository == nil {
+		return errors.New("ai: incomplete service dependencies")
+	}
 	if playerID <= 0 {
 		return ErrNotFound
 	}

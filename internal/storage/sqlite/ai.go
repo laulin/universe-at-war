@@ -12,6 +12,7 @@ import (
 
 	appai "universeatwar/internal/app/ai"
 	domainai "universeatwar/internal/domain/ai"
+	domainalliance "universeatwar/internal/domain/alliance"
 	"universeatwar/internal/domain/universe"
 )
 
@@ -253,23 +254,74 @@ func (r *AIRepository) Retire(ctx context.Context, playerID int64, now time.Time
 			if !exists {
 				return appai.ErrNotFound
 			}
-			// Already retired: retiring again changes nothing.
-			return nil
+		} else {
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE scheduled_events SET state = 'cancelled', processed_at = ?
+				WHERE entity_type = 'player' AND entity_id = ? AND event_type = 'ai_think' AND state = 'pending'
+			`, timestamp(now), strconv.FormatInt(playerID, 10)); err != nil {
+				return fmt.Errorf("ai repository: cancel the reflection: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE accounts SET status = 'disabled', updated_at = ?
+				WHERE id = (SELECT account_id FROM ai_profiles WHERE player_id = ?)
+			`, timestamp(now), playerID); err != nil {
+				return fmt.Errorf("ai repository: disable account: %w", err)
+			}
 		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE scheduled_events SET state = 'cancelled', processed_at = ?
-			WHERE entity_type = 'player' AND entity_id = ? AND event_type = 'ai_think' AND state = 'pending'
-		`, timestamp(now), strconv.FormatInt(playerID, 10)); err != nil {
-			return fmt.Errorf("ai repository: cancel the reflection: %w", err)
+		return retireAllianceMembership(ctx, tx, playerID, now)
+	})
+}
+
+// retireAllianceMembership makes a departure visible to its former team. A
+// founder hands the charge to the longest-standing remaining member; the final
+// member dissolves the alliance, as with an ordinary departure.
+func retireAllianceMembership(ctx context.Context, tx *sql.Tx, playerID int64, now time.Time) error {
+	var allianceID int64
+	var role string
+	err := tx.QueryRowContext(ctx,
+		"SELECT alliance_id, role FROM alliance_members WHERE player_id = ?", playerID).
+		Scan(&allianceID, &role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("ai repository: read departing alliance: %w", err)
+	}
+	members, err := memberCount(ctx, tx, allianceID)
+	if err != nil {
+		return err
+	}
+	if members == 1 {
+		if err := removeMember(ctx, tx, playerID); err != nil {
+			return err
 		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE accounts SET status = 'disabled', updated_at = ?
-			WHERE id = (SELECT account_id FROM ai_profiles WHERE player_id = ?)
-		`, timestamp(now), playerID); err != nil {
-			return fmt.Errorf("ai repository: disable account: %w", err)
+		if _, err := tx.ExecContext(ctx, "DELETE FROM alliances WHERE id = ?", allianceID); err != nil {
+			return fmt.Errorf("ai repository: dissolve departed alliance: %w", err)
 		}
 		return nil
-	})
+	}
+	if domainalliance.Role(role) == domainalliance.Founder {
+		var successor int64
+		if err := tx.QueryRowContext(ctx, `
+			SELECT player_id FROM alliance_members
+			WHERE alliance_id = ? AND player_id <> ?
+			ORDER BY CASE role WHEN 'officer' THEN 0 ELSE 1 END, joined_at, player_id LIMIT 1
+		`, allianceID, playerID).Scan(&successor); err != nil {
+			return fmt.Errorf("ai repository: choose successor: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE alliance_members SET role = 'founder' WHERE player_id = ?", successor); err != nil {
+			return fmt.Errorf("ai repository: promote successor: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE alliances SET founder_player_id = ? WHERE id = ?", successor, allianceID); err != nil {
+			return fmt.Errorf("ai repository: record successor: %w", err)
+		}
+	}
+	if err := removeMember(ctx, tx, playerID); err != nil {
+		return err
+	}
+	return recordHistory(ctx, tx, allianceID, playerID, "member_left", playerID, now, "json_object('reason', 'retired')")
 }
 
 // List reports on every artificial player of the universe.

@@ -182,9 +182,10 @@ func TestPopulatingTwiceCreatesNobody(t *testing.T) {
 	}
 }
 
-// TestARetiredPlayerIsNotBornAgain proves a decision an administrator took
-// sticks: the slot a retired player spent stays spent.
-func TestARetiredPlayerIsNotBornAgain(t *testing.T) {
+// TestARetiredPlayerMakesRoomForANewcomer proves the configured total is a
+// living population rather than a lifetime quota. The departed player stays
+// retired and a distinct identity takes the vacant place.
+func TestARetiredPlayerMakesRoomForANewcomer(t *testing.T) {
 	ctx := context.Background()
 	universeWorld := populationWorld(t, ctx, 1, artificialPopulation(nil))
 	admin := appauth.Principal{AccountID: 1, Roles: []appauth.Role{appauth.RoleAdmin}}
@@ -200,18 +201,69 @@ func TestARetiredPlayerIsNotBornAgain(t *testing.T) {
 		t.Fatalf("Retire() error = %v", err)
 	}
 
-	if born := settle(t, ctx, universeWorld); born != 0 {
-		t.Fatalf("settle() after a retirement = %d, want nobody", born)
+	if born := settle(t, ctx, universeWorld); born != 1 {
+		t.Fatalf("settle() after a retirement = %d, want one newcomer", born)
 	}
-	if total := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM ai_profiles"); total != 7 {
-		t.Fatalf("artificial profiles = %d, want the same 7", total)
+	if total := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM ai_profiles"); total != 8 {
+		t.Fatalf("artificial profiles = %d, want 7 active and one retired", total)
+	}
+	if active := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM ai_profiles WHERE state = 'active'"); active != 7 {
+		t.Fatalf("active artificial players = %d, want 7", active)
 	}
 	if still := count(t, ctx, universeWorld,
 		"SELECT COUNT(*) FROM ai_profiles WHERE player_id = ? AND state = 'retired'", retired); still != 1 {
 		t.Fatalf("the retired player came back")
 	}
-	if after := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM accounts"); after != accounts {
-		t.Fatalf("accounts = %d, want %d", after, accounts)
+	if after := count(t, ctx, universeWorld, "SELECT COUNT(*) FROM accounts"); after != accounts+1 {
+		t.Fatalf("accounts = %d, want %d", after, accounts+1)
+	}
+	if members := count(t, ctx, universeWorld,
+		"SELECT COUNT(*) FROM alliance_members m JOIN alliances a ON a.id = m.alliance_id WHERE a.tag = 'IA1'"); members != 2 {
+		t.Fatalf("members of IA1 = %d after replacement, want 2", members)
+	}
+	if stale := count(t, ctx, universeWorld,
+		"SELECT COUNT(*) FROM alliance_members WHERE player_id = ?", retired); stale != 0 {
+		t.Fatalf("retired player still belongs to an alliance")
+	}
+}
+
+// TestAPlayerWithoutAWorldLeavesAndIsReplaced covers an elimination coming
+// from the game rather than an administrator: once the final body disappears,
+// the profile is retired and the target population welcomes a newcomer.
+func TestAPlayerWithoutAWorldLeavesAndIsReplaced(t *testing.T) {
+	ctx := context.Background()
+	universeWorld := populationWorld(t, ctx, 1, artificialPopulation(func(configured *rules.Ruleset) {
+		configured.AI.Total = 3
+		configured.AI.AllianceCount = 0
+	}))
+	settle(t, ctx, universeWorld)
+
+	var eliminated int64
+	if err := universeWorld.Database.Write().QueryRowContext(ctx,
+		"SELECT player_id FROM ai_profiles WHERE state = 'active' ORDER BY player_id LIMIT 1").Scan(&eliminated); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := universeWorld.Database.Write().ExecContext(ctx,
+		"DELETE FROM planets WHERE owner_player_id = ?", eliminated); err != nil {
+		t.Fatal(err)
+	}
+
+	if born := settle(t, ctx, universeWorld); born != 1 {
+		t.Fatalf("settle() after elimination = %d, want one newcomer", born)
+	}
+	if active := count(t, ctx, universeWorld,
+		"SELECT COUNT(*) FROM ai_profiles WHERE state = 'active'"); active != 3 {
+		t.Fatalf("active artificial players = %d, want 3", active)
+	}
+	if departed := count(t, ctx, universeWorld,
+		"SELECT COUNT(*) FROM ai_profiles WHERE player_id = ? AND state = 'retired'", eliminated); departed != 1 {
+		t.Fatalf("eliminated player was not retired")
+	}
+	if disabled := count(t, ctx, universeWorld, `
+		SELECT COUNT(*) FROM accounts a JOIN ai_profiles p ON p.account_id = a.id
+		WHERE p.player_id = ? AND a.status = 'disabled'
+	`, eliminated); disabled != 1 {
+		t.Fatalf("eliminated player's account is still active")
 	}
 }
 

@@ -8,12 +8,14 @@ import (
 	"strings"
 	"time"
 
+	appadmin "universeatwar/internal/app/administration"
 	appai "universeatwar/internal/app/ai"
 	appalliance "universeatwar/internal/app/alliance"
 	appauth "universeatwar/internal/app/authentication"
 	appeconomy "universeatwar/internal/app/economy"
 	domainai "universeatwar/internal/domain/ai"
 	domainalliance "universeatwar/internal/domain/alliance"
+	"universeatwar/internal/domain/rules"
 )
 
 // artificialService is the administration of the server-driven players.
@@ -32,8 +34,23 @@ type artificialPageData struct {
 	pageShell
 	Players    []appai.Profile
 	Archetypes []domainai.Archetype
+	// Active is the living population; Players also contains departed profiles
+	// so their history remains inspectable.
+	Active int
+	// Retired remains visible as history and Pending is the number of newcomers
+	// the worker still owes to the active target.
+	Retired int
+	Pending int
 	// Configured is what the ruleset ordered, against which Players is read.
 	Configured int
+	// RulesVersion protects the short population form from overwriting a more
+	// recent settings change made in another administration tab.
+	RulesVersion     int64
+	AllianceCount    int
+	AllianceSize     int
+	IndependentCount int
+	Difficulty       string
+	MapCapacity      int
 }
 
 // artificialDetailPageData is the omniscient view of one artificial player. It
@@ -98,14 +115,110 @@ func (h *Handler) renderArtificials(response http.ResponseWriter, request *http.
 		http.Error(response, "artificial players unavailable", http.StatusInternalServerError)
 		return
 	}
+	active := 0
+	retired := 0
+	for _, player := range players {
+		if player.Retired {
+			retired++
+		} else {
+			active++
+		}
+	}
 	data := artificialPageData{
 		pageShell:  h.gameShell(request.Context(), token, principal, "admin", planets, h.rememberedBody(request)),
 		Players:    players,
 		Archetypes: domainai.Archetypes(),
+		Active:     active,
+		Retired:    retired,
 		Configured: configured,
+	}
+	data.Pending = max(0, configured-active)
+	if h.dashboard != nil {
+		settings, settingsErr := h.dashboard.GameSettings(request.Context(), principal)
+		if settingsErr != nil {
+			http.Error(response, "artificial population unavailable", http.StatusInternalServerError)
+			return
+		}
+		data.RulesVersion = settings.Version
+		data.Configured = settings.Rules.AI.Total
+		data.Pending = max(0, data.Configured-active)
+		data.AllianceCount = settings.Rules.AI.AllianceCount
+		data.AllianceSize = settings.Rules.AI.AllianceSize
+		data.IndependentCount = settings.Rules.AI.IndependentCount
+		data.Difficulty = settings.Rules.AI.Difficulty
+		data.MapCapacity = settings.Rules.Topology.Galaxies * settings.Rules.Topology.SystemsPerGalaxy *
+			settings.Rules.Topology.PositionsPerSystem
+	}
+	if request.URL.Query().Get("population") == "saved" {
+		data.Notice = "La cible de population IA a été mise à jour. Les nouveaux joueurs vont arriver progressivement."
 	}
 	data.Error = message
 	h.render(response, status, "admin-ai", data)
+}
+
+// updateArtificialPopulation changes only the active population target from
+// the dedicated administration screen. The complete document is still
+// validated, versioned and audited by the ordinary live-settings use case.
+func (h *Handler) updateArtificialPopulation(response http.ResponseWriter, request *http.Request) {
+	principal, ok := h.requireAdministrator(response, request)
+	if !ok || h.dashboard == nil || !h.validCSRF(response, request) {
+		return
+	}
+	current, err := h.dashboard.GameSettings(request.Context(), principal)
+	if err != nil {
+		http.Error(response, "artificial population unavailable", http.StatusInternalServerError)
+		return
+	}
+	expectedVersion, versionErr := strconv.ParseInt(request.PostFormValue("version"), 10, 64)
+	target, targetErr := strconv.Atoi(request.PostFormValue("target"))
+	capacity := current.Rules.Topology.Galaxies * current.Rules.Topology.SystemsPerGalaxy *
+		current.Rules.Topology.PositionsPerSystem
+	if versionErr != nil || targetErr != nil || target < 0 || target > capacity {
+		h.renderArtificials(response, request, http.StatusBadRequest, principal,
+			"La cible doit être un nombre compris entre zéro et la capacité de la carte.")
+		return
+	}
+	if expectedVersion != current.Version {
+		h.renderArtificials(response, request, http.StatusConflict, principal,
+			"Les paramètres ont changé depuis l'ouverture de cette page. La dernière version a été rechargée.")
+		return
+	}
+	if target != current.Rules.AI.Total {
+		updated := current.Rules
+		fitArtificialPopulation(&updated, target)
+		if _, err := h.dashboard.UpdateGameSettings(request.Context(), principal, current.Version, updated,
+			"Population IA active cible : "+strconv.Itoa(target)); err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, appadmin.ErrRulesConflict) {
+				status = http.StatusConflict
+			}
+			h.renderArtificials(response, request, status, principal, gameSettingsError(err))
+			return
+		}
+	}
+	if h.wakeSimulation != nil {
+		h.wakeSimulation()
+	}
+	http.Redirect(response, request, "/admin/ai?population=saved", http.StatusSeeOther)
+}
+
+// fitArtificialPopulation preserves the configured population shape whenever
+// it still fits. A smaller target trims whole teams first and then the declared
+// independent minimum, so the short form can never publish an invalid ruleset.
+func fitArtificialPopulation(configured *rules.Ruleset, target int) {
+	configured.AI.Total = target
+	if target <= 0 {
+		configured.AI.AllianceCount = 0
+		configured.AI.IndependentCount = 0
+		return
+	}
+	if !configured.Team.AlliancesEnabled || configured.AI.AllianceSize <= 0 {
+		configured.AI.AllianceCount = 0
+	} else {
+		configured.AI.AllianceCount = min(configured.AI.AllianceCount, target/configured.AI.AllianceSize)
+	}
+	teamMembers := configured.AI.AllianceCount * configured.AI.AllianceSize
+	configured.AI.IndependentCount = min(configured.AI.IndependentCount, target-teamMembers)
 }
 
 func (h *Handler) createArtificial(response http.ResponseWriter, request *http.Request) {

@@ -3,10 +3,42 @@
   <section class="panel-wide" aria-labelledby="ai-title">
     <p class="eyebrow">Administration</p>
     <h2 id="ai-title">Joueurs artificiels</h2>
-    {{if .Configured}}
-    <p class="muted">{{len .Players}} présents sur les {{.Configured}} que demande la configuration
-      {{if lt (len .Players) .Configured}}— l'univers se peuple encore, quelques joueurs à chaque passage.{{else}}— la population est au complet.{{end}}</p>
-    {{end}}
+
+    <div class="ai-population" aria-labelledby="population-title">
+      <div>
+        <h3 id="population-title">Population automatique</h3>
+        <dl class="ai-population__stats">
+          <div><dt>Actives</dt><dd>{{.Active}}</dd></div>
+          <div><dt>Cible</dt><dd>{{.Configured}}</dd></div>
+          <div><dt>Arrivées prévues</dt><dd>{{.Pending}}</dd></div>
+          <div><dt>Historique</dt><dd>{{.Retired}} retirées</dd></div>
+        </dl>
+        <p class="muted">
+          {{if gt .Pending 0}}De nouveaux joueurs vont arriver progressivement, par petits groupes.
+          {{else if gt .Active .Configured}}La cible est dépassée : aucun empire viable ne sera expulsé, les départs naturels réduiront la population.
+          {{else}}La population active a atteint sa cible.{{end}}
+        </p>
+        {{if .RulesVersion}}
+        <p class="muted">
+          Génération actuelle : archétypes variés, difficulté {{.Difficulty}}, empires répartis sur la carte
+          {{if .AllianceCount}}, avec {{.AllianceCount}} alliance{{if gt .AllianceCount 1}}s{{end}} de {{.AllianceSize}} IA et au moins {{.IndependentCount}} indépendante{{if ne .IndependentCount 1}}s{{end}}{{else}}, sans alliance imposée{{end}}.
+          <a href="/admin/settings">Réglages avancés</a>
+        </p>
+        {{end}}
+      </div>
+      {{if .RulesVersion}}
+      <form class="ai-population__form" method="post" action="/admin/ai/population">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="version" value="{{.RulesVersion}}">
+        <label for="population-target">Nombre d'IA actives souhaité
+          <input id="population-target" type="number" min="0" max="{{.MapCapacity}}" name="target" value="{{.Configured}}" required>
+        </label>
+        <button type="submit">Appliquer et lancer le peuplement</button>
+        <small class="muted">Les identités, personnalités et positions sont choisies automatiquement. Une baisse n'efface aucun empire actif.</small>
+      </form>
+      {{end}}
+    </div>
+
     {{if .Players}}
     <div class="admin-table-scroll">
     <table class="bodies admin-ai-table" aria-labelledby="ai-title">
@@ -56,24 +88,26 @@
     </div>
     {{else}}<p class="muted">Cet univers ne compte aucun joueur artificiel.</p>{{end}}
 
-    <h3 id="add-title">Ajouter un joueur artificiel</h3>
-    <form method="post" action="/admin/ai" aria-labelledby="add-title">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <label for="name">Nom</label>
-      <input id="name" name="name" required minlength="3" maxlength="32">
-      <label for="archetype">Archétype</label>
-      <select id="archetype" name="archetype">
-        {{range .Archetypes}}<option value="{{.}}">{{.}}</option>{{end}}
-      </select>
-      <label for="start_hour">Heure d'ouverture (UTC)</label>
-      <input id="start_hour" name="start_hour" type="number" min="0" max="23" value="8">
-      <label for="end_hour">Heure de fermeture (UTC)</label>
-      <input id="end_hour" name="end_hour" type="number" min="0" max="23" value="23">
-      <label for="interval_minutes">Intervalle de réflexion (minutes)</label>
-      <input id="interval_minutes" name="interval_minutes" type="number" min="1" max="1440" value="5">
-      <button type="submit">Créer</button>
-    </form>
-    <p class="muted">Un joueur artificiel paie, attend et perd comme un humain. Ouvrir et
-    fermer à la même heure décrit un joueur qui ne dort jamais.</p>
+    <details class="admin-ai-manual">
+      <summary>Création manuelle avancée</summary>
+      <h3 id="add-title">Ajouter un joueur artificiel précis</h3>
+      <form method="post" action="/admin/ai" aria-labelledby="add-title">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label for="name">Nom</label>
+        <input id="name" name="name" required minlength="3" maxlength="32">
+        <label for="archetype">Archétype</label>
+        <select id="archetype" name="archetype">
+          {{range .Archetypes}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+        <label for="start_hour">Heure d'ouverture (UTC)</label>
+        <input id="start_hour" name="start_hour" type="number" min="0" max="23" value="8">
+        <label for="end_hour">Heure de fermeture (UTC)</label>
+        <input id="end_hour" name="end_hour" type="number" min="0" max="23" value="23">
+        <label for="interval_minutes">Intervalle de réflexion (minutes)</label>
+        <input id="interval_minutes" name="interval_minutes" type="number" min="1" max="1440" value="5">
+        <button type="submit">Créer cette IA</button>
+      </form>
+      <p class="muted">Cette création individuelle peut dépasser la cible automatique. Un joueur artificiel paie, attend et perd comme un humain.</p>
+    </details>
   </section>
 {{end}}

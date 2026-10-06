@@ -207,8 +207,11 @@ type Dependencies struct {
 	Chat             chatService
 	Logger           *slog.Logger
 	Metrics          *observability.Metrics
-	SecureCookies    bool
-	LoginLimiter     loginRateLimiter
+	// WakeSimulation asks the durable worker to rescan immediately after an
+	// administration change which can create work without scheduling an event.
+	WakeSimulation func()
+	SecureCookies  bool
+	LoginLimiter   loginRateLimiter
 }
 
 // Handler serves the minimal bootstrap and authentication interface.
@@ -237,6 +240,7 @@ type Handler struct {
 	moderation       moderationService
 	backups          backupService
 	metrics          *observability.Metrics
+	wakeSimulation   func()
 	registration     registrationService
 	chat             chatService
 	secureCookies    bool
@@ -332,6 +336,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 		backups:          dependencies.Backups,
 		registration:     dependencies.Registration,
 		chat:             dependencies.Chat,
+		wakeSimulation:   dependencies.WakeSimulation,
 		secureCookies:    dependencies.SecureCookies,
 		loginLimiter:     limiter,
 		// Signing up forgives a few typos before it starts slowing down.
@@ -420,6 +425,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler.mux.HandleFunc("POST /admin/moderation/{ban}/lift", handler.liftBan)
 	handler.mux.HandleFunc("GET /admin/ai", handler.artificialPage)
 	handler.mux.HandleFunc("POST /admin/ai", handler.createArtificial)
+	handler.mux.HandleFunc("POST /admin/ai/population", handler.updateArtificialPopulation)
 	handler.mux.HandleFunc("GET /admin/ai/{player}", handler.artificialDetailPage)
 	handler.mux.HandleFunc("POST /admin/ai/{player}/settings", handler.updateArtificial)
 	handler.mux.HandleFunc("POST /admin/ai/{player}/retire", handler.retireArtificial)

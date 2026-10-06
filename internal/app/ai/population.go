@@ -74,10 +74,23 @@ func PopulationFrom(configured rules.Ruleset) Population {
 type Census struct {
 	Running bool
 	Rules   rules.Ruleset
+	// Active is the population that is still playing. Total is reconciled
+	// against this number, not against the historical number of profiles: a
+	// departure must leave room for a newcomer.
+	Active int
 	// Provisioned counts every artificial player this universe has already
-	// spent a slot on, the retired ones included. Retiring is a decision an
-	// administrator took, and nothing here undoes it.
+	// spent a slot on, the retired ones included. It only chooses the identity
+	// and placement of the next newcomer; it no longer caps the living
+	// population.
 	Provisioned int
+}
+
+// Departure is a player whose exit still needs reconciling. Active is true
+// when the profile has just lost its last world; false denotes an older,
+// already retired profile whose team membership only needs tidying up.
+type Departure struct {
+	PlayerID int64
+	Active   bool
 }
 
 // TeamCensus is the strength of one alliance of the population.
@@ -96,6 +109,9 @@ type Unfinished struct {
 // Censuses reads what the reconciler compares the standing order against.
 type Censuses interface {
 	Census(context.Context) (Census, error)
+	// Departures lists active players with no world left, and retired players
+	// whose old alliance membership still survives from an earlier build.
+	Departures(context.Context, int) ([]Departure, error)
 	// Unfinished lists births that stopped after their empire was founded.
 	Unfinished(context.Context, int) ([]Unfinished, error)
 	// Teams reports the strength of the named alliances, one entry per tag and
@@ -104,10 +120,10 @@ type Censuses interface {
 	Teams(context.Context, []string, int) ([]TeamCensus, []int64, error)
 }
 
-// Populating brings a universe up to the population its ruleset ordered. It
-// hooks onto nothing: it compares what was asked for with what is there and
-// closes a little of the gap, so it fills a fresh universe and repairs one
-// started before any of this existed by exactly the same means.
+// Populating keeps a universe at the active population its ruleset ordered. It
+// hooks onto nothing: it retires objective departures, compares what was asked
+// for with what is active and closes a little of the gap, so initial settlement
+// and later newcomers follow exactly the same path.
 type Populating struct {
 	Clock   domainclock.Clock
 	Service Service
@@ -129,6 +145,23 @@ func (p Populating) Populate(ctx context.Context, limit int) (int, error) {
 		return 0, nil
 	}
 	order := PopulationFrom(census.Rules)
+	active := census.Active
+	// Losing the final world is the objective end of an empire. Reaping it
+	// before counting the gap makes the replacement an ordinary newcomer on
+	// this very pass. Calling retire again also repairs memberships left by
+	// versions which used to keep retired players in their alliance forever.
+	departures, err := p.Census.Departures(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	for _, departure := range departures {
+		if err := p.Service.retire(ctx, departure.PlayerID); err != nil {
+			return 0, err
+		}
+		if departure.Active && active > 0 {
+			active--
+		}
+	}
 	if order.Total <= 0 {
 		return 0, nil
 	}
@@ -158,10 +191,10 @@ func (p Populating) Populate(ctx context.Context, limit int) (int, error) {
 		if err := p.finish(ctx, order, birth); err != nil {
 			return created, err
 		}
-		created++
+		created, active = created+1, active+1
 	}
 	slot := census.Provisioned
-	for created < limit {
+	for created < limit && active < order.Total {
 		team := shortTeam(order, teams)
 		// A player already there and belonging to nobody joins before one is
 		// born for the purpose, which is what makes an enrolment that failed
@@ -174,14 +207,11 @@ func (p Populating) Populate(ctx context.Context, limit int) (int, error) {
 			spares = spares[1:]
 			continue
 		}
-		if slot >= order.Total {
-			break
-		}
 		profile, err := p.born(ctx, order, slot)
 		if err != nil {
 			return created, err
 		}
-		created, slot = created+1, slot+1
+		created, active, slot = created+1, active+1, slot+1
 		if team >= 0 {
 			if err := p.Service.enlist(ctx, profile.PlayerID, teamName(team), teams[team].Tag); err != nil {
 				// The player stays where it is, belonging to nobody. The next

@@ -31,10 +31,10 @@ carte, ce qui empile une population fondée d'un coup sur les premiers inscrits.
   reste soudé à la frontière HTTP et la moitié non exportée sert l'appelant
   interne : **aucun principal n'est forgé**. Le joueur qui en sort a exactement
   les droits d'un humain, c'est-à-dire aucun.
-- Un slot est **dépensé tant qu'un profil ou un empire subsiste**. Une IA retirée
-  ne renaît donc jamais : le retrait est une décision d'administrateur. Une
-  naissance qui n'a pas atteint son empire ne laisse rien et son slot est
-  réessayé, sous le nom suivant si celui qu'elle voulait est déjà porté.
+- Un slot historique reste **dépensé** et une IA retirée ne renaît jamais sous
+  la même identité. En revanche, `AI.Total` cible désormais les profils actifs :
+  un départ libère une place pour un nouvel arrivant, créé avec un nouveau nom,
+  un nouvel empire et une nouvelle graine.
 - `AI.Total` fait autorité : un univers qui demande cinquante joueurs en obtient
   cinquante. Les alliances sont pourvues d'abord, le reste est indépendant.
 - Les empires artificiels visent une case et s'installent à la première libre à
@@ -48,6 +48,12 @@ carte, ce qui empile une population fondée d'un coup sur les premiers inscrits.
 
 Un serveur se peuple seul en quelques minutes après l'activation, et une partie
 lancée avant cette version se remplit au redémarrage sans repartir de zéro.
+
+La population reste ensuite vivante : une IA qui perd son dernier monde est
+retirée, quitte proprement son alliance et laisse arriver un remplaçant. Un
+retrait administratif produit le même remplacement sans réactiver l'ancien
+profil. La règle détaillée et ses cas limites sont consignés dans
+`docs/rules/ai-population.md`.
 
 Un seul réglage de la section `ai` reste inerte : `initial_development_level`.
 Il ne peut pas être honoré naïvement — offrir des bâtiments aux machines est

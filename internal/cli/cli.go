@@ -455,6 +455,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Registration:     registration,
 		Logger:           logger,
 		Metrics:          metrics,
+		WakeSimulation:   worker.Wake,
 		SecureCookies:    *secureCookie,
 	})
 	if err != nil {

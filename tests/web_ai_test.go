@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	appadmin "universeatwar/internal/app/administration"
 	appai "universeatwar/internal/app/ai"
 	appauth "universeatwar/internal/app/authentication"
 	appclock "universeatwar/internal/clock"
@@ -31,7 +32,15 @@ func TestWebArtificialAdministrationIsReservedToAdministrators(t *testing.T) {
 	csrfCookie := &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
 
 	page := getPage(t, admin, "/admin/ai", session, csrfCookie)
-	if !strings.Contains(page, "Ajouter un joueur artificiel") || !strings.Contains(page, "cautious_miner") {
+	for _, expected := range []string{
+		"Population automatique", "Nombre d'IA actives souhaité", "Appliquer et lancer le peuplement",
+		"Création manuelle avancée", "Ajouter un joueur artificiel précis", "cautious_miner",
+	} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("administration page misses %q: %q", expected, page)
+		}
+	}
+	if !strings.Contains(page, `name="target" value="4"`) {
 		t.Fatalf("administration page = %q", page)
 	}
 	// A plain player cannot even tell the pages exist.
@@ -45,6 +54,11 @@ func TestWebArtificialAdministrationIsReservedToAdministrators(t *testing.T) {
 		"start_hour": {"0"}, "end_hour": {"0"}, "interval_minutes": {"5"},
 	}, session, csrfCookie); code != http.StatusNotFound {
 		t.Fatalf("POST /admin/ai as a player = %d", code)
+	}
+	if code := postFormStatus(t, player, "/admin/ai/population", url.Values{
+		"csrf_token": {"csrf-token"}, "version": {"1"}, "target": {"12"},
+	}, session, csrfCookie); code != http.StatusNotFound {
+		t.Fatalf("POST /admin/ai/population as a player = %d", code)
 	}
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM ai_profiles", 0)
 
@@ -141,6 +155,90 @@ func TestWebArtificialAdministrationIsReservedToAdministrators(t *testing.T) {
 	}
 }
 
+// TestAdministratorSetsTheAutomaticArtificialPopulation proves the short form
+// publishes only the target, wakes the worker and lets the ordinary reconciler
+// create a varied population. Lowering the target never deletes viable players.
+func TestAdministratorSetsTheAutomaticArtificialPopulation(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld := artificialWeb(t)
+	if _, err := database.Write().ExecContext(ctx,
+		"INSERT INTO server_state(id, state, updated_at) VALUES (1, 'RUNNING', '2042-09-10T12:00:00Z')"); err != nil {
+		t.Fatal(err)
+	}
+	admin := appauth.Principal{
+		AccountID: 1, Username: "player1", Roles: []appauth.Role{appauth.RoleAdmin, appauth.RolePlayer},
+	}
+	dashboard := appadmin.DashboardService{
+		Clock: universeWorld.Clock,
+		Repository: storagesqlite.NewDashboardRepository(
+			database.Write(), "", universeWorld.Clock.Now().UTC()),
+	}
+	wakes := 0
+	handler, err := webhandler.New(webhandler.Dependencies{
+		Authentication: webAuthenticationStub{principal: admin},
+		ServerState:    runningStateStub{}, CSRFSecrets: sequenceSecret{value: "csrf-token"},
+		Economy: universeWorld.Economy, Artificials: universeWorld.AI, Dashboard: dashboard,
+		WakeSimulation: func() { wakes++ },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := &http.Cookie{Name: "uaw_session", Value: "session"}
+	csrfCookie := &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
+
+	page := getPage(t, handler, "/admin/ai", session, csrfCookie)
+	postForm(t, handler, "/admin/ai/population", url.Values{
+		"csrf_token": {"csrf-token"}, "version": {hiddenValue(t, page, "version")}, "target": {"7"},
+	}, http.StatusSeeOther, session, csrfCookie)
+	if wakes != 1 {
+		t.Fatalf("simulation wakes = %d, want 1", wakes)
+	}
+	settings, err := dashboard.GameSettings(ctx, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Version != 2 || settings.Rules.AI.Total != 7 {
+		t.Fatalf("population settings = version %d, target %d", settings.Version, settings.Rules.AI.Total)
+	}
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM audit_log WHERE action = 'ruleset_updated'", 1)
+	if code := postFormStatus(t, handler, "/admin/ai/population", url.Values{
+		"csrf_token": {"csrf-token"}, "version": {"1"}, "target": {"8"},
+	}, session, csrfCookie); code != http.StatusConflict {
+		t.Fatalf("stale population form = %d, want conflict", code)
+	}
+	if code := postFormStatus(t, handler, "/admin/ai/population", url.Values{
+		"csrf_token": {"csrf-token"}, "version": {"2"}, "target": {"999999"},
+	}, session, csrfCookie); code != http.StatusBadRequest {
+		t.Fatalf("impossible population target = %d, want bad request", code)
+	}
+	if wakes != 1 {
+		t.Fatalf("invalid forms woke the simulation: %d", wakes)
+	}
+
+	if born, err := universeWorld.Population.Populate(ctx, 5); err != nil || born != 5 {
+		t.Fatalf("Populate() = %d, %v, want 5 newcomers", born, err)
+	}
+	assertSingleValue(t, database, "SELECT COUNT(DISTINCT archetype) > 1 FROM ai_profiles WHERE state = 'active'", 1)
+	updatedPage := getPage(t, handler, "/admin/ai?population=saved", session, csrfCookie)
+	for _, expected := range []string{"5", "2", "nouveaux joueurs vont arriver progressivement", "cible de population IA a été mise à jour"} {
+		if !strings.Contains(updatedPage, expected) {
+			t.Fatalf("updated population page misses %q: %q", expected, updatedPage)
+		}
+	}
+
+	postForm(t, handler, "/admin/ai/population", url.Values{
+		"csrf_token": {"csrf-token"}, "version": {"2"}, "target": {"1"},
+	}, http.StatusSeeOther, session, csrfCookie)
+	settings, err = dashboard.GameSettings(ctx, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Rules.AI.Total != 1 || settings.Rules.AI.AllianceCount != 0 || settings.Rules.AI.IndependentCount > 1 {
+		t.Fatalf("smaller population was not fitted: %+v", settings.Rules.AI)
+	}
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM ai_profiles WHERE state = 'active'", 5)
+}
+
 // TestWebArtificialDiaryShowsWhatWasDecided proves an administrator can follow
 // what an artificial player tried and why.
 func TestWebArtificialDiaryShowsWhatWasDecided(t *testing.T) {
@@ -188,6 +286,11 @@ func artificialHandler(t *testing.T, universeWorld *world, principal appauth.Pri
 		Authentication: webAuthenticationStub{principal: principal},
 		ServerState:    runningStateStub{}, CSRFSecrets: sequenceSecret{value: "csrf-token"},
 		Economy: universeWorld.Economy, Artificials: universeWorld.AI,
+		Dashboard: appadmin.DashboardService{
+			Clock: universeWorld.Clock,
+			Repository: storagesqlite.NewDashboardRepository(
+				universeWorld.Database.Write(), "", universeWorld.Clock.Now().UTC()),
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
