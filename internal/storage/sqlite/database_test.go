@@ -158,6 +158,56 @@ func TestChatReadMigrationTreatsExistingHistoryAsRead(t *testing.T) {
 	}
 }
 
+func TestFusionReactorMigrationPreservesExistingDeuteriumRemainders(t *testing.T) {
+	ctx := context.Background()
+	database, err := Open(ctx, filepath.Join(t.TempDir(), "fusion-upgrade.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	available, err := loadMigrations(migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Write().ExecContext(ctx, migrationTable); err != nil {
+		t.Fatal(err)
+	}
+	var fusionMigration migration
+	for _, candidate := range available {
+		if candidate.version == 23 {
+			fusionMigration = candidate
+			break
+		}
+		if err := applyMigration(ctx, database.Write(), candidate); err != nil {
+			t.Fatalf("apply migration %d: %v", candidate.version, err)
+		}
+	}
+	if fusionMigration.version == 0 {
+		t.Fatal("fusion reactor migration is missing")
+	}
+	seedUniverse(t, ctx, database)
+	if _, err := database.Write().ExecContext(ctx,
+		"UPDATE planet_resources SET deuterium = 123, deuterium_remainder = 1800 WHERE planet_id = 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyMigration(ctx, database.Write(), fusionMigration); err != nil {
+		t.Fatalf("apply fusion migration: %v", err)
+	}
+	var stock, legacyRemainder, netRemainder int
+	if err := database.Read().QueryRowContext(ctx, `
+		SELECT deuterium, deuterium_remainder, deuterium_net_remainder
+		FROM planet_resources WHERE planet_id = 1
+	`).Scan(&stock, &legacyRemainder, &netRemainder); err != nil {
+		t.Fatal(err)
+	}
+	if stock != 123 || legacyRemainder != 1800 || netRemainder != 1800 {
+		t.Fatalf("migrated fuel state = stock %d, legacy %d, net %d", stock, legacyRemainder, netRemainder)
+	}
+	if err := database.Migrate(ctx); err != nil {
+		t.Fatalf("idempotent Migrate() after fusion upgrade: %v", err)
+	}
+}
+
 func TestIntegrityCheck(t *testing.T) {
 	ctx := context.Background()
 	database, err := Open(ctx, filepath.Join(t.TempDir(), "universe.db"))

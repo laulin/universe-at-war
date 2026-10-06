@@ -11,7 +11,8 @@ import (
 
 const secondsPerHour int64 = 3600
 
-// Remainders retains fractional units as unit-seconds, each in [0, 3600).
+// Remainders retains fractional units as unit-seconds. Metal and crystal stay
+// in [0, 3600); deuterium may also be negative while a fusion reactor burns it.
 type Remainders struct {
 	Metal     int64
 	Crystal   int64
@@ -25,7 +26,8 @@ type ProductionState struct {
 	ProducedAt time.Time
 }
 
-// Rates contains whole units produced per hour.
+// Rates contains the whole-unit hourly balance. Deuterium may be negative when
+// fusion fuel consumption exceeds production.
 type Rates struct {
 	Metal     int64
 	Crystal   int64
@@ -38,6 +40,9 @@ type Levels struct {
 	CrystalMine          int
 	DeuteriumSynthesizer int
 	SolarPlant           int
+	FusionReactor        int
+	EnergyTechnology     int
+	FusionFuelAvailable  bool
 	MetalStorage         int
 	CrystalStorage       int
 	DeuteriumTank        int
@@ -66,12 +71,12 @@ func Settle(state ProductionState, now time.Time, rates Rates, capacities Resour
 	if err := capacities.Validate(); err != nil || capacities.Metal == 0 || capacities.Crystal == 0 || capacities.Deuterium == 0 {
 		return ProductionState{}, errors.New("economy: capacities must be positive")
 	}
-	if rates.Metal < 0 || rates.Crystal < 0 || rates.Deuterium < 0 {
-		return ProductionState{}, errors.New("economy: rates cannot be negative")
+	if rates.Metal < 0 || rates.Crystal < 0 {
+		return ProductionState{}, errors.New("economy: metal and crystal rates cannot be negative")
 	}
 	if state.Remainder.Metal < 0 || state.Remainder.Metal >= secondsPerHour ||
 		state.Remainder.Crystal < 0 || state.Remainder.Crystal >= secondsPerHour ||
-		state.Remainder.Deuterium < 0 || state.Remainder.Deuterium >= secondsPerHour {
+		state.Remainder.Deuterium <= -secondsPerHour || state.Remainder.Deuterium >= secondsPerHour {
 		return ProductionState{}, errors.New("economy: invalid production remainder")
 	}
 	elapsed := int64(now.Sub(state.ProducedAt) / time.Second)
@@ -83,7 +88,7 @@ func Settle(state ProductionState, now time.Time, rates Rates, capacities Resour
 	if err != nil {
 		return ProductionState{}, err
 	}
-	deuterium, deuteriumRemainder, err := settleOne(state.Stock.Deuterium, state.Remainder.Deuterium, rates.Deuterium, capacities.Deuterium, elapsed)
+	deuterium, deuteriumRemainder, err := settleSigned(state.Stock.Deuterium, state.Remainder.Deuterium, rates.Deuterium, capacities.Deuterium, elapsed)
 	if err != nil {
 		return ProductionState{}, err
 	}
@@ -91,6 +96,38 @@ func Settle(state ProductionState, now time.Time, rates Rates, capacities Resour
 	state.Remainder = Remainders{Metal: metalRemainder, Crystal: crystalRemainder, Deuterium: deuteriumRemainder}
 	state.ProducedAt = now
 	return state, nil
+}
+
+// settleSigned applies a rate that may consume a resource. Hitting zero clears
+// a negative fractional debt: once the fuel is gone the reactor stops, so a
+// future positive rate must not repay consumption that never happened.
+func settleSigned(stock, remainder, rate, capacity, elapsed int64) (int64, int64, error) {
+	if stock > capacity {
+		stock = capacity
+	}
+	if elapsed == 0 || rate == 0 {
+		return stock, remainder, nil
+	}
+	if rate > 0 && rate > math.MaxInt64/elapsed || rate < 0 && rate < math.MinInt64/elapsed {
+		return 0, 0, errors.New("economy: production overflow")
+	}
+	numerator := rate * elapsed
+	if remainder > 0 && numerator > math.MaxInt64-remainder || remainder < 0 && numerator < math.MinInt64-remainder {
+		return 0, 0, errors.New("economy: production overflow")
+	}
+	numerator += remainder
+	whole := numerator / secondsPerHour
+	newRemainder := numerator % secondsPerHour
+	if whole >= 0 {
+		if whole >= capacity-stock {
+			return capacity, newRemainder, nil
+		}
+		return stock + whole, newRemainder, nil
+	}
+	if whole <= -stock {
+		return 0, 0, nil
+	}
+	return stock + whole, newRemainder, nil
 }
 
 func settleOne(stock, remainder, rate, capacity, elapsed int64) (int64, int64, error) {
@@ -117,7 +154,8 @@ func CalculateRates(configured rules.Ruleset, levels Levels, maximumTemperature 
 	if err := configured.Validate(); err != nil {
 		return Rates{}, Energy{}, err
 	}
-	if levels.MetalMine < 0 || levels.CrystalMine < 0 || levels.DeuteriumSynthesizer < 0 || levels.SolarPlant < 0 || levels.SolarSatellites < 0 {
+	if levels.MetalMine < 0 || levels.CrystalMine < 0 || levels.DeuteriumSynthesizer < 0 || levels.SolarPlant < 0 ||
+		levels.FusionReactor < 0 || levels.EnergyTechnology < 0 || levels.SolarSatellites < 0 {
 		return Rates{}, Energy{}, errors.New("economy: building levels cannot be negative")
 	}
 	growth := configured.Economy.MineProductionGrowth
@@ -150,6 +188,18 @@ func CalculateRates(configured rules.Ruleset, levels Levels, maximumTemperature 
 		return Rates{}, Energy{}, errors.New("economy: energy overflow")
 	}
 	produced += satellites
+	fusionConsumption := int64(0)
+	if levels.FusionReactor > 0 && levels.FusionFuelAvailable {
+		fusion, fusionErr := FusionReactorEnergy(levels.FusionReactor, levels.EnergyTechnology)
+		if fusionErr != nil || fusion > math.MaxInt64-produced {
+			return Rates{}, Energy{}, errors.New("economy: energy overflow")
+		}
+		produced += fusion
+		fusionConsumption, err = FusionReactorDeuterium(levels.FusionReactor, configured.Time.EconomySpeed)
+		if err != nil {
+			return Rates{}, Energy{}, err
+		}
+	}
 	factor := 1.0
 	if consumed > 0 && produced < consumed {
 		factor = math.Max(configured.Economy.LowEnergyProduction, float64(produced)/float64(consumed))
@@ -166,11 +216,27 @@ func CalculateRates(configured rules.Ruleset, levels Levels, maximumTemperature 
 	if err != nil {
 		return Rates{}, Energy{}, err
 	}
-	return Rates{
-		Metal:     baseMetal + int64(math.Floor(float64(metalMine)*factor)),
-		Crystal:   baseCrystal + int64(math.Floor(float64(crystalMine)*factor)),
-		Deuterium: baseDeuterium + int64(math.Floor(float64(deuteriumMine)*factor)),
-	}, Energy{Produced: produced, Consumed: consumed}, nil
+	metal, err := addRate(baseMetal, int64(math.Floor(float64(metalMine)*factor)))
+	if err != nil {
+		return Rates{}, Energy{}, err
+	}
+	crystal, err := addRate(baseCrystal, int64(math.Floor(float64(crystalMine)*factor)))
+	if err != nil {
+		return Rates{}, Energy{}, err
+	}
+	deuterium, err := addRate(baseDeuterium, int64(math.Floor(float64(deuteriumMine)*factor)))
+	if err != nil {
+		return Rates{}, Energy{}, err
+	}
+	deuterium -= fusionConsumption
+	return Rates{Metal: metal, Crystal: crystal, Deuterium: deuterium}, Energy{Produced: produced, Consumed: consumed}, nil
+}
+
+func addRate(left, right int64) (int64, error) {
+	if left > math.MaxInt64-right {
+		return 0, errors.New("economy: production overflow")
+	}
+	return left + right, nil
 }
 
 // satelliteEnergy is the energy one solar satellite produces, bounded so a very
@@ -196,6 +262,24 @@ func SolarPlantEnergy(level int) (int64, error) {
 		return 0, errors.New("economy: building levels cannot be negative")
 	}
 	return floored(20 * float64(level) * math.Pow(1.1, float64(level)))
+}
+
+// FusionReactorEnergy is the energy yielded by a fuelled reactor. Energy
+// technology improves the reaction on every planet where one is operating.
+func FusionReactorEnergy(level, energyTechnology int) (int64, error) {
+	if level < 0 || energyTechnology < 0 {
+		return 0, errors.New("economy: building and research levels cannot be negative")
+	}
+	return floored(30 * float64(level) * math.Pow(1.05+float64(energyTechnology)/100, float64(level)))
+}
+
+// FusionReactorDeuterium is the hourly fuel draw. Economy speed scales both
+// resource extraction and fuel use, preserving their relationship.
+func FusionReactorDeuterium(level int, economySpeed float64) (int64, error) {
+	if level < 0 || economySpeed <= 0 || math.IsNaN(economySpeed) || math.IsInf(economySpeed, 0) {
+		return 0, errors.New("economy: invalid fusion reactor input")
+	}
+	return floored(10 * float64(level) * math.Pow(1.1, float64(level)) * economySpeed)
 }
 
 func sumFlooredEnergy(levels Levels, growth float64) (int64, error) {

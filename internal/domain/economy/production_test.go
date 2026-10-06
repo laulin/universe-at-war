@@ -69,6 +69,60 @@ func TestCalculateRatesAndEnergy(t *testing.T) {
 	}
 }
 
+func TestFusionReactorProducesEnergyAndBurnsDeuterium(t *testing.T) {
+	configured := rules.Default()
+	levels := Levels{FusionReactor: 1, EnergyTechnology: 3, FusionFuelAvailable: true}
+	rates, energy, err := CalculateRates(configured, levels, 40)
+	if err != nil {
+		t.Fatalf("CalculateRates() error = %v", err)
+	}
+	if energy.Produced != 32 || energy.Consumed != 0 {
+		t.Fatalf("fusion energy = %#v, want 32 produced", energy)
+	}
+	if rates.Deuterium != -11 {
+		t.Fatalf("fusion deuterium rate = %d, want -11", rates.Deuterium)
+	}
+
+	levels.FusionFuelAvailable = false
+	rates, energy, err = CalculateRates(configured, levels, 40)
+	if err != nil {
+		t.Fatalf("CalculateRates(without fuel) error = %v", err)
+	}
+	if energy.Produced != 0 || rates.Deuterium != 0 {
+		t.Fatalf("unfuelled fusion reactor = rates %#v, energy %#v", rates, energy)
+	}
+
+	produced, err := FusionReactorEnergy(5, 10)
+	if err != nil || produced != 301 {
+		t.Fatalf("FusionReactorEnergy(5, 10) = %d, %v; want 301", produced, err)
+	}
+	consumed, err := FusionReactorDeuterium(5, 1)
+	if err != nil || consumed != 80 {
+		t.Fatalf("FusionReactorDeuterium(5, 1) = %d, %v; want 80", consumed, err)
+	}
+}
+
+func TestSettleAllowsFusionToDrainButNotOverdrawDeuterium(t *testing.T) {
+	start := time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)
+	capacities := Resources{Metal: 10, Crystal: 10, Deuterium: 10}
+	state := ProductionState{Stock: Resources{Deuterium: 1}, ProducedAt: start}
+
+	half, err := Settle(state, start.Add(30*time.Minute), Rates{Deuterium: -1}, capacities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if half.Stock.Deuterium != 1 || half.Remainder.Deuterium != -1800 {
+		t.Fatalf("half-hour fusion settlement = %#v", half)
+	}
+	empty, err := Settle(half, start.Add(time.Hour), Rates{Deuterium: -1}, capacities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty.Stock.Deuterium != 0 || empty.Remainder.Deuterium != 0 {
+		t.Fatalf("exhausted fusion settlement = %#v", empty)
+	}
+}
+
 func TestCapacity(t *testing.T) {
 	for _, test := range []struct {
 		level int

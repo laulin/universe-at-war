@@ -25,10 +25,10 @@ fournissait le prérequis. Un remboursement ne dépasse jamais la capacité des
 entrepôts : ce qui ne rentre pas est perdu, et le joueur en est averti avant
 comme après.
 
-Le catalogue initial contient les mines de métal/cristal/deutérium, la centrale
-solaire, les trois stockages, l'usine de robots, l'usine de nanites, le chantier
-spatial, le laboratoire, le silo à missiles et le terraformeur. Les bâtiments
-lunaires ont leur propre catalogue, décrit dans `moon.md`.
+Le catalogue initial contient les mines de métal/cristal/deutérium, les centrales
+solaire et à fusion, les trois stockages, l'usine de robots, l'usine de nanites,
+le chantier spatial, le laboratoire, le silo à missiles et le terraformeur. Les
+bâtiments lunaires ont leur propre catalogue, décrit dans `moon.md`.
 
 Une installation dont une autre file dépend ne s'agrandit pas : le laboratoire
 pendant qu'une recherche est en cours ou en attente, le chantier spatial et
@@ -81,6 +81,7 @@ niveau que la file atteint déjà, comme le coût et la durée du même plan.
 | `crystal_mine` | 48/24/0 | 1,6 | — |
 | `deuterium_synthesizer` | 225/75/0 | 1,5 | — |
 | `solar_plant` | 75/30/0 | 1,5 | — |
+| `fusion_reactor` | 900/360/180 | 1,8 | synthétiseur 5, énergie 3 |
 | `metal_storage` | 1 000/0/0 | 2 | — |
 | `crystal_storage` | 1 000/500/0 | 2 | — |
 | `deuterium_tank` | 1 000/1 000/0 | 2 | — |

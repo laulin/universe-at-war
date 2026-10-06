@@ -105,6 +105,37 @@ func TestACardCarriesTheEnergyItsNextLevelChanges(t *testing.T) {
 	}
 }
 
+func TestFusionReactorCardNamesItsRequirementsAndEnergy(t *testing.T) {
+	handler, database, session, csrfCookie := progressionHandler(t)
+	ctx := context.Background()
+
+	locked := buildingCardOf(t, getPage(t, handler, "/planets/1", session, csrfCookie), "fusion_reactor")
+	for _, expected := range []string{"Synthétiseur de deutérium", "Technologie énergétique"} {
+		if !strings.Contains(locked, expected) {
+			t.Fatalf("the locked fusion reactor card misses requirement %q: %q", expected, locked)
+		}
+	}
+	if strings.Contains(locked, "<form") {
+		t.Fatalf("the locked fusion reactor offers a construction form: %q", locked)
+	}
+
+	setBuilding(t, ctx, database, 1, "deuterium_synthesizer", 5)
+	setResearch(t, ctx, database, 1, "energy_technology", 3)
+
+	card := buildingCardOf(t, getPage(t, handler, "/planets/1", session, csrfCookie), "fusion_reactor")
+	for _, expected := range []string{
+		"Centrale électrique de fusion",
+		`class="res-energy"`,
+		"&#43;32",
+		"Convertit du deutérium en énergie",
+		"<form",
+	} {
+		if !strings.Contains(card, expected) {
+			t.Fatalf("the fusion reactor card misses %q: %q", expected, card)
+		}
+	}
+}
+
 // A card that only names a price says nothing about what the building is for.
 func TestEveryCardSaysWhatItsBuildingIsFor(t *testing.T) {
 	handler, _, session, csrfCookie := progressionHandler(t)
@@ -113,7 +144,7 @@ func TestEveryCardSaysWhatItsBuildingIsFor(t *testing.T) {
 	if !strings.Contains(buildingCardOf(t, page, "solar_plant"), "Produit l&#39;énergie que les trois mines consomment") {
 		t.Fatalf("the plant card does not say what it is for: %q", buildingCardOf(t, page, "solar_plant"))
 	}
-	for _, id := range []string{"metal_mine", "crystal_mine", "deuterium_synthesizer", "solar_plant",
+	for _, id := range []string{"metal_mine", "crystal_mine", "deuterium_synthesizer", "solar_plant", "fusion_reactor",
 		"metal_storage", "crystal_storage", "deuterium_tank", "robotics_factory", "nanite_factory",
 		"shipyard", "research_lab", "missile_silo", "terraformer"} {
 		if !strings.Contains(buildingCardOf(t, page, id), `class="card__more"`) {

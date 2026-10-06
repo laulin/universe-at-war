@@ -548,7 +548,7 @@ func settledProduction(ctx context.Context, tx *sql.Tx, planetID int64, now time
 	var remainders economy.Remainders
 	var producedText string
 	if err := tx.QueryRowContext(ctx, `
-		SELECT metal, crystal, deuterium, metal_remainder, crystal_remainder, deuterium_remainder, produced_at
+		SELECT metal, crystal, deuterium, metal_remainder, crystal_remainder, deuterium_net_remainder, produced_at
 		FROM planet_resources WHERE planet_id = ?
 	`, planetID).Scan(&stock.Metal, &stock.Crystal, &stock.Deuterium,
 		&remainders.Metal, &remainders.Crystal, &remainders.Deuterium, &producedText); err != nil {

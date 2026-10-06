@@ -665,7 +665,7 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 	}
 	// Read remainders separately to keep the main projection scan explicit.
 	var remainders economy.Remainders
-	if err := tx.QueryRowContext(ctx, "SELECT metal_remainder, crystal_remainder, deuterium_remainder FROM planet_resources WHERE planet_id = ?", planet.ID).Scan(&remainders.Metal, &remainders.Crystal, &remainders.Deuterium); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT metal_remainder, crystal_remainder, deuterium_net_remainder FROM planet_resources WHERE planet_id = ?", planet.ID).Scan(&remainders.Metal, &remainders.Crystal, &remainders.Deuterium); err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
 	producedAt, err := time.Parse(time.RFC3339Nano, producedText)
@@ -893,7 +893,9 @@ func enrichEconomy(planet *appeconomy.Planet) error {
 	levels := economy.Levels{
 		MetalMine: planet.Levels[building.MetalMine], CrystalMine: planet.Levels[building.CrystalMine],
 		DeuteriumSynthesizer: planet.Levels[building.DeuteriumSynthesizer], SolarPlant: planet.Levels[building.SolarPlant],
-		MetalStorage: planet.Levels[building.MetalStorage], CrystalStorage: planet.Levels[building.CrystalStorage], DeuteriumTank: planet.Levels[building.DeuteriumTank],
+		FusionReactor: planet.Levels[building.FusionReactor], EnergyTechnology: planet.Researches[research.EnergyTechnology],
+		FusionFuelAvailable: planet.Stock.Deuterium > 0,
+		MetalStorage:        planet.Levels[building.MetalStorage], CrystalStorage: planet.Levels[building.CrystalStorage], DeuteriumTank: planet.Levels[building.DeuteriumTank],
 		SolarSatellites: int(planet.Units[unit.SolarSatellite]),
 	}
 	var err error
@@ -914,7 +916,7 @@ func enrichEconomy(planet *appeconomy.Planet) error {
 }
 
 func persistProduction(ctx context.Context, tx *sql.Tx, planetID int64, state economy.ProductionState) error {
-	_, err := tx.ExecContext(ctx, `UPDATE planet_resources SET metal = ?, crystal = ?, deuterium = ?, metal_remainder = ?, crystal_remainder = ?, deuterium_remainder = ?, produced_at = ?, version = version + 1 WHERE planet_id = ?`, state.Stock.Metal, state.Stock.Crystal, state.Stock.Deuterium, state.Remainder.Metal, state.Remainder.Crystal, state.Remainder.Deuterium, timestamp(state.ProducedAt), planetID)
+	_, err := tx.ExecContext(ctx, `UPDATE planet_resources SET metal = ?, crystal = ?, deuterium = ?, metal_remainder = ?, crystal_remainder = ?, deuterium_net_remainder = ?, produced_at = ?, version = version + 1 WHERE planet_id = ?`, state.Stock.Metal, state.Stock.Crystal, state.Stock.Deuterium, state.Remainder.Metal, state.Remainder.Crystal, state.Remainder.Deuterium, timestamp(state.ProducedAt), planetID)
 	if err != nil {
 		return fmt.Errorf("economy repository: persist production: %w", err)
 	}

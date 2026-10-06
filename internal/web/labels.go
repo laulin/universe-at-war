@@ -14,7 +14,8 @@ func buildingName(id building.ID) string {
 	names := map[building.ID]string{
 		building.MetalMine: "Mine de métal", building.CrystalMine: "Mine de cristal",
 		building.DeuteriumSynthesizer: "Synthétiseur de deutérium", building.SolarPlant: "Centrale solaire",
-		building.MetalStorage: "Hangar de métal", building.CrystalStorage: "Hangar de cristal",
+		building.FusionReactor: "Centrale électrique de fusion",
+		building.MetalStorage:  "Hangar de métal", building.CrystalStorage: "Hangar de cristal",
 		building.DeuteriumTank: "Réservoir de deutérium", building.RoboticsFactory: "Usine de robots",
 		building.NaniteFactory: "Usine de nanites", building.Shipyard: "Chantier spatial",
 		building.ResearchLab: "Laboratoire de recherche", building.MissileSilo: "Silo à missiles",
@@ -28,7 +29,7 @@ func buildingName(id building.ID) string {
 }
 
 // buildingRole says what a building is for, in one or two sentences. A player
-// reading a catalogue of sixteen entries needs to know what each one does
+// reading a catalogue of seventeen entries needs to know what each one does
 // before its price means anything, and the entry that touches the energy
 // balance says so, because the card puts a figure of energy next to it.
 func buildingRole(id building.ID) string {
@@ -37,6 +38,7 @@ func buildingRole(id building.ID) string {
 		building.CrystalMine:          "Extrait le cristal, qu'exigent l'électronique, les recherches et les vaisseaux les plus avancés. Chaque niveau consomme plus d'énergie.",
 		building.DeuteriumSynthesizer: "Condense le deutérium, carburant des flottes et matière des recherches lourdes. Son rendement dépend de la température du monde, et chaque niveau consomme plus d'énergie.",
 		building.SolarPlant:           "Produit l'énergie que les trois mines consomment. Sans énergie suffisante, elles tournent au ralenti et la production s'effondre.",
+		building.FusionReactor:        "Convertit du deutérium en énergie. Son rendement augmente avec la technologie énergétique ; sans deutérium disponible, elle s'arrête.",
 		building.MetalStorage:         "Double la capacité de stockage du métal à chaque niveau. Ce qui dépasse la capacité est perdu.",
 		building.CrystalStorage:       "Double la capacité de stockage du cristal à chaque niveau. Ce qui dépasse la capacité est perdu.",
 		building.DeuteriumTank:        "Double la capacité de stockage du deutérium à chaque niveau. Ce qui dépasse la capacité est perdu.",
@@ -88,7 +90,7 @@ func researchName(id research.ID) string {
 // sixteen entries is exactly where guessing goes wrong.
 func researchRole(id research.ID) string {
 	roles := map[research.ID]string{
-		research.EnergyTechnology:             "Ouvre les technologies et les bâtiments avancés. Elle ne produit pas d'énergie par elle-même : c'est la centrale solaire qui en produit.",
+		research.EnergyTechnology:             "Ouvre les technologies et les bâtiments avancés. Elle améliore aussi le rendement des centrales électriques de fusion.",
 		research.LaserTechnology:              "Ouvre les artilleries laser et prépare les technologies à ions et à plasma.",
 		research.IonTechnology:                "Ouvre l'artillerie à ions et le croiseur, et réduit le coût de démantèlement.",
 		research.HyperspaceTechnology:         "Ouvre les vaisseaux et les défenses les plus lourds, ainsi que la porte de saut.",

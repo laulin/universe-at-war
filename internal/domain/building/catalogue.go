@@ -18,6 +18,7 @@ const (
 	CrystalMine          ID = "crystal_mine"
 	DeuteriumSynthesizer ID = "deuterium_synthesizer"
 	SolarPlant           ID = "solar_plant"
+	FusionReactor        ID = "fusion_reactor"
 	MetalStorage         ID = "metal_storage"
 	CrystalStorage       ID = "crystal_storage"
 	DeuteriumTank        ID = "deuterium_tank"
@@ -94,6 +95,7 @@ func DefaultCatalogue() Catalogue {
 		{ID: CrystalMine, BaseCost: economy.Resources{Metal: 48, Crystal: 24}, Growth: 1.6},
 		{ID: DeuteriumSynthesizer, BaseCost: economy.Resources{Metal: 225, Crystal: 75}, Growth: 1.5},
 		{ID: SolarPlant, BaseCost: economy.Resources{Metal: 75, Crystal: 30}, Growth: 1.5},
+		{ID: FusionReactor, BaseCost: economy.Resources{Metal: 900, Crystal: 360, Deuterium: 180}, Growth: 1.8, Prerequisites: []prerequisite.Requirement{requiresBuilding(DeuteriumSynthesizer, 5), requiresResearch("energy_technology", 3)}},
 		{ID: MetalStorage, BaseCost: economy.Resources{Metal: 1000}, Growth: 2},
 		{ID: CrystalStorage, BaseCost: economy.Resources{Metal: 1000, Crystal: 500}, Growth: 2},
 		{ID: DeuteriumTank, BaseCost: economy.Resources{Metal: 1000, Crystal: 1000}, Growth: 2},
@@ -120,7 +122,7 @@ func DefaultCatalogue() Catalogue {
 
 // order is the stable interface order of the catalogue.
 var order = []ID{
-	MetalMine, CrystalMine, DeuteriumSynthesizer, SolarPlant, MetalStorage, CrystalStorage, DeuteriumTank,
+	MetalMine, CrystalMine, DeuteriumSynthesizer, SolarPlant, FusionReactor, MetalStorage, CrystalStorage, DeuteriumTank,
 	RoboticsFactory, NaniteFactory, Shipyard, ResearchLab, MissileSilo, Terraformer,
 	LunarBase, SensorPhalanx, JumpGate,
 }
@@ -238,7 +240,7 @@ func (c Catalogue) Plan(id ID, placement Placement, levels Levels, researches pr
 	if err != nil {
 		return Plan{}, err
 	}
-	change, err := energyChange(id, levels[id], target, configured.Economy.EnergyConsumptionGrowth)
+	change, err := energyChange(id, levels[id], target, researches, configured.Economy.EnergyConsumptionGrowth)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -247,8 +249,8 @@ func (c Catalogue) Plan(id ID, placement Placement, levels Levels, researches pr
 
 // energyChange answers what the level being ordered does to the body's energy
 // balance, which is the figure a player decides on: a mine costs energy, the
-// solar plant gives it, and the rest of the catalogue neither.
-func energyChange(id ID, currentLevel, targetLevel int, consumptionGrowth float64) (int64, error) {
+// solar plant and fusion reactor give it, and the rest of the catalogue neither.
+func energyChange(id ID, currentLevel, targetLevel int, researches prerequisite.Levels, consumptionGrowth float64) (int64, error) {
 	var before, after int64
 	var err error
 	switch id {
@@ -265,6 +267,15 @@ func energyChange(id ID, currentLevel, targetLevel int, consumptionGrowth float6
 			return 0, err
 		}
 		if after, err = economy.SolarPlantEnergy(targetLevel); err != nil {
+			return 0, err
+		}
+		return after - before, nil
+	case FusionReactor:
+		energyTechnology := researches["energy_technology"]
+		if before, err = economy.FusionReactorEnergy(currentLevel, energyTechnology); err != nil {
+			return 0, err
+		}
+		if after, err = economy.FusionReactorEnergy(targetLevel, energyTechnology); err != nil {
 			return 0, err
 		}
 		return after - before, nil

@@ -105,6 +105,40 @@ func TestEconomyProgressionFromEmpireToCompletedBuilding(t *testing.T) {
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM game_event_log WHERE event_type = 'building_completed'", 1)
 }
 
+func TestFusionReactorBurnsFuelAcrossAnExistingPlanet(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2042, time.September, 10, 11, 0, 0, 0, time.UTC)
+	clock := appclock.NewFake(now)
+	database := economyDatabase(t, ctx, 1)
+	universe := newWorld(t, database, clock)
+	principal := appauth.Principal{AccountID: 1, Username: "captain"}
+	planet, err := universe.Economy.CreateEmpire(ctx, principal, "Captain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	setBuilding(t, ctx, database, planet.ID, string(building.FusionReactor), 1)
+	setResearch(t, ctx, database, 1, "energy_technology", 3)
+	setResources(t, ctx, database, planet.ID, 500, 500, 100)
+
+	clock.Advance(time.Hour)
+	planet, err = universe.Economy.Planet(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if planet.Stock.Deuterium != 89 || planet.Rates.Deuterium != -11 || planet.Energy.Produced != 32 {
+		t.Fatalf("fuelled reactor planet = stock %#v, rates %#v, energy %#v", planet.Stock, planet.Rates, planet.Energy)
+	}
+
+	setResources(t, ctx, database, planet.ID, 500, 500, 0)
+	planet, err = universe.Economy.Planet(ctx, principal, planet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if planet.Rates.Deuterium != 0 || planet.Energy.Produced != 0 {
+		t.Fatalf("empty reactor planet = rates %#v, energy %#v", planet.Rates, planet.Energy)
+	}
+}
+
 func TestDueBuildingsUseStableEventOrder(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2042, time.September, 10, 11, 12, 13, 0, time.UTC)

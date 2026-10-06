@@ -9,7 +9,7 @@ and no stylesheet changes.
 
 | Category   | Slug                          | Suggested size | Filled |
 |------------|-------------------------------|----------------|--------|
-| `building` | the building identifier       | 640 x 480      | all 13 planetary buildings |
+| `building` | the building identifier       | 640 x 480      | all 14 planetary buildings |
 | `research` | the research identifier       | 640 x 480      | all 16 technologies |
 | `ship`     | the unit identifier           | 640 x 480      | all 14 |
 | `defense`  | the unit identifier           | 640 x 480      | all 10 |

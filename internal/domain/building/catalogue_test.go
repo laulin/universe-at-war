@@ -69,6 +69,34 @@ func TestValidateStart(t *testing.T) {
 	}
 }
 
+func TestFusionReactorNeedsItsFuelChain(t *testing.T) {
+	catalogue := DefaultCatalogue()
+	configured := rules.Default()
+	levels := Levels{DeuteriumSynthesizer: 5}
+	researches := prerequisite.Levels{"energy_technology": 3}
+
+	if _, err := catalogue.Plan(FusionReactor, OnPlanet, Levels{}, researches, 0, 100, configured); err == nil {
+		t.Fatal("fusion reactor accepted without deuterium synthesizer 5")
+	}
+	if _, err := catalogue.Plan(FusionReactor, OnPlanet, levels, prerequisite.Levels{"energy_technology": 2}, 0, 100, configured); err == nil {
+		t.Fatal("fusion reactor accepted without energy technology 3")
+	}
+	plan, err := catalogue.Plan(FusionReactor, OnPlanet, levels, researches, 0, 100, configured)
+	if err != nil {
+		t.Fatalf("Plan(fusion reactor) error = %v", err)
+	}
+	if plan.Cost != (economy.Resources{Metal: 900, Crystal: 360, Deuterium: 180}) {
+		t.Fatalf("fusion reactor cost = %#v", plan.Cost)
+	}
+	if plan.EnergyChange != 32 {
+		t.Fatalf("fusion reactor energy change = %d, want 32", plan.EnergyChange)
+	}
+	second, err := catalogue.Cost(FusionReactor, 2, 1)
+	if err != nil || second != (economy.Resources{Metal: 1620, Crystal: 648, Deuterium: 324}) {
+		t.Fatalf("fusion reactor level 2 cost = %#v, %v", second, err)
+	}
+}
+
 func TestPlacementSeparatesPlanetsFromMoons(t *testing.T) {
 	catalogue := DefaultCatalogue()
 	configured := rules.Default()
@@ -134,6 +162,17 @@ func TestPlanCarriesTheEnergyItChanges(t *testing.T) {
 	}
 	if plant.EnergyChange <= 0 {
 		t.Fatalf("a plant level should give energy, changed by %d", plant.EnergyChange)
+	}
+
+	reactor, err := catalogue.Plan(FusionReactor, OnPlanet,
+		Levels{DeuteriumSynthesizer: 5, FusionReactor: 4}, prerequisite.Levels{"energy_technology": 10}, 20, 100, configured)
+	if err != nil {
+		t.Fatalf("Plan(fusion reactor) error = %v", err)
+	}
+	reactorBefore, _ := economy.FusionReactorEnergy(4, 10)
+	reactorAfter, _ := economy.FusionReactorEnergy(5, 10)
+	if reactor.EnergyChange != reactorAfter-reactorBefore || reactor.EnergyChange <= 0 {
+		t.Fatalf("a fusion reactor changes energy by %d, want %d", reactor.EnergyChange, reactorAfter-reactorBefore)
 	}
 
 	for _, id := range []ID{MetalStorage, RoboticsFactory, ResearchLab} {

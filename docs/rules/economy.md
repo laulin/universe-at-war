@@ -38,10 +38,28 @@ La centrale solaire produit :
 floor(20 * level * 1.1^level)
 ```
 
-Les deux formules s'appellent par niveau autant qu'elles se somment sur la
-planète, de sorte qu'un écran peut dire ce qu'un niveau donné consomme ou produit
-sans réécrire la formule. C'est ce que la carte d'un bâtiment affiche, en
-différence entre le niveau atteint et le niveau visé.
+Une centrale électrique de fusion alimentée en deutérium produit, avec `E`
+le niveau de technologie énergétique :
+
+```text
+floor(30 * level * (1.05 + E / 100)^level)
+```
+
+Elle consomme par heure, à la vitesse économique de l'univers :
+
+```text
+floor(10 * level * 1.1^level * economy_speed)
+```
+
+Cette consommation est soustraite de la production horaire de deutérium et
+peut donc rendre son taux net négatif. Le stock ne descend jamais sous zéro ;
+une centrale sans deutérium disponible s'arrête jusqu'au prochain règlement qui
+rend du carburant disponible.
+
+Les fonctions d'énergie s'appellent par niveau autant qu'elles se somment sur
+la planète, de sorte qu'un écran peut dire ce qu'un niveau donné consomme ou
+produit sans réécrire la formule. C'est ce que la carte d'un bâtiment affiche,
+en différence entre le niveau atteint et le niveau visé.
 
 Le facteur énergétique vaut 1 si la production couvre la consommation. Sinon :
 
@@ -54,10 +72,10 @@ Il ne réduit que la production des mines, jamais la production de base.
 Le règlement d'une ressource conserve un reste en `unités-secondes` :
 
 ```text
-numerator = hourly_rate * elapsed_whole_seconds + previous_remainder
+numerator = net_hourly_rate * elapsed_whole_seconds + previous_remainder
 whole     = numerator / 3600
 remainder = numerator % 3600
-stored    = min(capacity, stored + whole)
+stored    = clamp(stored + whole, 0, capacity)
 ```
 
 Les instants persistés ont une précision d'une seconde. Une durée partielle est
@@ -96,7 +114,8 @@ l'algorithme.
 
 ## Cas limites et invariants
 
-- aucun solde, débit, taux ou plafond négatif ;
+- aucun solde, débit ou plafond négatif ; seul le taux net de deutérium peut
+  l'être lorsqu'une centrale à fusion consomme plus que le synthétiseur ;
 - aucun dépassement de capacité après règlement ;
 - aucune perte due à des lectures rapprochées grâce au reste ;
 - un débit est atomique avec l'action qui le motive ;

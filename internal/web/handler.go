@@ -952,7 +952,7 @@ type buildingPageChoice struct {
 	CostDeuterium int64
 	Duration      time.Duration
 	// EnergyChange is what the ordered level does to the body's energy balance,
-	// negative for a mine and positive for the solar plant.
+	// negative for a mine and positive for an energy plant.
 	EnergyChange int64
 	// Role says what the building is for, and Requirements lists what it depends
 	// on, each with the level the body reaches, so a locked card names its whole
@@ -1536,7 +1536,7 @@ func bodySurfaceArtSlot(levels building.Levels, moon bool) string {
 	}
 	strongestMine := max(levels[building.MetalMine], levels[building.CrystalMine],
 		levels[building.DeuteriumSynthesizer])
-	if levels[building.SolarPlant] >= strongestMine+3 {
+	if max(levels[building.SolarPlant], levels[building.FusionReactor]) >= strongestMine+3 {
 		return "energy"
 	}
 	return "mining"
