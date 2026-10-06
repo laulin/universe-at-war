@@ -20,21 +20,7 @@
           </p>
           <p class="muted">Durée unitaire : {{.Duration}}</p>
           {{end}}
-          <button type="button" class="card__more" aria-describedby="stats-{{.ID}}">Caractéristiques</button>
-          <div class="card__stats" id="stats-{{.ID}}" role="note">
-            <dl>
-              <dt>Arme</dt><dd>{{figure .Weapon}}</dd>
-              <dt>Bouclier</dt><dd>{{figure .Shield}}</dd>
-              <dt>Coque</dt><dd>{{figure .Hull}}</dd>
-              {{if .Cargo}}<dt>Fret</dt><dd>{{figure .Cargo}}</dd>{{end}}
-              {{if .Speed}}<dt>Vitesse</dt><dd>{{figure .Speed}}</dd>{{end}}
-              {{if .Fuel}}<dt>Consommation</dt><dd>{{figure .Fuel}}</dd>{{end}}
-            </dl>
-            {{if .Inflicts}}<p class="card__volleys">Inflige</p>
-            <ul>{{range .Inflicts}}<li>{{.Name}} <b>×{{.Shots}}</b></li>{{end}}</ul>{{end}}
-            {{if .Suffers}}<p class="card__volleys">Subit</p>
-            <ul>{{range .Suffers}}<li>{{.Name}} <b>×{{.Shots}}</b></li>{{end}}</ul>{{end}}
-          </div>
+          {{template "technologyButton" .Technology}}
           {{if .Offered}}
           <form method="post" action="/planets/{{$.Planet.ID}}/{{$.Action}}/{{.ID}}"{{if .AwaitingResources}} data-cost-metal="{{.CostMetal}}" data-cost-crystal="{{.CostCrystal}}" data-cost-deuterium="{{.CostDeuterium}}"{{end}}{{if .AwaitingResources}} data-ceiling="{{.OrderCeiling}}"{{end}}>
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
@@ -51,6 +37,7 @@
           </form>
           {{else}}<p class="muted">{{.Reason}}</p>{{end}}
         </div>
+        {{template "technologyDialog" .Technology}}
       </article>
     {{end}}
     </div>

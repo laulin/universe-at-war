@@ -174,6 +174,61 @@
     showHold();
   }
 
+  // Catalogue cards open one native modal. Native dialog supplies focus
+  // trapping, Escape and focus restoration; this layer only connects the
+  // server-rendered controls and turns the three complete sections into tabs.
+  for (const opener of document.querySelectorAll("[data-technology-open]")) {
+    const dialog = document.getElementById(opener.dataset.technologyOpen);
+    if (!dialog || typeof dialog.showModal !== "function") {
+      continue;
+    }
+    opener.hidden = false;
+    const tablist = dialog.querySelector("[data-technology-tabs]");
+    const closeButton = dialog.querySelector("[data-technology-close]");
+    const tabs = Array.from(dialog.querySelectorAll("[data-technology-tab]"));
+    const panels = Array.from(dialog.querySelectorAll("[data-technology-panel]"));
+    const activate = (name, focus = false) => {
+      for (const tab of tabs) {
+        const active = tab.dataset.technologyTab === name;
+        tab.setAttribute("aria-selected", String(active));
+        tab.tabIndex = active ? 0 : -1;
+        if (active && focus) {
+          tab.focus();
+        }
+      }
+      for (const panel of panels) {
+        panel.hidden = panel.dataset.technologyPanel !== name;
+      }
+    };
+    if (tablist) {
+      tablist.hidden = false;
+      for (const tab of tabs) {
+        tab.addEventListener("click", () => activate(tab.dataset.technologyTab));
+        tab.addEventListener("keydown", (event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+            return;
+          }
+          event.preventDefault();
+          const current = tabs.indexOf(tab);
+          const step = event.key === "ArrowRight" ? 1 : -1;
+          const next = (current + step + tabs.length) % tabs.length;
+          activate(tabs[next].dataset.technologyTab, true);
+        });
+      }
+    }
+    activate("info");
+    opener.addEventListener("click", () => {
+      activate("info");
+      dialog.showModal();
+    });
+    closeButton?.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    });
+  }
+
   // Messaging remains a normal server-rendered form without JavaScript. With
   // enhancement available, new messages arrive incrementally, sending no
   // longer reloads the page, emoji buttons become usable and short-lived

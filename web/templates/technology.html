@@ -1,0 +1,104 @@
+{{define "technologyButton"}}
+<button type="button" class="card__more" aria-haspopup="dialog" aria-controls="{{.DialogID}}" data-technology-open="{{.DialogID}}" hidden>
+  Informations
+</button>
+{{end}}
+
+{{define "technologyDialog"}}
+<dialog class="technology-dialog" id="{{.DialogID}}" aria-labelledby="{{.DialogID}}-title">
+  <header class="technology-dialog__header">
+    <div>
+      <p class="eyebrow">{{.Kind}}</p>
+      <h2 id="{{.DialogID}}-title">{{.Name}}</h2>
+    </div>
+    <button class="technology-dialog__close" type="button" aria-label="Fermer la fiche de {{.Name}}" data-technology-close>×</button>
+  </header>
+
+  <div class="technology-dialog__tabs" role="tablist" aria-label="Rubriques de la fiche" data-technology-tabs hidden>
+    <button type="button" role="tab" id="{{.DialogID}}-tab-info" aria-controls="{{.DialogID}}-info" aria-selected="true" data-technology-tab="info">Informations</button>
+    <button type="button" role="tab" id="{{.DialogID}}-tab-tree" aria-controls="{{.DialogID}}-tree" aria-selected="false" tabindex="-1" data-technology-tab="tree">Arbre tech</button>
+    {{if or .Progress .Stats}}
+    <button type="button" role="tab" id="{{.DialogID}}-tab-figures" aria-controls="{{.DialogID}}-figures" aria-selected="false" tabindex="-1" data-technology-tab="figures">{{if .Progress}}Progression{{else}}Caractéristiques{{end}}</button>
+    {{end}}
+  </div>
+
+  <div class="technology-dialog__body">
+    <section class="technology-dialog__panel" id="{{.DialogID}}-info" role="tabpanel" aria-labelledby="{{.DialogID}}-tab-info" data-technology-panel="info">
+      <img class="technology-dialog__art" src="/art/{{.ArtCategory}}/{{.ID}}" alt="" width="320" height="240">
+      <div class="technology-dialog__summary">
+        <p>{{.Description}}</p>
+        <dl>
+          {{if eq .Kind "Bâtiment"}}<dt>Niveau actuel</dt><dd>{{.Level}}</dd>{{end}}
+          {{if eq .Kind "Recherche"}}<dt>Niveau actuel</dt><dd>{{.Level}}</dd>{{end}}
+          {{if eq .Kind "Vaisseau"}}<dt>Disponibles</dt><dd>{{figure .Owned}}</dd>{{end}}
+          {{if eq .Kind "Défense"}}<dt>Disponibles</dt><dd>{{figure .Owned}}</dd>{{end}}
+        </dl>
+      </div>
+    </section>
+
+    <section class="technology-dialog__panel technology-dialog__tree" id="{{.DialogID}}-tree" role="tabpanel" aria-labelledby="{{.DialogID}}-tab-tree" data-technology-panel="tree">
+      <div>
+        <h3>Prérequis</h3>
+        {{if .Requirements}}
+        <ul>
+          {{range .Requirements}}
+          <li class="{{if .Met}}requirement--met{{else}}requirement--unmet{{end}}">
+            <span>{{.Name}}</span><b>{{.Reached}} / {{.Level}}</b>
+          </li>
+          {{end}}
+        </ul>
+        {{else}}<p class="muted">Aucun prérequis.</p>{{end}}
+      </div>
+      <div>
+        <h3>Débloque</h3>
+        {{if .Unlocks}}
+        <ul>
+          {{range .Unlocks}}<li><span>{{.Name}}</span><b>niveau {{.Level}}</b></li>{{end}}
+        </ul>
+        {{else}}<p class="muted">Aucun élément ne dépend directement de cette technologie.</p>{{end}}
+      </div>
+    </section>
+
+    {{if or .Progress .Stats}}
+    <section class="technology-dialog__panel" id="{{.DialogID}}-figures" role="tabpanel" aria-labelledby="{{.DialogID}}-tab-figures" data-technology-panel="figures">
+      {{if .Progress}}
+      <div class="technology-table-wrap">
+        <table class="technology-table">
+          <thead><tr>
+            <th scope="col">Niveau</th>
+            <th scope="col">Métal</th>
+            <th scope="col">Cristal</th>
+            <th scope="col">Deutérium</th>
+            <th scope="col">Énergie</th>
+            <th scope="col">Durée</th>
+            <th scope="col">Effet</th>
+          </tr></thead>
+          <tbody>
+          {{range .Progress}}
+            <tr{{if .Current}} class="technology-table__current"{{end}}>
+              <th scope="row">{{.Level}}{{if .Current}} <span class="visually-hidden">(niveau actuel)</span>{{end}}</th>
+              <td>{{figure .Metal}}</td>
+              <td>{{figure .Crystal}}</td>
+              <td>{{figure .Deuterium}}</td>
+              <td>{{signed .Energy}}</td>
+              <td>{{.Duration}}</td>
+              <td>{{.Effect}}</td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <dl class="technology-stats">
+        {{range .Stats}}<dt>{{.Name}}</dt><dd>{{.Value}}</dd>{{end}}
+      </dl>
+      {{if .Inflicts}}<div class="technology-volleys"><h3>Rapid fire infligé</h3>
+      <ul>{{range .Inflicts}}<li><span>{{.Name}}</span><b>×{{.Shots}}</b></li>{{end}}</ul></div>{{end}}
+      {{if .Suffers}}<div class="technology-volleys"><h3>Rapid fire subi</h3>
+      <ul>{{range .Suffers}}<li><span>{{.Name}}</span><b>×{{.Shots}}</b></li>{{end}}</ul></div>{{end}}
+      {{end}}
+    </section>
+    {{end}}
+  </div>
+</dialog>
+{{end}}

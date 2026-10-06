@@ -251,11 +251,11 @@ var (
 func parsePages() (map[string]*template.Template, error) {
 	pages := map[string]*template.Template{}
 	for base, names := range map[string][]string{"layout": gamePages, "shell": plainPages} {
-		// queue.html rides along with the shell so that every build screen shares
-		// one queue panel instead of three drifting copies.
+		// Shared components ride along with the shell so the progression screens
+		// cannot grow separate queue panels or technology dialogs.
 		sources := []string{"templates/" + base + ".html"}
 		if base == "layout" {
-			sources = append(sources, "templates/queue.html")
+			sources = append(sources, "templates/queue.html", "templates/technology.html")
 		}
 		root, err := template.New(base+".html").Funcs(templateFuncs).ParseFS(webassets.Files, sources...)
 		if err != nil {
@@ -941,8 +941,9 @@ func (h *Handler) startBuilding(response http.ResponseWriter, request *http.Requ
 }
 
 type buildingPageChoice struct {
-	ID   building.ID
-	Name string
+	ID         building.ID
+	Name       string
+	Technology technologyView
 	// Level is what the body has built; TargetLevel is what the button orders,
 	// which the queue may already have pushed further ahead.
 	Level         int
@@ -954,10 +955,9 @@ type buildingPageChoice struct {
 	// EnergyChange is what the ordered level does to the body's energy balance,
 	// negative for a mine and positive for an energy plant.
 	EnergyChange int64
-	// Role says what the building is for, and Requirements lists what it depends
-	// on, each with the level the body reaches, so a locked card names its whole
-	// dependency rather than only the first gap.
-	Role         string
+	// Requirements lists what the building depends on, each with the level the
+	// body reaches, so a locked card names its whole dependency rather than only
+	// the first gap. Technology carries the complete descriptive sheet.
 	Requirements []requirementView
 	// Offered says the card carries a form at all. AwaitingResources says that
 	// form is there but disabled, because the only thing missing is a stock the
@@ -1054,10 +1054,10 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 		}
 		views = append(views, buildingPageChoice{
 			ID: choice.Definition.ID, Name: buildingName(choice.Definition.ID), Level: choice.Level,
+			Technology:  buildingTechnology(choice, planet),
 			TargetLevel: choice.Plan.TargetLevel,
 			CostMetal:   choice.Plan.Cost.Metal, CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
 			Duration: choice.Plan.Duration, EnergyChange: choice.Plan.EnergyChange,
-			Role:         buildingRole(choice.Definition.ID),
 			Requirements: requirementViews(choice.Requirements),
 			Offered:      choice.Available, AwaitingResources: choice.Available && !choice.Affordable,
 			Reason: reason, IdempotencyKey: key,

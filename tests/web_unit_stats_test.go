@@ -46,10 +46,10 @@ func TestAShipCardNamesWhatItShredsAndWhatShredsIt(t *testing.T) {
 	handler, _, session, csrfCookie := progressionHandler(t)
 
 	panel := statsPanel(t, getPage(t, handler, "/planets/1/shipyard", session, csrfCookie), "cruiser")
-	if !strings.Contains(panel, "Chasseur léger <b>×6</b>") {
+	if !strings.Contains(panel, "<span>Chasseur léger</span><b>×6</b>") {
 		t.Fatalf("the cruiser card does not say what it shreds: %q", panel)
 	}
-	if !strings.Contains(panel, "Étoile de la mort <b>×33</b>") {
+	if !strings.Contains(panel, "<span>Étoile de la mort</span><b>×33</b>") {
 		t.Fatalf("the cruiser card does not say what shreds it: %q", panel)
 	}
 }
@@ -63,26 +63,31 @@ func TestADefenceCardNamesItsPredators(t *testing.T) {
 	if strings.Contains(panel, "Inflige") {
 		t.Fatalf("the launcher card claims to inflict rapid fire: %q", panel)
 	}
-	for _, predator := range []string{"Croiseur <b>×10</b>", "Bombardier <b>×20</b>", "Étoile de la mort <b>×200</b>"} {
+	for _, predator := range []string{"<span>Croiseur</span><b>×10</b>", "<span>Bombardier</span><b>×20</b>", "<span>Étoile de la mort</span><b>×200</b>"} {
 		if !strings.Contains(panel, predator) {
 			t.Fatalf("the launcher card does not name %s: %q", predator, panel)
 		}
 	}
 }
 
-// statsPanel cuts one card's panel out of the page. The panel holds no nested
-// division, so it ends at the first closing one.
+// statsPanel cuts the technical dialog out of the page, whichever production
+// family owns the unit.
 func statsPanel(t *testing.T, page, id string) string {
 	t.Helper()
-	marker := `id="stats-` + id + `"`
-	start := strings.Index(page, marker)
+	start := -1
+	for _, family := range []string{"ship", "defense"} {
+		if candidate := strings.Index(page, `id="technology-`+family+`-`+id+`"`); candidate >= 0 {
+			start = candidate
+			break
+		}
+	}
 	if start < 0 {
-		t.Fatalf("the page holds no panel for %s", id)
+		t.Fatalf("the page holds no technical dialog for %s", id)
 	}
 	panel := page[start:]
-	end := strings.Index(panel, "</div>")
+	end := strings.Index(panel, "</dialog>")
 	if end < 0 {
-		t.Fatalf("the panel of %s is never closed: %q", id, panel)
+		t.Fatalf("the technical dialog of %s is never closed: %q", id, panel)
 	}
 	return panel[:end]
 }

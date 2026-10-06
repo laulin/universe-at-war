@@ -20,11 +20,11 @@ import (
 
 // researchPageChoice is one research prepared for display.
 type researchPageChoice struct {
-	ID   research.ID
-	Name string
-	// Role says what the technology is for, and Requirements lists what it
-	// depends on, each with the level the empire reaches.
-	Role              string
+	ID         research.ID
+	Name       string
+	Technology technologyView
+	// Requirements lists what the technology depends on, each with the level
+	// the empire reaches. Technology carries the complete descriptive sheet.
 	Requirements      []requirementView
 	Level             int
 	TargetLevel       int
@@ -58,6 +58,7 @@ type unitPageVolley struct {
 type unitPageChoice struct {
 	ID                unit.ID
 	Name              string
+	Technology        technologyView
 	Owned             int64
 	CostMetal         int64
 	CostCrystal       int64
@@ -71,17 +72,6 @@ type unitPageChoice struct {
 	OrderCeiling   int64
 	Reason         string
 	IdempotencyKey string
-	// What the unit is worth in a battle. Speed is zero for whatever has no
-	// drive, which is every defence and the solar satellite, and the card then
-	// shows no speed rather than a nought.
-	Weapon   int64
-	Shield   int64
-	Hull     int64
-	Cargo    int64
-	Speed    int64
-	Fuel     int64
-	Inflicts []unitPageVolley
-	Suffers  []unitPageVolley
 }
 
 type productionPageData struct {
@@ -161,6 +151,8 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 		}
 		view := researchPageChoice{
 			ID: choice.Definition.ID, Name: researchName(choice.Definition.ID), Level: choice.Level,
+			Technology: researchTechnology(choice.Level, choice.Definition, choice.Requirements,
+				overview.Planet, overview.Laboratories),
 			TargetLevel: choice.Plan.TargetLevel, CostMetal: choice.Plan.Cost.Metal,
 			CostCrystal: choice.Plan.Cost.Crystal, CostDeuterium: choice.Plan.Cost.Deuterium,
 			Energy: choice.Plan.Energy, Duration: choice.Plan.Duration,
@@ -168,7 +160,6 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 			// Energy never fills on its own, so a research short of it is not
 			// something the page may lift however long it waits.
 			AwaitingResources: choice.Available && !choice.Affordable && !choice.EnergyShort,
-			Role:              researchRole(choice.Definition.ID),
 			Requirements:      requirementViews(choice.Requirements),
 			Reason: researchChoiceReason(choice,
 				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength),
@@ -299,6 +290,9 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 		if !keyOK {
 			return
 		}
+		speed := unitSpeed(choice.Definition, overview.Planet.Researches)
+		inflicts := namedVolleys(catalogue.RapidFireOf(choice.Definition.ID))
+		suffers := namedVolleys(catalogue.RapidFireAgainst(choice.Definition.ID))
 		view := unitPageChoice{
 			ID: choice.Definition.ID, Name: unitName(choice.Definition.ID), Owned: choice.Owned,
 			CostMetal: choice.UnitCost.Metal, CostCrystal: choice.UnitCost.Crystal,
@@ -311,15 +305,9 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 				len(overview.Queue) >= overview.Planet.Rules.Progression.QueueLength,
 				choice.Available && choice.MaximumAffordable == 0),
 			IdempotencyKey: key,
-			Weapon:         choice.Definition.Weapon,
-			Shield:         choice.Definition.Shield,
-			Hull:           choice.Definition.Hull(),
-			Cargo:          choice.Definition.Cargo,
-			Speed:          unitSpeed(choice.Definition, overview.Planet.Researches),
-			Fuel:           choice.Definition.FuelConsumption,
-			Inflicts:       namedVolleys(catalogue.RapidFireOf(choice.Definition.ID)),
-			Suffers:        namedVolleys(catalogue.RapidFireAgainst(choice.Definition.ID)),
 		}
+		view.Technology = unitTechnology(choice.Definition, choice.Owned, choice.UnitCost,
+			choice.UnitDuration, overview.Planet, speed, inflicts, suffers)
 		choices = append(choices, view)
 	}
 	section := "shipyard"

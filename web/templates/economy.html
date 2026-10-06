@@ -21,10 +21,7 @@
           </p>
           <p class="muted">{{.Duration}}</p>
           {{end}}
-          {{if .Role}}
-          <button type="button" class="card__more" aria-describedby="role-{{.ID}}">Rôle</button>
-          <div class="card__stats" id="role-{{.ID}}" role="note"><p>{{.Role}}</p></div>
-          {{end}}
+          {{template "technologyButton" .Technology}}
           {{if .Offered}}
           <form method="post" action="/planets/{{$.Planet.ID}}/buildings/{{.ID}}"{{if .AwaitingResources}} data-cost-metal="{{.CostMetal}}" data-cost-crystal="{{.CostCrystal}}" data-cost-deuterium="{{.CostDeuterium}}"{{end}}>
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
@@ -46,6 +43,7 @@
           {{if .Reason}}<p class="muted">{{.Reason}}</p>{{end}}
           {{end}}
         </div>
+        {{template "technologyDialog" .Technology}}
       </article>
     {{end}}
     </div>

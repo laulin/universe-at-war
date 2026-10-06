@@ -130,15 +130,13 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-panel);
 }
-.card--locked { opacity: 0.62; }
+.card--locked > .card__art,
+.card--locked > .card__body { opacity: 0.62; }
 
 /* The card frames the panel that folds into it. */
 .card { position: relative; }
 
-/* The panel is folded away until the card is hovered or something inside it
-   takes focus, so a mouse, a keyboard and a finger all reach it. The button is
-   there to be that focus target and does nothing else; without it the panel
-   would be reachable by pointer alone. */
+/* Every catalogue card opens the same full technical sheet. */
 .card__more {
   align-self: start;
   min-height: auto;
@@ -151,45 +149,6 @@
   font-weight: 400;
 }
 .card:hover .card__more { color: var(--text); border-color: var(--border-strong); }
-
-.card__stats {
-  position: absolute;
-  /* Below the card, never over it: laid on top, the panel covered the very
-     button the player came to press. Sideways, the last column of the grid
-     would run into the window, so downwards is the only free direction. The
-     cap is above the longest table in the catalogue, the death star's eighteen
-     entries, and is there for a catalogue that grows. */
-  top: calc(100% + var(--space-1));
-  left: 0;
-  right: 0;
-  max-height: 32rem;
-  z-index: 2;
-  overflow-y: auto;
-  /* A panel that is only ever read must not take the pointer, or it would
-     swallow the click meant for the card it hangs over. */
-  pointer-events: none;
-  padding: var(--space-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--surface-sunken);
-  font-size: var(--text-xs);
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-.card:hover .card__stats,
-.card:focus-within .card__stats { visibility: visible; opacity: 1; }
-/* The card being read floats above its neighbours, or the card declared after
-   it would be painted over the panel hanging beneath. */
-.card:hover, .card:focus-within { z-index: 3; }
-
-.card__stats dl { display: grid; grid-template-columns: 1fr auto; gap: 0 var(--space-3); margin: 0; }
-.card__stats dt { color: var(--muted); }
-.card__stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.card__stats ul { list-style: none; margin: 0; padding: 0; }
-.card__stats li { display: flex; justify-content: space-between; gap: var(--space-3); }
-.card__stats b { color: var(--accent); font-variant-numeric: tabular-nums; }
-.card__stats p { margin: 0; }
 
 /* What a locked card depends on stays on the card rather than under it: it is
    the reason the card is locked, and a reason nobody hovers over is a reason
@@ -258,6 +217,190 @@
 .card__title span { color: var(--muted); font-weight: 400; font-size: var(--text-sm); }
 .card__body p { margin: 0; font-size: var(--text-sm); }
 .card__body form { margin: 0; gap: var(--space-2); }
+
+/* ---------- Technology sheets ---------- */
+
+.technology-dialog {
+  width: min(64rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: min(52rem, calc(100vh - 2rem));
+  padding: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.75);
+}
+.technology-dialog::backdrop {
+  background: rgba(1, 6, 12, 0.78);
+  backdrop-filter: blur(0.18rem);
+}
+.technology-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: linear-gradient(90deg, rgba(26, 62, 92, 0.9), var(--surface-raised));
+  border-bottom: 1px solid var(--border-strong);
+}
+.technology-dialog__header h2,
+.technology-dialog__header p { margin: 0; }
+.technology-dialog__header h2 { color: var(--accent-strong); font-size: var(--text-lg); }
+.technology-dialog__header form { margin: 0; }
+.technology-dialog__close {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  color: var(--text);
+  background: rgba(3, 10, 17, 0.65);
+  border-color: var(--border-strong);
+  font-size: var(--text-xl);
+  line-height: 1;
+}
+.technology-dialog__tabs {
+  display: flex;
+  gap: 1px;
+  padding: var(--space-2) var(--space-3) 0;
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border);
+}
+.technology-dialog__tabs[hidden] { display: none; }
+.technology-dialog__tabs button {
+  flex: 1;
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  color: var(--muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  box-shadow: none;
+}
+.technology-dialog__tabs button[aria-selected="true"] {
+  color: var(--accent-strong);
+  background: var(--surface-sunken);
+  border-bottom-color: var(--surface-sunken);
+}
+.technology-dialog__body {
+  max-height: calc(min(52rem, 100vh - 2rem) - 8.5rem);
+  overflow: auto;
+  padding: var(--space-4);
+}
+.technology-dialog__panel[hidden] { display: none !important; }
+.technology-dialog__panel {
+  min-height: 16rem;
+}
+.technology-dialog__panel:first-child {
+  display: grid;
+  grid-template-columns: minmax(12rem, 20rem) 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+.technology-dialog__art {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.technology-dialog__summary p { margin-top: 0; line-height: 1.6; }
+.technology-dialog__summary dl,
+.technology-stats {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) auto;
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3);
+  background: var(--surface-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.technology-dialog__summary dt,
+.technology-stats dt { color: var(--muted); }
+.technology-dialog__summary dd,
+.technology-stats dd {
+  margin: 0;
+  text-align: right;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+.technology-dialog__tree {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+.technology-dialog__tree h3,
+.technology-volleys h3 {
+  margin-top: 0;
+  color: var(--accent);
+}
+.technology-dialog__tree ul,
+.technology-volleys ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.technology-dialog__tree li,
+.technology-volleys li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.technology-dialog__tree b,
+.technology-volleys b {
+  flex: none;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+.technology-table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.technology-table {
+  width: 100%;
+  min-width: 48rem;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.technology-table th,
+.technology-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+.technology-table th:first-child,
+.technology-table td:last-child { text-align: left; }
+.technology-table thead th {
+  position: sticky;
+  top: 0;
+  color: var(--muted);
+  background: var(--surface-raised);
+  z-index: 1;
+}
+.technology-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.025); }
+.technology-table__current {
+  color: var(--accent-strong);
+  background: rgba(40, 180, 210, 0.1) !important;
+}
+.technology-volleys { margin-top: var(--space-5); }
+
+@media (max-width: 44rem) {
+  .technology-dialog {
+    width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+  }
+  .technology-dialog__body {
+    max-height: calc(100vh - 9rem);
+    padding: var(--space-3);
+  }
+  .technology-dialog__panel:first-child,
+  .technology-dialog__tree { grid-template-columns: 1fr; }
+  .technology-dialog__art { max-width: 20rem; }
+  .technology-dialog__tabs button { padding-inline: var(--space-1); font-size: var(--text-xs); }
+}
 .card__body .cost { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-sm); }
 /* Every card of a row is as tall as the tallest, so what closes a card is held
    against its floor. Without this a title that wraps onto a second line pushes

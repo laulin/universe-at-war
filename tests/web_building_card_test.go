@@ -35,7 +35,7 @@ func TestALaboratoryHeldByAResearchOffersNoFormAndSaysWhy(t *testing.T) {
 	if !strings.Contains(held, "Une recherche occupe ce laboratoire") {
 		t.Fatalf("the card does not say what holds the laboratory: %q", held)
 	}
-	if strings.Contains(held, "Prérequis") {
+	if strings.Contains(held, "Prérequis manquants") {
 		t.Fatalf("the card blames prerequisites for a busy laboratory: %q", held)
 	}
 
@@ -47,7 +47,7 @@ func TestALaboratoryHeldByAResearchOffersNoFormAndSaysWhy(t *testing.T) {
 	if !strings.Contains(refused, "occupe cette installation") {
 		t.Fatalf("the refusal does not name the busy installation: %q", refused)
 	}
-	if strings.Contains(refused, "prérequis") {
+	if strings.Contains(refused, "Les prérequis de cette construction") {
 		t.Fatalf("the refusal blames prerequisites for a busy installation: %q", refused)
 	}
 }
