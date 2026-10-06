@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"universeatwar/internal/domain/building"
 	"universeatwar/migrations"
 )
 
@@ -205,6 +206,45 @@ func TestFusionReactorMigrationPreservesExistingDeuteriumRemainders(t *testing.T
 	}
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatalf("idempotent Migrate() after fusion upgrade: %v", err)
+	}
+}
+
+func TestExistingWorldLoadsAllianceDepotAtLevelZeroWithoutSchemaChange(t *testing.T) {
+	ctx := context.Background()
+	database, err := Open(ctx, filepath.Join(t.TempDir(), "alliance-depot-upgrade.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	if err := database.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	versionBefore, err := database.SchemaVersion(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedUniverse(t, ctx, database)
+
+	var levels building.Levels
+	if err := withWriteTx(ctx, database.Write(), "test alliance depot compatibility", func(tx *sql.Tx) error {
+		var loadErr error
+		levels, loadErr = loadLevels(ctx, tx, 1, building.DefaultCatalogue())
+		return loadErr
+	}); err != nil {
+		t.Fatalf("load existing world with alliance depot catalogue: %v", err)
+	}
+	if got := levels[building.AllianceDepot]; got != 0 {
+		t.Fatalf("alliance depot level on an existing world = %d, want 0", got)
+	}
+	if err := database.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() after catalogue extension: %v", err)
+	}
+	versionAfter, err := database.SchemaVersion(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if versionAfter != versionBefore {
+		t.Fatalf("schema version changed from %d to %d for a catalogue-only addition", versionBefore, versionAfter)
 	}
 }
 

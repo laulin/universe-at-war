@@ -97,6 +97,26 @@ func TestFusionReactorNeedsItsFuelChain(t *testing.T) {
 	}
 }
 
+func TestAllianceDepotCostsDoubleAtEveryLevelAndNeedsNoPrerequisite(t *testing.T) {
+	catalogue := DefaultCatalogue()
+	configured := rules.Default()
+
+	plan, err := catalogue.Plan(AllianceDepot, OnPlanet, Levels{}, nil, 0, 100, configured)
+	if err != nil {
+		t.Fatalf("Plan(alliance depot) error = %v", err)
+	}
+	if plan.Cost != (economy.Resources{Metal: 20_000, Crystal: 40_000}) {
+		t.Fatalf("alliance depot cost = %#v", plan.Cost)
+	}
+	if plan.EnergyChange != 0 {
+		t.Fatalf("alliance depot energy change = %d, want none", plan.EnergyChange)
+	}
+	second, err := catalogue.Cost(AllianceDepot, 2, 1)
+	if err != nil || second != (economy.Resources{Metal: 40_000, Crystal: 80_000}) {
+		t.Fatalf("alliance depot level 2 cost = %#v, %v", second, err)
+	}
+}
+
 func TestPlacementSeparatesPlanetsFromMoons(t *testing.T) {
 	catalogue := DefaultCatalogue()
 	configured := rules.Default()
@@ -175,7 +195,7 @@ func TestPlanCarriesTheEnergyItChanges(t *testing.T) {
 		t.Fatalf("a fusion reactor changes energy by %d, want %d", reactor.EnergyChange, reactorAfter-reactorBefore)
 	}
 
-	for _, id := range []ID{MetalStorage, RoboticsFactory, ResearchLab} {
+	for _, id := range []ID{MetalStorage, RoboticsFactory, ResearchLab, AllianceDepot} {
 		plan, err := catalogue.Plan(id, OnPlanet, Levels{}, nil, 20, 100, configured)
 		if err != nil {
 			t.Fatalf("Plan(%s) error = %v", id, err)

@@ -18,7 +18,8 @@ func buildingName(id building.ID) string {
 		building.MetalStorage:  "Hangar de métal", building.CrystalStorage: "Hangar de cristal",
 		building.DeuteriumTank: "Réservoir de deutérium", building.RoboticsFactory: "Usine de robots",
 		building.NaniteFactory: "Usine de nanites", building.Shipyard: "Chantier spatial",
-		building.ResearchLab: "Laboratoire de recherche", building.MissileSilo: "Silo à missiles",
+		building.ResearchLab: "Laboratoire de recherche", building.AllianceDepot: "Dépôt d’alliance",
+		building.MissileSilo: "Silo à missiles",
 		building.Terraformer: "Terraformeur", building.LunarBase: "Base lunaire",
 		building.SensorPhalanx: "Phalange de capteurs", building.JumpGate: "Porte de saut",
 	}
@@ -29,7 +30,7 @@ func buildingName(id building.ID) string {
 }
 
 // buildingRole says what a building is for, in one or two sentences. A player
-// reading a catalogue of seventeen entries needs to know what each one does
+// reading a catalogue of eighteen entries needs to know what each one does
 // before its price means anything, and the entry that touches the energy
 // balance says so, because the card puts a figure of energy next to it.
 func buildingRole(id building.ID) string {
@@ -46,6 +47,7 @@ func buildingRole(id building.ID) string {
 		building.NaniteFactory:        "Divise par deux la durée de chaque construction et de chaque production à chaque niveau. Le bâtiment le plus cher du catalogue.",
 		building.Shipyard:             "Construit les vaisseaux et les défenses. Chaque niveau accélère la production, et le silo à missiles en dépend.",
 		building.ResearchLab:          "Mène les recherches et fixe leur vitesse. Il ne peut pas être agrandi pendant qu'une recherche est en cours.",
+		building.AllianceDepot:        "Ravitaille les flottes alliées stationnées en orbite. Chaque niveau permet de leur envoyer 10 000 unités supplémentaires de deutérium par heure.",
 		building.MissileSilo:          "Abrite les missiles d'interception et les missiles interplanétaires. Chaque niveau ajoute des emplacements.",
 		building.Terraformer:          "Gagne des cases constructibles sur un monde devenu trop petit. Il n'y a pas d'autre moyen d'en obtenir.",
 		building.LunarBase:            "Rend la lune habitable et fixe le nombre de cases qu'elle offre. Rien d'autre ne peut y être bâti avant elle.",

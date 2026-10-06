@@ -146,7 +146,7 @@ func TestEveryCardSaysWhatItsBuildingIsFor(t *testing.T) {
 	}
 	for _, id := range []string{"metal_mine", "crystal_mine", "deuterium_synthesizer", "solar_plant", "fusion_reactor",
 		"metal_storage", "crystal_storage", "deuterium_tank", "robotics_factory", "nanite_factory",
-		"shipyard", "research_lab", "missile_silo", "terraformer"} {
+		"shipyard", "research_lab", "alliance_depot", "missile_silo", "terraformer"} {
 		if !strings.Contains(buildingCardOf(t, page, id), `class="card__more"`) {
 			t.Fatalf("the card of %s carries no role", id)
 		}

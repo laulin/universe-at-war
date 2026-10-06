@@ -26,6 +26,7 @@ const (
 	NaniteFactory        ID = "nanite_factory"
 	Shipyard             ID = "shipyard"
 	ResearchLab          ID = "research_lab"
+	AllianceDepot        ID = "alliance_depot"
 	MissileSilo          ID = "missile_silo"
 	Terraformer          ID = "terraformer"
 
@@ -103,6 +104,7 @@ func DefaultCatalogue() Catalogue {
 		{ID: NaniteFactory, BaseCost: economy.Resources{Metal: 1_000_000, Crystal: 500_000, Deuterium: 100_000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(RoboticsFactory, 10), requiresResearch("computer_technology", 10)}},
 		{ID: Shipyard, BaseCost: economy.Resources{Metal: 400, Crystal: 200, Deuterium: 100}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(RoboticsFactory, 2)}},
 		{ID: ResearchLab, BaseCost: economy.Resources{Metal: 200, Crystal: 400, Deuterium: 200}, Growth: 2},
+		{ID: AllianceDepot, BaseCost: economy.Resources{Metal: 20_000, Crystal: 40_000}, Growth: 2},
 		{ID: MissileSilo, BaseCost: economy.Resources{Metal: 20_000, Crystal: 20_000, Deuterium: 1000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(Shipyard, 1)}},
 		{ID: Terraformer, BaseCost: economy.Resources{Crystal: 50_000, Deuterium: 100_000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(NaniteFactory, 1), requiresResearch("energy_technology", 12)}},
 
@@ -123,7 +125,7 @@ func DefaultCatalogue() Catalogue {
 // order is the stable interface order of the catalogue.
 var order = []ID{
 	MetalMine, CrystalMine, DeuteriumSynthesizer, SolarPlant, FusionReactor, MetalStorage, CrystalStorage, DeuteriumTank,
-	RoboticsFactory, NaniteFactory, Shipyard, ResearchLab, MissileSilo, Terraformer,
+	RoboticsFactory, NaniteFactory, Shipyard, ResearchLab, AllianceDepot, MissileSilo, Terraformer,
 	LunarBase, SensorPhalanx, JumpGate,
 }
 

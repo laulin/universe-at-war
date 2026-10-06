@@ -27,8 +27,9 @@ comme après.
 
 Le catalogue initial contient les mines de métal/cristal/deutérium, les centrales
 solaire et à fusion, les trois stockages, l'usine de robots, l'usine de nanites,
-le chantier spatial, le laboratoire, le silo à missiles et le terraformeur. Les
-bâtiments lunaires ont leur propre catalogue, décrit dans `moon.md`.
+le chantier spatial, le laboratoire, le dépôt d'alliance, le silo à missiles et
+le terraformeur. Les bâtiments lunaires ont leur propre catalogue, décrit dans
+`moon.md`.
 
 Une installation dont une autre file dépend ne s'agrandit pas : le laboratoire
 pendant qu'une recherche est en cours ou en attente, le chantier spatial et
@@ -89,10 +90,18 @@ niveau que la file atteint déjà, comme le coût et la durée du même plan.
 | `nanite_factory` | 1 000 000/500 000/100 000 | 2 | usine robots 10 |
 | `shipyard` | 400/200/100 | 2 | usine robots 2 |
 | `research_lab` | 200/400/200 | 2 | — |
+| `alliance_depot` | 20 000/40 000/0 | 2 | — |
 | `missile_silo` | 20 000/20 000/1 000 | 2 | chantier 1 |
 | `terraformer` | 0/50 000/100 000 | 2 | nanites 1 |
 
 Les identifiants sont persistés et ne dépendent pas de la langue d'affichage.
+Le dépôt d'alliance augmente de 10 000 unités de deutérium par heure et par
+niveau la capacité de ravitaillement des flottes alliées en stationnement.
+
+Les niveaux sont stockés dans `planet_buildings` sous forme de lignes génériques.
+Ajouter un identifiant au catalogue ne modifie donc pas le schéma : une planète
+créée par une version antérieure n'a simplement aucune ligne `alliance_depot`,
+ce qui équivaut au niveau 0 jusqu'à sa première construction.
 
 ## Ordre et idempotence
 
