@@ -212,6 +212,26 @@ func TestWebPlanetTitleCanRenameOnlyItsOwnPlanet(t *testing.T) {
 	assertSingleText(t, database, "SELECT name FROM planets WHERE id = 2", "Planète mère")
 }
 
+func TestPlanetRenameButtonsDoNotLoseTheEditedNameOnFocusChange(t *testing.T) {
+	handler, _, _, _ := fleetHandler(t)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/static/app.js", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /static/app.js = %d", response.Code)
+	}
+	script := response.Body.String()
+	for _, expected := range []string{
+		`form.addEventListener("focusout", (event)`,
+		`event.relatedTarget && !form.contains(event.relatedTarget)`,
+		`document.addEventListener("pointerdown", (event)`,
+		`!rename.contains(event.target)`,
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("rename focus handling misses %q", expected)
+		}
+	}
+}
+
 func getPage(t *testing.T, handler http.Handler, target string, cookies ...*http.Cookie) string {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, target, nil)

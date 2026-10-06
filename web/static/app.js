@@ -53,7 +53,8 @@
   // The resources-page title is the rename control. The real form is rendered
   // open as a no-script fallback; once this convenience is available, the title
   // replaces it until clicked. Enter submits naturally, while Escape or leaving
-  // the editor restores the last server-confirmed value.
+  // the editor restores the last server-confirmed value. Pointer clicks inside
+  // the form never close it before their button can act.
   const rename = document.querySelector("[data-body-rename]");
   if (rename) {
     const trigger = rename.querySelector("[data-body-rename-trigger]");
@@ -82,12 +83,18 @@
         trigger.focus();
       }
     });
-    form.addEventListener("focusout", () => {
-      window.setTimeout(() => {
-        if (!form.contains(document.activeElement)) {
-          close();
-        }
-      }, 0);
+    form.addEventListener("focusout", (event) => {
+      // relatedTarget is the element receiving keyboard focus. Some browsers
+      // leave it null for pointer interactions, which the pointer handler below
+      // handles without racing the submit button's click.
+      if (event.relatedTarget && !form.contains(event.relatedTarget)) {
+        close();
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!rename.contains(event.target)) {
+        close();
+      }
     });
     close();
   }
