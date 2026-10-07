@@ -97,6 +97,77 @@ func TestArtificialPlayerNamesANewColonyWithoutOverwritingChosenNames(t *testing
 		"SELECT COUNT(*) FROM ai_decisions WHERE body_id = ? AND action = 'rename 1:2:4' AND outcome = 'done'", 1, colony)
 }
 
+func TestArtificialPlayerColonizesThenDevelopsTheNewPlanet(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+	profile, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Pionnier", Archetype: domainai.Logistician,
+		Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setResearch(t, ctx, database, profile.PlayerID, "astrophysics", 1)
+	setResearch(t, ctx, database, profile.PlayerID, "computer_technology", 2)
+	setUnits(t, ctx, database, 2, "colony_ship", 1)
+	setResources(t, ctx, database, 2, 500000, 500000, 500000)
+
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'colonize'", 1, profile.PlayerID)
+	var arrivesText string
+	if err := database.Read().QueryRowContext(ctx, `
+		SELECT arrives_at FROM fleets WHERE owner_player_id = ? AND mission = 'colonize'
+	`, profile.PlayerID).Scan(&arrivesText); err != nil {
+		t.Fatal(err)
+	}
+	arrivesAt, err := time.Parse(time.RFC3339Nano, arrivesText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setClock(t, universeWorld.Clock, arrivesAt)
+	if _, err := universeWorld.Events.CompleteDue(ctx, 200); err != nil {
+		t.Fatal(err)
+	}
+	var colonyID int64
+	if err := database.Read().QueryRowContext(ctx,
+		"SELECT id FROM planets WHERE owner_player_id = ? AND id <> 2", profile.PlayerID).Scan(&colonyID); err != nil {
+		t.Fatal(err)
+	}
+	setResources(t, ctx, database, colonyID, 100000, 100000, 100000)
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) > 0 FROM building_queue WHERE planet_id = ?", 1, colonyID)
+	assertSingleValue(t, database, `
+		SELECT COUNT(*) > 0 FROM ai_decisions
+		WHERE body_id = ? AND action LIKE 'build %' AND outcome = 'done'`, 1, colonyID)
+}
+
+func TestArtificialPlayerDecisionDiaryIsBounded(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+	profile, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Archiviste", Archetype: domainai.CautiousMiner,
+		Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 300; index++ {
+		if _, err := database.Write().ExecContext(ctx, `
+			INSERT INTO ai_decisions(player_id, decided_at, layer, action, outcome, reason)
+			VALUES (?, ?, 'strategic', 'sleep', 'skipped', 'fixture')
+		`, profile.PlayerID, universeWorld.Clock.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM ai_decisions WHERE player_id = ?", 250, profile.PlayerID)
+}
+
 // TestReflectionIsReproducibleAndArchetypesDiffer proves the same state and the
 // same seed give the same decision, and that two characters do not.
 func TestReflectionIsReproducibleAndArchetypesDiffer(t *testing.T) {

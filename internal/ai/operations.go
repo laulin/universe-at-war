@@ -74,6 +74,12 @@ func (b *Brain) defend(ctx context.Context, principal appauth.Principal, profile
 		return skip(domainai.Operational, "defend "+at.String(),
 			"the threatened body is my own", home.ID), true
 	}
+	for _, fleet := range overview.Fleets {
+		if fleet.Mission == domainfleet.MissionHold && fleet.Target == at {
+			return skip(domainai.Operational, "defend "+at.String(),
+				"already standing watch over this ally", home.ID), true
+		}
+	}
 	composition := domainai.ComposeFleetsave(overview.Stationed, b.Catalogues.Units)
 	if len(composition) == 0 {
 		return skip(domainai.Operational, "defend "+at.String(), "no ship to send", home.ID), true
@@ -95,6 +101,25 @@ func (b *Brain) defend(ctx context.Context, principal appauth.Principal, profile
 	}, true
 }
 
+// superviseDefence closes a watch without inventing an ACS group. Hold
+// missions are individual by design; members keep the objective reserved and
+// avoid duplicate launches until its planning window has elapsed.
+func (b *Brain) superviseDefence(ctx context.Context, objective domainai.Objective, now time.Time) domainai.Decision {
+	coordinate := objective.Coordinate
+	if now.Before(objective.DeadlineAt) {
+		return domainai.Skip(domainai.Strategic, "defence watch",
+			fmt.Sprintf("watch active for %s", objective.DeadlineAt.Sub(now).Round(time.Second)))
+	}
+	if err := b.Teamwork.AdvanceObjective(ctx, objective, domainai.Achieved, 0,
+		"the defence watch was established", now); err != nil {
+		return failure(domainai.Strategic, "defence watch", err)
+	}
+	return domainai.Decision{
+		Layer: domainai.Strategic, Action: "close defence on " + coordinate.String(), Outcome: domainai.Done,
+		Reason: "the defence watch was established", Target: &coordinate,
+	}
+}
+
 // strike is the part a member takes in a grouped attack: look first, then
 // engage. Only the leader opens the operation; the others join it.
 func (b *Brain) strike(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
@@ -113,8 +138,9 @@ func (b *Brain) strike(ctx context.Context, principal appauth.Principal, profile
 	if !found {
 		return skip(domainai.Tactical, "raid "+at.String(), "the alliance no longer knows this target", home.ID), true
 	}
-	composition, ok := domainai.ComposeRaid(overview.Stationed, b.Catalogues.Units,
-		belief.Plunder, belief.Defence, profile.Preferences())
+	sizing := raidSizing(profile, at)
+	composition, ok := domainai.ComposeRaidSized(overview.Stationed, b.Catalogues.Units,
+		belief.Plunder, belief.Defence, profile.Preferences(), sizing)
 	if !ok {
 		return skip(domainai.Tactical, "raid "+at.String(),
 			"not strong enough for what the alliance saw", home.ID), true
@@ -140,7 +166,7 @@ func (b *Brain) strike(ctx context.Context, principal appauth.Principal, profile
 		}
 		return domainai.Decision{
 			Layer: domainai.Tactical, Action: "open operation on " + coordinate.String(),
-			Outcome: domainai.Done, Reason: "the alliance gathers", BodyID: home.ID, Target: &coordinate,
+			Outcome: domainai.Done, Reason: raidReason(sizing, "the alliance gathers"), BodyID: home.ID, Target: &coordinate,
 		}, true
 	}
 	group, err := b.Operations.Group(ctx, principal, plan.objective.GroupID)
@@ -167,7 +193,7 @@ func (b *Brain) strike(ctx context.Context, principal appauth.Principal, profile
 	}
 	return domainai.Decision{
 		Layer: domainai.Tactical, Action: "join operation on " + coordinate.String(),
-		Outcome: domainai.Done, Reason: "the alliance gathers", BodyID: home.ID, Target: &coordinate,
+		Outcome: domainai.Done, Reason: raidReason(sizing, "the alliance gathers"), BodyID: home.ID, Target: &coordinate,
 	}, true
 }
 

@@ -134,8 +134,17 @@ func TestArtificialPlayerPaysTheSamePriceAsAHuman(t *testing.T) {
 		t.Fatalf("the machine paid %d over %d s and the human %d over %d s",
 			artificialCost, artificialSeconds, humanCost, humanSeconds)
 	}
-	// Neither of them built anything on credit: both purses lost the price.
-	assertSingleValue(t, database, "SELECT metal FROM planet_resources WHERE planet_id = 2", int(5000-artificialCost))
+	// Neither of them built anything on credit. The machine may already have
+	// funded the bounded backlog introduced for fast universes, but it paid at
+	// least the exact same first price and never crossed zero.
+	var artificialMetal int64
+	if err := database.Read().QueryRowContext(ctx,
+		"SELECT metal FROM planet_resources WHERE planet_id = 2").Scan(&artificialMetal); err != nil {
+		t.Fatal(err)
+	}
+	if artificialMetal < 0 || artificialMetal > 5000-artificialCost {
+		t.Fatalf("the machine kept %d metal after a first price of %d", artificialMetal, artificialCost)
+	}
 	if before-after != humanCost {
 		t.Fatalf("the human paid %d for a mine priced at %d", before-after, humanCost)
 	}

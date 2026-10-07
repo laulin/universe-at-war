@@ -141,6 +141,39 @@ func TestResearchPlanMovesThroughUnlockMilestones(t *testing.T) {
 	}
 }
 
+func TestArchetypeResearchFocusHasFiniteMilestones(t *testing.T) {
+	options := map[string]Option{
+		"combustion_drive":     {ID: "combustion_drive", Level: 6, Available: true, Affordable: true},
+		"impulse_drive":        {ID: "impulse_drive", Level: 5, Available: true, Affordable: true},
+		"espionage_technology": {ID: "espionage_technology", Level: 8, Available: true, Affordable: true},
+		"weapons_technology":   {ID: "weapons_technology", Level: 8, Available: true, Affordable: true},
+		"computer_technology":  {ID: "computer_technology", Level: 8, Available: true, Affordable: true},
+		"astrophysics":         {ID: "astrophysics", Level: 0, Available: true, Affordable: true},
+	}
+	profile := Profile{Archetype: Raider}
+	wanted := TunedResearchPriorities(options, profile)
+	if len(wanted) == 0 || wanted[0] == "combustion_drive" {
+		t.Fatalf("a mature raider remained stuck on its first focus: %v", wanted)
+	}
+	for _, id := range wanted {
+		if id == "astrophysics" {
+			return
+		}
+	}
+	t.Fatalf("the common expansion line disappeared behind the archetype: %v", wanted)
+}
+
+func TestArchetypeFacilitiesStopAtTheirTarget(t *testing.T) {
+	settled := body(map[string]int{
+		"metal_mine": 12, "crystal_mine": 8, "deuterium_synthesizer": 5,
+		"shipyard": 3, "research_lab": 3, "robotics_factory": 2,
+	}, economy.Energy{Produced: 200, Consumed: 100}, economy.Resources{}, economy.Resources{})
+	wanted := TunedBuildingPriorities(settled, Raider)
+	if len(wanted) == 0 || wanted[0] == "shipyard" {
+		t.Fatalf("a raider kept raising a completed facility instead of its economy: %v", wanted)
+	}
+}
+
 func TestTunedProductionBuildsUtilityAndAdvancedUnits(t *testing.T) {
 	tuning := Raider.Tuning()
 	tuning.DefenceShare = 0

@@ -23,6 +23,7 @@ import (
 	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
+	"universeatwar/internal/observability"
 )
 
 // Thinking hands out the players that owe a reflection and takes their
@@ -69,6 +70,7 @@ type Brain struct {
 	Operations Operations
 	Catalogues catalogue.Set
 	Logger     *slog.Logger
+	Metrics    *observability.Metrics
 }
 
 // ThinkDue runs one reflection for each artificial player that owes one, at
@@ -90,6 +92,9 @@ func (b *Brain) ThinkDue(ctx context.Context, limit int) (int, error) {
 		if err := b.Thinking.Complete(ctx, profile.PlayerID, decisions); err != nil {
 			return thought, err
 		}
+		for _, decision := range decisions {
+			b.Metrics.AIDecision(decision.Action, string(decision.Outcome), decision.Reason)
+		}
 		thought++
 	}
 	return thought, nil
@@ -108,9 +113,7 @@ func (b *Brain) think(ctx context.Context, profile domainai.Profile) []domainai.
 	}
 	home := planets[0]
 	decisions := b.nameColonies(ctx, principal, profile, planets)
-	decisions = append(decisions, b.build(ctx, principal, profile, home.ID))
-	decisions = append(decisions, b.research(ctx, principal, profile, home.ID))
-	decisions = append(decisions, b.produce(ctx, principal, profile, home.ID))
+	decisions = append(decisions, b.develop(ctx, principal, profile, planets)...)
 	team := friends{names: map[string]bool{}, coordinates: map[universe.Coordinate]bool{}}
 	alliance, allied := b.team(ctx, profile)
 	var beliefs []domainai.Knowledge
@@ -147,6 +150,64 @@ func (b *Brain) think(ctx context.Context, profile domainai.Profile) []domainai.
 	}
 	plan := b.assignment(ctx, profile, alliance, beliefs, allied)
 	return append(decisions, b.campaign(ctx, principal, profile, planets, observations, team, plan)...)
+}
+
+// develop keeps a small paid backlog on every planet. The queue is the same
+// one a human uses; filling a few entries merely prevents a fast universe from
+// sitting idle between two five-minute strategic reflections.
+func (b *Brain) develop(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	planets []appeconomy.Planet) []domainai.Decision {
+	var decisions []domainai.Decision
+	for _, planet := range planets {
+		if planet.Kind != building.OnPlanet {
+			continue
+		}
+		for order := 0; order < profile.BuildingQueueDepth(); order++ {
+			decision := b.build(ctx, principal, profile, planet.ID, order)
+			decisions = append(decisions, decision)
+			if decision.Outcome != domainai.Done {
+				break
+			}
+		}
+	}
+	researchBody := bestLaboratory(planets)
+	for order := 0; order < profile.ResearchQueueDepth(); order++ {
+		decision := b.research(ctx, principal, profile, researchBody.ID, order)
+		decisions = append(decisions, decision)
+		if decision.Outcome != domainai.Done {
+			break
+		}
+	}
+	colonies := 0
+	for _, planet := range planets {
+		if planet.Kind == building.OnPlanet {
+			colonies++
+		}
+	}
+	needColony := colonies-1 < planets[0].Researches.ColonySlots(planets[0].Rules.Progression.MaximumColonies)
+	for _, planet := range planets {
+		if planet.Kind != building.OnPlanet {
+			continue
+		}
+		for order := 0; order < profile.YardQueueDepth(); order++ {
+			decision := b.produce(ctx, principal, profile, planet.ID, needColony, order)
+			decisions = append(decisions, decision)
+			if decision.Outcome != domainai.Done {
+				break
+			}
+		}
+	}
+	return decisions
+}
+
+func bestLaboratory(planets []appeconomy.Planet) appeconomy.Planet {
+	best := planets[0]
+	for _, planet := range planets[1:] {
+		if planet.Kind == building.OnPlanet && planet.Levels[building.ResearchLab] > best.Levels[building.ResearchLab] {
+			best = planet
+		}
+	}
+	return best
 }
 
 // nameColonies gives a freshly settled world a stable name on the first
@@ -191,18 +252,17 @@ func artificialColonyName(owner string, coordinate universe.Coordinate) string {
 }
 
 // build raises the one building the body wants most and can pay for.
-func (b *Brain) build(ctx context.Context, principal appauth.Principal, profile domainai.Profile, bodyID int64) domainai.Decision {
+func (b *Brain) build(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	bodyID int64, ordinal int) domainai.Decision {
 	planet, choices, err := b.Economy.Buildings(ctx, principal, bodyID)
 	if err != nil {
 		return failure(domainai.Strategic, "build", err)
 	}
-	// An artificial player orders one level at a time and waits for it: queues
-	// are a convenience offered to human players, not a way to spend faster.
-	if len(planet.Queue) > 0 {
-		return skip(domainai.Strategic, "build", "the site is already busy", bodyID)
+	if len(planet.Queue) >= profile.BuildingQueueDepth() {
+		return skip(domainai.Strategic, "build", "the planned backlog is full", bodyID)
 	}
 	body := bodyOf(planet, choices)
-	chosen, blocked := domainai.Pick(body.Options, domainai.BuildingPriorities(body))
+	chosen, blocked := domainai.Pick(body.Options, domainai.TunedBuildingPriorities(body, profile.Archetype))
 	if chosen == "" {
 		reason := "nothing worth building"
 		if blocked != "" {
@@ -210,7 +270,8 @@ func (b *Brain) build(ctx context.Context, principal appauth.Principal, profile 
 		}
 		return skip(domainai.Strategic, "build", reason, bodyID)
 	}
-	key := commandKey(profile, "build", chosen)
+	target := body.Options[chosen].Level + 1
+	key := commandKey(profile, "build", fmt.Sprintf("%d:%s:%d:%d", bodyID, chosen, target, ordinal))
 	if _, err := b.Economy.EnqueueBuilding(ctx, principal, bodyID, building.ID(chosen), key); err != nil {
 		return failure(domainai.Strategic, "build "+chosen, err)
 	}
@@ -228,7 +289,8 @@ func buildReason(blocked string) string {
 }
 
 // research follows the next unmet milestone of the technology plan.
-func (b *Brain) research(ctx context.Context, principal appauth.Principal, profile domainai.Profile, bodyID int64) domainai.Decision {
+func (b *Brain) research(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	bodyID int64, ordinal int) domainai.Decision {
 	if b.Research == nil {
 		return domainai.Skip(domainai.Strategic, "research", "no laboratory service")
 	}
@@ -236,10 +298,8 @@ func (b *Brain) research(ctx context.Context, principal appauth.Principal, profi
 	if err != nil {
 		return failure(domainai.Strategic, "research", err)
 	}
-	// One research at a time, as before: the queue is a convenience offered to
-	// human players, not a way for an artificial one to spend faster.
-	if len(overview.Queue) > 0 {
-		return skip(domainai.Strategic, "research", "a research is already running", bodyID)
+	if len(overview.Queue) >= profile.ResearchQueueDepth() {
+		return skip(domainai.Strategic, "research", "the planned backlog is full", bodyID)
 	}
 	options := make(map[string]domainai.Option, len(overview.Choices))
 	for _, choice := range overview.Choices {
@@ -248,7 +308,7 @@ func (b *Brain) research(ctx context.Context, principal appauth.Principal, profi
 			Available: choice.Available, Affordable: choice.Affordable,
 		}
 	}
-	chosen, blocked := domainai.Pick(options, domainai.PlannedResearchPriorities(options, profile.Preferences()))
+	chosen, blocked := domainai.Pick(options, domainai.TunedResearchPriorities(options, profile))
 	if chosen == "" {
 		reason := "nothing to learn yet"
 		if blocked != "" {
@@ -256,7 +316,8 @@ func (b *Brain) research(ctx context.Context, principal appauth.Principal, profi
 		}
 		return skip(domainai.Strategic, "research", reason, bodyID)
 	}
-	key := commandKey(profile, "research", chosen)
+	target := options[chosen].Level + 1
+	key := commandKey(profile, "research", fmt.Sprintf("%s:%d:%d", chosen, target, ordinal))
 	if _, err := b.Research.EnqueueResearch(ctx, principal, bodyID, research.ID(chosen), key); err != nil {
 		return failure(domainai.Strategic, "research "+chosen, err)
 	}
@@ -268,7 +329,8 @@ func (b *Brain) research(ctx context.Context, principal appauth.Principal, profi
 
 // produce commits part of what is left to the yard, ships or defences
 // depending on the character.
-func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profile domainai.Profile, bodyID int64) domainai.Decision {
+func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	bodyID int64, needColony bool, ordinal int) domainai.Decision {
 	if b.Shipyard == nil {
 		return domainai.Skip(domainai.Tactical, "produce", "no yard service")
 	}
@@ -280,10 +342,11 @@ func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profil
 	if err != nil {
 		return failure(domainai.Tactical, "produce", err)
 	}
-	// One batch at a time across the whole yard, as before the two families
-	// were given a queue each.
-	if len(ships.Queue) > 0 || len(defenses.Queue) > 0 {
-		return skip(domainai.Tactical, "produce", "the yard is already busy", bodyID)
+	if shipyardQueued(ships.Planet) {
+		return skip(domainai.Tactical, "produce", "the shipyard is being upgraded", bodyID)
+	}
+	if len(ships.Queue)+len(defenses.Queue) >= profile.YardQueueDepth() {
+		return skip(domainai.Tactical, "produce", "the planned backlog is full", bodyID)
 	}
 	options := map[string]domainai.Option{}
 	families := map[string]unit.Family{}
@@ -298,9 +361,14 @@ func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profil
 			families[id] = overview.Family
 		}
 	}
+	for _, order := range append(append([]appshipyard.Order{}, ships.Ships...), ships.Defenses...) {
+		option := options[string(order.Unit)]
+		option.Owned += order.Quantity - order.Delivered
+		options[string(order.Unit)] = option
+	}
 	tuning := profile.Behaviour()
 	tuning.Preferences = profile.Preferences()
-	wanted := domainai.TunedProductionPriorities(tuning, options,
+	wanted := domainai.TunedEmpireProductionPriorities(tuning, profile.Archetype, options, needColony,
 		random.NewSeeded(uint64(profile.Seed)^uint64(profile.Tick)))
 	chosen, blocked := domainai.Pick(options, wanted)
 	if chosen == "" {
@@ -311,7 +379,7 @@ func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profil
 		return skip(domainai.Tactical, "produce", reason, bodyID)
 	}
 	quantity := domainai.OrderSizeUpTo(options[chosen].Capacity, tuning.BatchSize)
-	key := commandKey(profile, "produce", fmt.Sprintf("%s:%d", chosen, quantity))
+	key := commandKey(profile, "produce", fmt.Sprintf("%d:%s:%d:%d", bodyID, chosen, quantity, ordinal))
 	if _, err := b.Shipyard.OrderFamily(ctx, principal, bodyID, unit.ID(chosen), families[chosen], quantity, key); err != nil {
 		return failure(domainai.Tactical, "produce "+chosen, err)
 	}
@@ -319,6 +387,15 @@ func (b *Brain) produce(ctx context.Context, principal appauth.Principal, profil
 		Layer: domainai.Tactical, Action: fmt.Sprintf("produce %d %s", quantity, chosen),
 		Outcome: domainai.Done, Reason: "keeps the yard busy", BodyID: bodyID,
 	}
+}
+
+func shipyardQueued(planet appeconomy.Planet) bool {
+	for _, entry := range planet.Queue {
+		if entry.Building == building.Shipyard {
+			return true
+		}
+	}
+	return false
 }
 
 // bodyOf turns the pages of a planet into what the planner reasons about.

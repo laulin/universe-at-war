@@ -202,7 +202,8 @@ func flyEverything(t *testing.T, ctx context.Context, universeWorld *world) {
 	for attempt := 0; attempt < 12; attempt++ {
 		var due sql.NullString
 		if err := universeWorld.Database.Read().QueryRowContext(ctx, `
-			SELECT MIN(due_at) FROM scheduled_events WHERE state = 'pending' AND event_type <> 'ai_think'
+			SELECT MIN(due_at) FROM scheduled_events
+			WHERE state = 'pending' AND entity_type IN ('fleet', 'acs_group')
 		`).Scan(&due); err != nil {
 			t.Fatal(err)
 		}

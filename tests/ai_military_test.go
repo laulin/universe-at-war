@@ -70,6 +70,43 @@ func TestArtificialPlayerSpiesBeforeItRaids(t *testing.T) {
 	assertSingleValue(t, database, "SELECT COUNT(*) > 0 FROM ai_memory WHERE kind = 'target'", 1)
 	assertSingleValue(t, database,
 		"SELECT COUNT(*) > 0 FROM ai_decisions WHERE action LIKE 'raid %' AND outcome = 'done'", 1)
+
+	// Once the combat report exists, the same snapshot cannot drive an endless
+	// loop of raids. The target cools down, then must be observed again.
+	var attackArrivalText string
+	if err := database.Read().QueryRowContext(ctx, `
+		SELECT arrives_at FROM fleets
+		WHERE mission = 'attack' AND owner_player_id = 2 ORDER BY id DESC LIMIT 1
+	`).Scan(&attackArrivalText); err != nil {
+		t.Fatal(err)
+	}
+	attackArrival, err := time.Parse(time.RFC3339Nano, attackArrivalText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setClock(t, universeWorld.Clock, attackArrival)
+	if _, err := universeWorld.Events.CompleteDue(ctx, 200); err != nil {
+		t.Fatal(err)
+	}
+	var raidedText string
+	if err := database.Read().QueryRowContext(ctx, `
+		SELECT occurred_at FROM reports
+		WHERE recipient_player_id = 2 AND kind = 'combat_attack' ORDER BY id DESC LIMIT 1
+	`).Scan(&raidedText); err != nil {
+		t.Fatal(err)
+	}
+	raidedAt, err := time.Parse(time.RFC3339Nano, raidedText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setClock(t, universeWorld.Clock, raidedAt.Add(10*time.Minute))
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE mission = 'attack' AND owner_player_id = 2", 1)
+	setClock(t, universeWorld.Clock, raidedAt.Add(31*time.Minute))
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE mission = 'espionage' AND owner_player_id = 2", 2)
 }
 
 // TestArtificialPlayerBuildsScoutsAndFindsADistantTarget covers the complete
@@ -117,17 +154,38 @@ func TestArtificialPlayerBuildsScoutsAndFindsADistantTarget(t *testing.T) {
 	assertSingleValue(t, database,
 		"SELECT quantity > 0 FROM planet_units WHERE planet_id = 2 AND unit_id = 'espionage_probe'", 1)
 
-	// It now starts a real combat fleet and sends its own probes to system 3.
+	// It now secures the missing cargo holds and sends its own probes to system
+	// 3. Utility batches are completed before the yard turns to combat.
 	setResources(t, ctx, database, 2, 500000, 500000, 500000)
 	think(t, ctx, universeWorld)
 	assertSingleValue(t, database,
-		"SELECT COUNT(*) FROM production_orders WHERE planet_id = 2 AND unit_id = 'light_fighter'", 1)
+		"SELECT COUNT(*) > 0 FROM production_orders WHERE planet_id = 2 AND unit_id IN ('small_cargo', 'large_cargo')", 1)
 	assertSingleValue(t, database,
 		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'espionage' AND target_system = 3", 1, profile.PlayerID)
+	finishProduction(t, ctx, database, universeWorld, 2)
+	setResources(t, ctx, database, 2, 500000, 500000, 500000)
+	think(t, ctx, universeWorld)
+	for cycle := 0; cycle < 6; cycle++ {
+		var fighters int
+		if err := database.Read().QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM production_orders
+			WHERE planet_id = 2 AND unit_id = 'light_fighter'
+		`).Scan(&fighters); err != nil {
+			t.Fatal(err)
+		}
+		if fighters > 0 {
+			break
+		}
+		finishProduction(t, ctx, database, universeWorld, 2)
+		setResources(t, ctx, database, 2, 500000, 500000, 500000)
+		think(t, ctx, universeWorld)
+	}
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) > 0 FROM production_orders WHERE planet_id = 2 AND unit_id = 'light_fighter'", 1)
 
 	// Fighters take longer than a report stays fresh. Once they are ready the
 	// AI refreshes the intelligence, then attacks on the following reflection.
-	advanceToProduction(t, ctx, database, universeWorld, "light_fighter")
+	finishProduction(t, ctx, database, universeWorld, 2)
 	setResources(t, ctx, database, 2, 500000, 500000, 500000)
 	think(t, ctx, universeWorld)
 	var attacks int
@@ -238,7 +296,7 @@ func advanceToProduction(t *testing.T, ctx context.Context, database *storagesql
 	var completesText string
 	if err := database.Read().QueryRowContext(ctx, `
 		SELECT completes_at FROM production_orders WHERE planet_id = 2 AND unit_id = ?
-		ORDER BY id DESC LIMIT 1
+		AND completes_at IS NOT NULL ORDER BY id LIMIT 1
 	`, unitID).Scan(&completesText); err != nil {
 		t.Fatal(err)
 	}
@@ -250,6 +308,30 @@ func advanceToProduction(t *testing.T, ctx context.Context, database *storagesql
 	if _, err := universeWorld.Events.CompleteDue(ctx, 100); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func finishProduction(t *testing.T, ctx context.Context, database *storagesqlite.Database,
+	universeWorld *world, planetID int64) {
+	t.Helper()
+	for cycle := 0; cycle < 20; cycle++ {
+		var completesText string
+		err := database.Read().QueryRowContext(ctx, `
+			SELECT completes_at FROM production_orders
+			WHERE planet_id = ? AND state = 'active' ORDER BY completes_at LIMIT 1
+		`, planetID).Scan(&completesText)
+		if err != nil {
+			return
+		}
+		completesAt, err := time.Parse(time.RFC3339Nano, completesText)
+		if err != nil {
+			t.Fatal(err)
+		}
+		setClock(t, universeWorld.Clock, completesAt)
+		if _, err := universeWorld.Events.CompleteDue(ctx, 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Fatal("production queue did not settle")
 }
 
 // TestAnAgeingReportCanCostTheFleet proves an artificial player acts on what it

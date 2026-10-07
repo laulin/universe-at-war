@@ -27,11 +27,11 @@ joueur n'obtiendrait pas.
 Une flotte de raid emporte ses vaisseaux de combat et juste assez de soutes pour
 le butin espéré ; un ramassage de débris emporte juste assez de recycleurs.
 
-Chaque réflexion parcourt les trois niveaux dans cet ordre et n'engage au plus
-qu'une action par niveau : une construction, une recherche, une commande, une
-mission. Un joueur artificiel ne commande d'ailleurs que si la file concernée est
-vide : les files d'attente sont une commodité offerte au joueur humain, pas un
-moyen de dépenser plus vite.
+Chaque réflexion parcourt les trois niveaux. Elle entretient une petite avance
+payée dans les files économiques, puis n'engage au plus qu'une mission. La
+réflexion reste donc un rythme stratégique et non le métronome de chaque niveau
+de mine : dans un univers rapide, une file peut avancer entre deux réflexions
+sans laisser l'empire artificiel à l'arrêt.
 
 ## Réflexion et jitter
 
@@ -94,7 +94,8 @@ pour autant — une IA peut agir sur un rapport vieillissant et se tromper.
 
 ## Rôle des vaisseaux
 
-Un raid part avec ce qui se bat et juste ce qu'il faut pour rapporter. Le rôle
+Un raid part avec le nombre de vaisseaux que l'IA croit nécessaire et juste ce
+qu'il faut de soutes pour rapporter. Le rôle
 se lit dans le catalogue seul : un vaisseau **combat** si son arme est non nulle
 et vaut au moins le centième de sa soute ; sinon il **transporte** si sa soute
 atteint 1000 unités ; sinon il reste au sol. Une sonde n'emporte rien d'utile et
@@ -122,8 +123,35 @@ Le raid n'est lancé que si toutes ces conditions tiennent :
 - `puissance(flotte envoyée) ≥ puissance(défense vue) × marge` de l'archétype ;
 - la planète visée n'appartient ni à l'IA ni à son alliance.
 
+Une cible déjà attaquée entre en refroidissement (30 minutes pour un raider,
+une heure pour un fleeter ou un opportuniste, deux heures par défaut). À la fin
+du délai, le rapport antérieur au combat est invalidé : un nouveau raid exige
+un nouvel espionnage. Une attaque déjà en vol vers cette position interdit
+également tout doublon.
+
 L'estimation se fait sur ce que le rapport dit, pas sur la vérité : un rapport
 ancien peut donc envoyer l'IA à la perte, et c'est voulu.
+
+## Erreur de dimensionnement d'un raid
+
+Même avec un rapport exact, l'IA peut mal traduire la défense observée en nombre
+de vaisseaux. À chaque raid, elle tire depuis sa seed un facteur reproductible
+appliqué à la force qu'elle voulait engager :
+
+| Difficulté | Facteur de dimensionnement |
+| --- | ---: |
+| `easy` | 0,15 à 1,15 |
+| `normal` ou inconnue | 0,45 à 1,15 |
+| `hard` | 0,90 à 1,05 |
+
+Elle sélectionne ensuite juste assez de vaisseaux pour atteindre ce besoin
+estimé, au lieu d'envoyer automatiquement tout ce qu'elle possède. La marge de
+sécurité de l'archétype continue de compter : un raider débutant peut donc
+sous-dimensionner franchement sa flotte, tandis qu'un mineur très prudent reste
+souvent protégé par sa marge malgré une mauvaise estimation. Le résolveur de
+combat ne corrige rien et utilise les forces réelles ; l'erreur peut donc
+détruire la flotte. Un facteur très faible ou très élevé est inscrit dans la
+raison de la décision pour rendre ce comportement diagnostiquable.
 
 ## Archétypes
 
@@ -141,13 +169,18 @@ sont bornées et documentées ici.
 | `logistician` | 0,80 | 0,40 | 1,20 | 3,0 | 2 | 0,20 | 9 000 | toujours |
 | `defender` | 0,65 | 0,30 | 1,60 | 4,0 | 2 | 0,40 | 15 000 | toujours |
 
-« Économie » est la part des réflexions consacrées au développement plutôt qu'à
-la guerre ; « Défense » la part de la production réservée aux défenses.
+« Économie » règle notamment la profondeur prudente des files ; « Défense » la
+part de la production réservée aux défenses. Les archétypes ont aussi des
+priorités finies de bâtiments, de recherches et de flotte : le raider avance le
+chantier et les propulsions, l'éclaireur le laboratoire, l'espionnage et les
+slots, la tortue les défenses, le logisticien les soutes, recycleurs et colonies.
+Une priorité a toujours un niveau cible : elle ne peut donc pas monopoliser la
+progression indéfiniment.
 
 ## Planificateur économique
 
-À chaque réflexion, l'IA choisit au plus une construction sur le corps le plus
-avancé, en suivant cette priorité :
+À chaque réflexion, l'IA entretient une file de deux à trois constructions sur
+**chaque planète** (jamais sur une lune), en suivant cette priorité :
 
 1. **Énergie** : si la consommation dépasse la production, une centrale
    solaire.
@@ -164,13 +197,26 @@ payer est nommée dans la trace (« en économisant pour … ») et laissée à 
 réflexion suivante : ainsi elle ne se bloque jamais, quitte à faire un choix
 sous-optimal.
 
-La recherche suit une file fixe, la première dont les prérequis sont satisfaits :
-énergie, combustion, espionnage, ordinateur, armes, bouclier, protection,
-impulsion, astrophysique. À chaque commande, le chantier tire la part de
-défense de l'archétype depuis la seed de l'IA et son numéro de tick : la
-tortue pointe le sol beaucoup plus souvent que le raider, sans jamais suivre un
-script. La quantité commandée est la moitié de ce que le stock permet, bornée à
-dix : une IA ne vide jamais ses caisses d'un coup.
+La recherche entretient deux entrées dans le meilleur laboratoire de l'empire.
+Elle progresse par jalons d'ouverture, puis par objectifs propres à l'archétype,
+sans répéter éternellement la première technologie. Le chantier garde deux à
+trois lots d'avance par planète. Avant le combat, il protège un socle utile :
+sondes, éventuel vaisseau de colonisation, recycleurs et cargos. Ensuite il tire
+la part de défense de l'archétype depuis la seed de l'IA et son numéro de tick,
+et considère aussi les vaisseaux avancés débloqués. La quantité commandée est
+la moitié de ce que le stock permet, bornée par la taille de lot configurée.
+
+Les profondeurs sont bornées et toutes les commandes paient immédiatement les
+mêmes coûts qu'un humain. Elles compensent la cadence de réflexion ; elles ne
+confèrent ni réduction de durée ni production gratuite.
+
+## Expansion
+
+Dès que l'astrophysique ouvre un emplacement et qu'un vaisseau de colonisation
+est stationné, l'IA cherche une position vide dans la carte publique autour de
+l'une de ses planètes et lance une mission `colonize` ordinaire. Une seule
+colonisation peut être en vol. La nouvelle planète est nommée à la réflexion
+suivante et entre immédiatement dans le planificateur multi-planètes.
 
 ## Recyclage
 
@@ -182,17 +228,18 @@ des débris, et la réflexion suivante va les chercher.
 
 ## Budgets
 
-Une réflexion n'engage jamais plus d'une action par niveau : une construction,
-une recherche, une commande de chantier, une mission, et seulement si la file
-correspondante est vide. Une commande de
-chantier ne prend que la moitié de ce que le stock permet, bornée à dix unités,
-si bien qu'il reste toujours de quoi bâtir. Un lot de réflexions est borné par
-la taille de lot du worker : un univers plein d'IA ne monopolise pas la boucle.
+Une réflexion ne lance jamais plus d'une mission. Les files économiques sont
+bornées à trois entrées au maximum et une commande de chantier ne prend qu'une
+part de ce que le stock permet. Un lot de réflexions est borné par la taille de
+lot du worker : un univers plein d'IA ne monopolise pas la boucle.
 
 ## Mise à l'abri
 
 Avant de dormir, une IA dont l'archétype le demande envoie sa flotte en
-transport vers un autre de ses corps, chargée de ce que la flotte peut porter.
+transport vers un autre de ses corps, chargée de ce que la capacité restante
+après carburant peut porter. Elle charge métal, cristal puis jusqu'à 80 % du
+deutérium. Le mode `loaded` ne part que s'il a effectivement quelque chose à
+mettre à l'abri ; le mode `always` protège la flotte même à vide.
 Une IA qui n'a qu'un seul corps ne peut pas se mettre à l'abri de cette
 manière : elle enregistre la raison et garde sa flotte au sol. C'est une limite
 assumée de ce jalon.
@@ -200,8 +247,11 @@ assumée de ce jalon.
 ## Traces
 
 Chaque réflexion écrit ses décisions : le niveau, l'action, l'issue (`done`,
-`skipped`, `failed`) et une raison courte. Ces traces servent au diagnostic et
-prouvent que rien n'a été obtenu autrement que par les règles du jeu.
+`skipped`, `failed`) et une raison courte. Les 250 décisions les plus récentes
+de chaque IA sont conservées ; cette fenêtre suffit au diagnostic sans faire
+croître la base sans borne. Les métriques locales exposent en plus les volumes
+par action et issue, ainsi que des familles bornées de motifs de refus (file,
+ressources, sondes, cadence de reconnaissance, renseignement, flotte).
 
 ## Coût
 
@@ -220,9 +270,9 @@ est annulé.
 
 ## Tests de référence
 
-Développement d'un empire vide ; identité des coûts et des délais avec un
+Développement d'un empire vide et de plusieurs planètes ; colonisation autonome ; identité des coûts et des délais avec un
 humain ; absence d'action hors horaires ; reproductibilité à seed égale ;
 divergence entre archétypes ; espionnage obligatoire avant un raid significatif ;
-raid sur rapport périmé refusé ; cargo et composition cohérents ; mise à l'abri
+nouvel espionnage après un raid ; raid sur rapport périmé refusé ; cargo et composition cohérents ; mise à l'abri
 avant le sommeil ; isolation structurelle du paquet `internal/ai` ; plusieurs
 centaines de cycles sans boucle active.

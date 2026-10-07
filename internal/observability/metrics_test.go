@@ -15,6 +15,8 @@ func TestMetricsCountWhatWentThroughAndNothingElse(t *testing.T) {
 	metrics.Event(3, false)
 	metrics.Event(0, true)
 	metrics.Reflection(2)
+	metrics.AIDecision("spy 1:2:3", "done", "fresh target")
+	metrics.AIDecision("build metal_mine", "skipped", "the planned backlog is full")
 
 	snapshot := metrics.Read()
 	if snapshot.Requests != 3 || snapshot.ServerFailures != 1 {
@@ -29,9 +31,13 @@ func TestMetricsCountWhatWentThroughAndNothingElse(t *testing.T) {
 	if snapshot.Statuses[200] != 2 || snapshot.Statuses[500] != 1 {
 		t.Fatalf("statuses = %v", snapshot.Statuses)
 	}
+	if snapshot.AIDecisions != 2 || snapshot.AIActions["spy"] != 1 ||
+		snapshot.AIOutcomes["skipped"] != 1 || snapshot.AISkips["busy"] != 1 {
+		t.Fatalf("ai metrics = %+v", snapshot)
+	}
 
 	rendered := snapshot.String()
-	for _, expected := range []string{"requests 3", "server_failures 1", "events 3", "status_200 2"} {
+	for _, expected := range []string{"requests 3", "server_failures 1", "events 3", "status_200 2", "ai_action_spy 1", "ai_skip_busy 1"} {
 		if !strings.Contains(rendered, expected) {
 			t.Fatalf("the counters do not report %q: %s", expected, rendered)
 		}
@@ -46,6 +52,7 @@ func TestMetricsCountWhatWentThroughAndNothingElse(t *testing.T) {
 	absent.Request(200, time.Second)
 	absent.Event(1, true)
 	absent.Reflection(1)
+	absent.AIDecision("raid 1:2:3", "failed", "secret")
 	if absent.Read().Requests != 0 {
 		t.Fatal("a nil metrics set counted something")
 	}

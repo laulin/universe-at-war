@@ -16,7 +16,8 @@ artificiel possède en propre.
   rapports ou de la carte publique.
 - `ai_decisions` : son journal, une ligne par décision, avec le niveau, l'issue
   et la raison. C'est la trace qui prouve que rien n'a été obtenu autrement que
-  par les règles.
+  par les règles. Après chaque réflexion, seules les 250 lignes les plus
+  récentes du joueur sont conservées.
 
 ## Événement
 

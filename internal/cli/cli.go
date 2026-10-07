@@ -417,6 +417,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Operations: operations,
 		Catalogues: catalogues,
 		Logger:     logger,
+		Metrics:    metrics,
 	}
 	worker.Populator = appai.Populating{
 		Clock:   clock,

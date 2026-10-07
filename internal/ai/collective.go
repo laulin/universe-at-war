@@ -189,6 +189,9 @@ func (b *Brain) steer(ctx context.Context, principal appauth.Principal, profile 
 	// Once the fleets are on their way the operation carries its own clock: the
 	// window only bounds how long the alliance waits for somebody to look.
 	if objective.State == domainai.Assembling {
+		if objective.Kind == domainai.DefenceObjective {
+			return b.superviseDefence(ctx, objective, now)
+		}
 		if b.Operations == nil {
 			return domainai.Skip(domainai.Strategic, "operation", "no operation service")
 		}

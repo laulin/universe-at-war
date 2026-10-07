@@ -1,10 +1,12 @@
 package ai
 
 import (
+	"math"
 	"sort"
 	"time"
 
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/random"
 	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 )
@@ -106,13 +108,43 @@ func BestTarget(targets []Target, preferences Preferences) (best Target, stale T
 	return Target{}, stale, false
 }
 
-// ComposeRaid builds the fleet an artificial player sends: everything that can
-// fight, and just enough holds to carry what it hopes to take. It refuses to
-// send anything it does not believe strong enough.
+// ComposeRaid builds the force an artificial player intends without a sizing
+// mistake. Runtime players use ComposeRaidSized with their competence draw.
 func ComposeRaid(inventory map[unit.ID]int64, catalogue unit.Catalogue,
 	expected economy.Resources, defence int64, preferences Preferences) (map[unit.ID]int64, bool) {
+	return ComposeRaidSized(inventory, catalogue, expected, defence, preferences, 1)
+}
+
+// RaidSizingFactor is the error made while translating an observed defence
+// into a number of ships. The caller supplies a seeded source, so even a bad
+// beginner calculation remains deterministic and replayable.
+func RaidSizingFactor(difficulty Difficulty, source random.Source) float64 {
+	if source == nil {
+		return 1
+	}
+	minimum, maximum := .45, 1.15
+	switch difficulty {
+	case Easy:
+		minimum, maximum = .15, 1.15
+	case Hard:
+		minimum, maximum = .90, 1.05
+	}
+	return minimum + source.Float64()*(maximum-minimum)
+}
+
+// ComposeRaidSized sends only the force the player believes necessary. A low
+// sizing factor can therefore make an aggressive beginner attack with less
+// strength than the report actually showed. Combat still resolves the real
+// fleets and punishes the mistake normally.
+func ComposeRaidSized(inventory map[unit.ID]int64, catalogue unit.Catalogue,
+	expected economy.Resources, defence int64, preferences Preferences,
+	sizingFactor float64) (map[unit.ID]int64, bool) {
+	if sizingFactor <= 0 || math.IsNaN(sizingFactor) || math.IsInf(sizingFactor, 0) {
+		sizingFactor = 1
+	}
 	composition := map[unit.ID]int64{}
 	var carriers []unit.ID
+	var warships []unit.ID
 	for _, id := range sortedUnits(inventory) {
 		quantity := inventory[id]
 		if quantity <= 0 {
@@ -124,15 +156,39 @@ func ComposeRaid(inventory map[unit.ID]int64, catalogue unit.Catalogue,
 		}
 		switch ShipRoleOf(definition) {
 		case Warship:
-			composition[id] = quantity
+			warships = append(warships, id)
 		case Carrier:
 			carriers = append(carriers, id)
 		}
 	}
-	if len(composition) == 0 {
+	if len(warships) == 0 {
 		return nil, false
 	}
-	if float64(Strength(composition, catalogue)) < float64(defence)*preferences.SafetyMargin {
+	required := float64(max(0, defence)) * preferences.SafetyMargin * sizingFactor
+	if required < 1 {
+		required = 1
+	}
+	var committed int64
+	for _, id := range warships {
+		definition, _ := catalogue.Definition(id)
+		one := definition.Weapon + definition.Shield + definition.Hull()
+		if one <= 0 {
+			continue
+		}
+		needed := int64(math.Ceil((required - float64(committed)) / float64(one)))
+		if needed < 1 {
+			break
+		}
+		if needed > inventory[id] {
+			needed = inventory[id]
+		}
+		composition[id] = needed
+		committed += needed * one
+		if float64(committed) >= required {
+			break
+		}
+	}
+	if len(composition) == 0 || float64(committed) < required {
 		return nil, false
 	}
 	// Add holds until the expected haul fits, without emptying the yard of
@@ -178,6 +234,40 @@ func ComposeFleetsave(inventory map[unit.ID]int64, catalogue unit.Catalogue) map
 		return nil
 	}
 	return composition
+}
+
+// FleetsaveCargo fills the available holds in a stable resource order while
+// leaving part of the deuterium on the body for the launch fuel. The fleet
+// service performs the authoritative capacity and fuel validation afterwards.
+func FleetsaveCargo(stock economy.Resources, composition map[unit.ID]int64,
+	catalogue unit.Catalogue) economy.Resources {
+	return FleetsaveCargoUpTo(stock, capacityOf(composition, catalogue))
+}
+
+// FleetsaveCargoUpTo fills the capacity left after the fleet planner accounted
+// for fuel. It is separate so the AI can preview a real route before loading.
+func FleetsaveCargoUpTo(stock economy.Resources, capacity int64) economy.Resources {
+	if capacity <= 0 {
+		return economy.Resources{}
+	}
+	load := func(available int64) int64 {
+		if available < 0 {
+			return 0
+		}
+		if available > capacity {
+			available = capacity
+		}
+		capacity -= available
+		return available
+	}
+	cargo := economy.Resources{}
+	cargo.Metal = load(stock.Metal)
+	cargo.Crystal = load(stock.Crystal)
+	// Twenty per cent stays available for fuel and the first decisions after
+	// waking. This is intentionally conservative; PlanLaunch still decides
+	// whether the trip is affordable.
+	cargo.Deuterium = load(stock.Deuterium * 4 / 5)
+	return cargo
 }
 
 // LastBefore reports whether a reflection is the last one before the night: the

@@ -89,6 +89,53 @@ func BuildingPriorities(body Body) []string {
 	return append(wanted, mineOrder(body)...)
 }
 
+// TunedBuildingPriorities gives the shared sound economic plan a character.
+// Urgent energy and storage work still comes first, but specialised empires
+// bring the facilities they depend on forward as soon as the game unlocks
+// them. Pick will harmlessly step over a facility whose prerequisites are not
+// met yet.
+func TunedBuildingPriorities(body Body, archetype Archetype) []string {
+	var wanted []string
+	if body.Energy.Consumed > body.Energy.Produced {
+		wanted = append(wanted, "solar_plant")
+	}
+	wanted = append(wanted, fullStores(body)...)
+	average := body.averageMine()
+	add := func(id string, target int) {
+		if body.level(id) < target {
+			wanted = append(wanted, id)
+		}
+	}
+	roboticsTarget := min(10, max(2, average-3))
+	laboratoryTarget := min(12, max(3, average-4))
+	shipyardTarget := min(12, max(2, average-5))
+	switch archetype {
+	case Raider, Fleeter:
+		add("shipyard", shipyardTarget)
+		add("research_lab", laboratoryTarget)
+		add("robotics_factory", roboticsTarget)
+	case Scout:
+		add("research_lab", laboratoryTarget+1)
+		add("shipyard", shipyardTarget)
+		add("robotics_factory", roboticsTarget)
+	case Turtle, Defender:
+		add("shipyard", shipyardTarget)
+		add("missile_silo", min(6, max(1, average/4)))
+		add("research_lab", laboratoryTarget)
+		add("robotics_factory", roboticsTarget)
+	case Logistician:
+		add("robotics_factory", roboticsTarget+1)
+		add("shipyard", shipyardTarget)
+		add("research_lab", laboratoryTarget)
+	case Opportunist:
+		add("shipyard", shipyardTarget)
+		add("robotics_factory", roboticsTarget)
+		add("research_lab", laboratoryTarget)
+	}
+	wanted = append(wanted, BuildingPriorities(body)...)
+	return uniquePlan(wanted)
+}
+
 // fullStores names the stores about to overflow, fullest first.
 func fullStores(body Body) []string {
 	type store struct {
@@ -192,6 +239,42 @@ func PlannedResearchPriorities(options map[string]Option, preferences Preference
 	return wanted
 }
 
+// TunedResearchPriorities moves the technologies that express a character in
+// front of the common unlock line. This is an ordering only: prerequisites,
+// prices and queues remain those of the ordinary research use case.
+func TunedResearchPriorities(options map[string]Option, profile Profile) []string {
+	type goal struct {
+		id     string
+		target int
+	}
+	var goals []goal
+	switch profile.Archetype {
+	case CautiousMiner:
+		goals = []goal{{"energy_technology", 6}, {"combustion_drive", 6}, {"astrophysics", 3}, {"computer_technology", 5}}
+	case Raider:
+		goals = []goal{{"combustion_drive", 6}, {"impulse_drive", 5}, {"espionage_technology", 8}, {"weapons_technology", 8}, {"computer_technology", 8}}
+	case Fleeter:
+		goals = []goal{{"combustion_drive", 6}, {"impulse_drive", 6}, {"armour_technology", 8}, {"weapons_technology", 8}, {"shielding_technology", 8}}
+	case Turtle:
+		goals = []goal{{"energy_technology", 8}, {"laser_technology", 8}, {"shielding_technology", 10}, {"armour_technology", 10}, {"ion_technology", 6}}
+	case Opportunist:
+		goals = []goal{{"espionage_technology", 8}, {"computer_technology", 8}, {"impulse_drive", 5}, {"weapons_technology", 7}}
+	case Scout:
+		goals = []goal{{"espionage_technology", 10}, {"computer_technology", 10}, {"combustion_drive", 6}, {"impulse_drive", 5}, {"astrophysics", 5}}
+	case Logistician:
+		goals = []goal{{"combustion_drive", 6}, {"impulse_drive", 5}, {"astrophysics", 5}, {"computer_technology", 8}}
+	case Defender:
+		goals = []goal{{"armour_technology", 10}, {"shielding_technology", 10}, {"weapons_technology", 8}, {"computer_technology", 6}}
+	}
+	var focus []string
+	for _, goal := range goals {
+		if option, known := options[goal.id]; known && option.Level < goal.target {
+			focus = append(focus, goal.id)
+		}
+	}
+	return uniquePlan(append(focus, PlannedResearchPriorities(options, profile.Preferences())...))
+}
+
 // ProductionPriorities is what a body builds next. The share of defences of the
 // archetype is the chance that the yard turns to the ground rather than the sky,
 // drawn from the seed of the player so the choice stays reproducible.
@@ -207,12 +290,45 @@ func ProductionPriorities(preferences Preferences, source random.Source) []strin
 // and unaffordable entries are skipped later by Pick, so a young empire falls
 // back naturally to light units while a mature one stops doing only that.
 func TunedProductionPriorities(tuning Tuning, options map[string]Option, source random.Source) []string {
+	return TunedEmpireProductionPriorities(tuning, "", options, false, source)
+}
+
+// TunedEmpireProductionPriorities protects the small utility fleet an empire
+// needs before feeding its military roster. Utility targets are deliberately
+// modest: they make scouting, colonisation and recycling possible without
+// turning those ships into a free economic advantage.
+func TunedEmpireProductionPriorities(tuning Tuning, archetype Archetype, options map[string]Option,
+	needColony bool, source random.Source) []string {
 	var wanted []string
 	if tuning.EspionageEnabled {
 		probeTarget := max(int64(2), tuning.Probes*2)
 		if option, known := options["espionage_probe"]; known && option.Owned < probeTarget {
 			wanted = append(wanted, "espionage_probe")
 		}
+	}
+	if needColony {
+		if option, known := options["colony_ship"]; known && option.Owned < 1 {
+			wanted = append(wanted, "colony_ship")
+		}
+	}
+	if tuning.RecycleEnabled {
+		target := int64(3)
+		if archetype == Logistician || archetype == Opportunist {
+			target = 8
+		}
+		if option, known := options["recycler"]; known && option.Owned < target {
+			wanted = append(wanted, "recycler")
+		}
+	}
+	cargoTarget := int64(6)
+	if archetype == Raider || archetype == Logistician || archetype == CautiousMiner {
+		cargoTarget = 12
+	}
+	if option, known := options["large_cargo"]; known && option.Owned < cargoTarget/3 {
+		wanted = append(wanted, "large_cargo")
+	}
+	if option, known := options["small_cargo"]; known && option.Owned < cargoTarget {
+		wanted = append(wanted, "small_cargo")
 	}
 	if random.Chance(source, tuning.DefenceShare) {
 		wanted = append(wanted,
@@ -226,16 +342,24 @@ func TunedProductionPriorities(tuning Tuning, options map[string]Option, source 
 		wanted = append(wanted, warships[start:]...)
 		wanted = append(wanted, warships[:start]...)
 	}
-	if tuning.RecycleEnabled {
-		if option, known := options["recycler"]; known && option.Owned < 5 {
-			wanted = append(wanted, "recycler")
-		}
-	}
 	wanted = append(wanted, "large_cargo", "small_cargo")
 	if tuning.EspionageEnabled {
 		wanted = append(wanted, "espionage_probe")
 	}
-	return wanted
+	return uniquePlan(wanted)
+}
+
+func uniquePlan(plan []string) []string {
+	seen := make(map[string]bool, len(plan))
+	unique := make([]string, 0, len(plan))
+	for _, id := range plan {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		unique = append(unique, id)
+	}
+	return unique
 }
 
 // Pick returns the first wanted option the game would actually accept, and the

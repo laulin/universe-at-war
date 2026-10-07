@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/random"
 	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 )
@@ -28,6 +29,18 @@ func TestScoringWeighsPlunderFreshnessAndDefence(t *testing.T) {
 	old := ScoreTarget(intel, now.Add(24*time.Hour), time.Hour, Raider.Preferences())
 	if old.Freshness != 0 || old.Score >= raider.Score {
 		t.Fatalf("an old report kept its value: %+v", old)
+	}
+}
+
+func TestFleetsaveCargoRespectsThePlannedHoldAndLeavesDeuterium(t *testing.T) {
+	stock := economy.Resources{Metal: 800, Crystal: 600, Deuterium: 1000}
+	cargo := FleetsaveCargoUpTo(stock, 1200)
+	if cargo.Metal != 800 || cargo.Crystal != 400 || cargo.Deuterium != 0 {
+		t.Fatalf("FleetsaveCargoUpTo() = %+v", cargo)
+	}
+	cargo = FleetsaveCargoUpTo(economy.Resources{Deuterium: 1000}, 1000)
+	if cargo.Deuterium != 800 {
+		t.Fatalf("deuterium cargo = %d, want 800", cargo.Deuterium)
 	}
 }
 
@@ -73,8 +86,8 @@ func TestRaidCarriesEnoughHoldsAndRefusesToBeOutgunned(t *testing.T) {
 	if !ok {
 		t.Fatal("a strong fleet refused an easy target")
 	}
-	if composition[unit.LightFighter] != 40 {
-		t.Fatalf("the fighters stayed home: %v", composition)
+	if composition[unit.LightFighter] <= 0 || composition[unit.LightFighter] >= 40 {
+		t.Fatalf("the raid did not size its fighter wing: %v", composition)
 	}
 	if composition[unit.SmallCargo] == 0 {
 		t.Fatalf("nothing came along to carry the haul: %v", composition)
@@ -97,6 +110,53 @@ func TestRaidCarriesEnoughHoldsAndRefusesToBeOutgunned(t *testing.T) {
 	if _, ok := ComposeRaid(map[unit.ID]int64{unit.SmallCargo: 5, unit.EspionageProbe: 9},
 		catalogue, expected, 0, Raider.Preferences()); ok {
 		t.Fatal("an unarmed convoy went raiding")
+	}
+}
+
+func TestRaidSizingErrorDependsOnDifficultyAndIsReproducible(t *testing.T) {
+	cases := []struct {
+		difficulty Difficulty
+		draw       float64
+		want       float64
+	}{
+		{Easy, 0, .15},
+		{Normal, 0, .45},
+		{Hard, 0, .90},
+		{Easy, 1, 1.15},
+		{Normal, 1, 1.15},
+		{Hard, 1, 1.05},
+	}
+	for _, testCase := range cases {
+		got := RaidSizingFactor(testCase.difficulty, random.NewScript(nil, []float64{testCase.draw}))
+		if got < testCase.want-1e-9 || got > testCase.want+1e-9 {
+			t.Fatalf("RaidSizingFactor(%s, %v) = %v, want %v", testCase.difficulty, testCase.draw, got, testCase.want)
+		}
+	}
+	first := RaidSizingFactor(Normal, random.NewSeeded(42))
+	second := RaidSizingFactor(Normal, random.NewSeeded(42))
+	if first != second {
+		t.Fatalf("the same seed sized two raids differently: %v and %v", first, second)
+	}
+}
+
+func TestBeginnerCanSendLessStrengthThanTheReportShowed(t *testing.T) {
+	catalogue := unit.DefaultCatalogue()
+	defenders := map[unit.ID]int64{unit.LightFighter: 20}
+	defence := Strength(defenders, catalogue)
+	inventory := map[unit.ID]int64{unit.LightFighter: 100}
+	preferences := Raider.Preferences().At(Easy)
+
+	composition, ok := ComposeRaidSized(inventory, catalogue, economy.Resources{}, defence, preferences, .15)
+	if !ok {
+		t.Fatal("the beginner did not trust its bad calculation")
+	}
+	committed := Strength(composition, catalogue)
+	if committed >= defence {
+		t.Fatalf("the supposed beginner still sent %d against an observed %d: %v", committed, defence, composition)
+	}
+	accurate, ok := ComposeRaidSized(inventory, catalogue, economy.Resources{}, defence, preferences, 1)
+	if !ok || Strength(accurate, catalogue) < int64(float64(defence)*preferences.SafetyMargin) {
+		t.Fatalf("the accurate calculation did not respect its margin: %v", accurate)
 	}
 }
 

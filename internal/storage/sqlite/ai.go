@@ -414,6 +414,7 @@ func (r *AIRepository) Due(ctx context.Context, now time.Time, limit int) ([]dom
 
 // Complete records what a reflection concluded and closes it.
 func (r *AIRepository) Complete(ctx context.Context, playerID int64, decisions []domainai.Decision, now time.Time) error {
+	const retainedDecisionsPerPlayer = 250
 	return withWriteTx(ctx, r.write, "ai repository: complete", func(tx *sql.Tx) error {
 		for _, decision := range decisions {
 			if err := insertDecision(ctx, tx, playerID, now, decision); err != nil {
@@ -425,6 +426,14 @@ func (r *AIRepository) Complete(ctx context.Context, playerID int64, decisions [
 			WHERE player_id = ?
 		`, timestamp(now), playerID); err != nil {
 			return fmt.Errorf("ai repository: close the reflection: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			DELETE FROM ai_decisions
+			WHERE player_id = ? AND id NOT IN (
+				SELECT id FROM ai_decisions WHERE player_id = ? ORDER BY id DESC LIMIT ?
+			)
+		`, playerID, playerID, retainedDecisionsPerPlayer); err != nil {
+			return fmt.Errorf("ai repository: retain recent decisions: %w", err)
 		}
 		return nil
 	})

@@ -106,8 +106,10 @@ rapporté.
 
 Un membre attaqué publie une menace dans la mémoire commune, tirée de son propre
 rapport de combat. Tant que cette menace est fraîche, **tous les membres éveillés qui ont des
-vaisseaux** vont stationner sur le corps visé, par le cas d'usage de défense
-groupée du Milestone 7, pour trois heures.
+vaisseaux** vont stationner individuellement sur le corps visé, par une mission
+de maintien, pour trois heures. La défense n'invente pas de groupe ACS : le
+plan reste en `assembling` pendant sa fenêtre de surveillance puis passe en
+`resolved`. Une mission déjà en route vers ce corps empêche un second départ.
 
 Un membre sans vaisseau, endormi, ou dont l'emplacement de flotte est déjà pris,
 ne part pas : il enregistre la raison. La victime elle-même ne se porte pas
@@ -157,4 +159,5 @@ Rapport non partagé invisible ; provenance et expiration ; plan reproductible �
 seeds égales ; campagne de sondage avant l'attaque ; opération groupée résolue
 avec deux IA ; membre endormi, flotte perdue ou cible déplacée ; défense d'un
 membre et refus faute de moyens ; interdiction inter-alliance ; conservation des
-ressources et des vaisseaux.
+ressources et des vaisseaux ; clôture d'une surveillance défensive sans groupe
+ACS et absence de mission de maintien dupliquée.

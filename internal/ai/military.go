@@ -12,8 +12,10 @@ import (
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appreports "universeatwar/internal/app/reports"
 	domainai "universeatwar/internal/domain/ai"
+	"universeatwar/internal/domain/building"
 	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
+	"universeatwar/internal/domain/random"
 	"universeatwar/internal/domain/report"
 	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
@@ -35,6 +37,7 @@ type Galaxy interface {
 // Fleet is the fleet page of a player.
 type Fleet interface {
 	Overview(context.Context, appauth.Principal, int64) (appfleet.Overview, error)
+	Preview(context.Context, appauth.Principal, int64, appfleet.LaunchRequest) (domainfleet.Plan, error)
 	Launch(context.Context, appauth.Principal, int64, appfleet.LaunchRequest, string) (appfleet.Fleet, error)
 }
 
@@ -54,6 +57,9 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 	if profile.Window.LastBefore(now, profile.Interval) {
 		return []domainai.Decision{b.fleetsave(ctx, principal, profile, planets, overview)}
 	}
+	if decision, sent := b.expand(ctx, principal, profile, planets, overview); sent {
+		return []domainai.Decision{decision}
+	}
 	// What the alliance asks comes before what one would do alone, as often as
 	// the universe asked its members to act as one. A member sitting this call
 	// out still leaves the target of the alliance alone: not marching is not the
@@ -69,6 +75,10 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 			return []domainai.Decision{failure(domainai.Operational, "remember", err)}
 		}
 	}
+	raids := b.recentRaids(ctx, principal)
+	observations = invalidateRaidedIntelligence(observations, raids, now, profile.RaidCooldown())
+	targets, _ = b.survey(profile, home, observations)
+	targets = targetsOffCooldown(targets, raids, now, profile.RaidCooldown())
 	best, stale, found := domainai.BestTarget(reserve(targets, plan.reserved), profile.Preferences())
 	behaviour := profile.Behaviour()
 	if found && behaviour.AttackEnabled {
@@ -89,6 +99,159 @@ func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profi
 		return []domainai.Decision{skip(domainai.Operational, "spy", "espionage is disabled for this character", home.ID)}
 	}
 	return []domainai.Decision{b.spy(ctx, principal, profile, home, overview, stale, observations, team)}
+}
+
+func (b *Brain) recentRaids(ctx context.Context, principal appauth.Principal) map[universe.Coordinate]time.Time {
+	recent := map[universe.Coordinate]time.Time{}
+	if b.Reports == nil {
+		return recent
+	}
+	summaries, err := b.Reports.List(ctx, principal, appreports.Filter{Kind: report.CombatAttack, Page: 1})
+	if err != nil {
+		return recent
+	}
+	for _, summary := range summaries {
+		if previous, found := recent[summary.Coordinate]; !found || summary.OccurredAt.After(previous) {
+			recent[summary.Coordinate] = summary.OccurredAt
+		}
+	}
+	return recent
+}
+
+func invalidateRaidedIntelligence(observations []observation,
+	raids map[universe.Coordinate]time.Time, now time.Time, cooldown time.Duration) []observation {
+	updated := make([]observation, len(observations))
+	copy(updated, observations)
+	for index := range updated {
+		if raidedAt, found := raids[updated[index].intel.Coordinate]; found &&
+			raidedAt.After(updated[index].intel.ObservedAt) && now.Sub(raidedAt) >= cooldown {
+			updated[index].intel.Complete = false
+			updated[index].payload.Probes = 0
+		}
+	}
+	return updated
+}
+
+func targetsOffCooldown(targets []domainai.Target, raids map[universe.Coordinate]time.Time,
+	now time.Time, cooldown time.Duration) []domainai.Target {
+	available := make([]domainai.Target, 0, len(targets))
+	for _, target := range targets {
+		if raidedAt, found := raids[target.Coordinate]; found && now.Sub(raidedAt) >= 0 && now.Sub(raidedAt) < cooldown {
+			continue
+		}
+		available = append(available, target)
+	}
+	return available
+}
+
+// expand founds the next ordinary colony when astrophysics, a colony ship and
+// a fleet slot all say the empire is ready. It discovers the empty position
+// through the same public galaxy view a human uses.
+func (b *Brain) expand(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	planets []appeconomy.Planet, homeOverview appfleet.Overview) (domainai.Decision, bool) {
+	if b.Galaxy == nil || len(planets) == 0 {
+		return domainai.Decision{}, false
+	}
+	planetCount := 0
+	for _, planet := range planets {
+		if planet.Kind == building.OnPlanet {
+			planetCount++
+		}
+	}
+	home := planets[0]
+	if planetCount-1 >= home.Researches.ColonySlots(home.Rules.Progression.MaximumColonies) {
+		return domainai.Decision{}, false
+	}
+	for _, fleet := range homeOverview.Fleets {
+		if fleet.Mission == domainfleet.MissionColonize {
+			return skip(domainai.Strategic, "colonize", "a colony ship is already underway", home.ID), true
+		}
+	}
+	for _, origin := range planets {
+		if origin.Kind != building.OnPlanet {
+			continue
+		}
+		overview := homeOverview
+		if origin.ID != home.ID {
+			var err error
+			overview, err = b.Fleet.Overview(ctx, principal, origin.ID)
+			if err != nil {
+				continue
+			}
+		}
+		if overview.Stationed[unit.ColonyShip] <= 0 {
+			continue
+		}
+		target, found := b.emptyPosition(ctx, principal, profile, origin)
+		if !found {
+			return skip(domainai.Strategic, "colonize", "no empty position in exploration range", origin.ID), true
+		}
+		request := appfleet.LaunchRequest{
+			Target: target, TargetKind: domainfleet.TargetEmpty, Mission: domainfleet.MissionColonize,
+			Composition: domainfleet.Composition{unit.ColonyShip: 1}, Percent: 100,
+		}
+		if _, err := b.Fleet.Launch(ctx, principal, origin.ID, request,
+			commandKey(profile, "colonize", target.String())); err != nil {
+			return failure(domainai.Strategic, "colonize "+target.String(), err), true
+		}
+		coordinate := target
+		return domainai.Decision{
+			Layer: domainai.Strategic, Action: "colonize " + target.String(), Outcome: domainai.Done,
+			Reason: "astrophysics opened a colony slot", BodyID: origin.ID, Target: &coordinate,
+		}, true
+	}
+	return domainai.Decision{}, false
+}
+
+func (b *Brain) emptyPosition(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	origin appeconomy.Planet) (universe.Coordinate, bool) {
+	radius := max(2, min(profile.Behaviour().SearchRadius, origin.Rules.Topology.SystemsPerGalaxy))
+	var candidates []universe.Coordinate
+	seen := map[int]bool{}
+	for distance := 0; distance < radius; distance++ {
+		for _, offset := range symmetricOffsets(distance) {
+			system := wrappedSystem(origin, offset)
+			if system == 0 || seen[system] {
+				continue
+			}
+			seen[system] = true
+			view, err := b.Galaxy.System(ctx, principal, origin.Coordinate.Galaxy, system)
+			if err != nil {
+				continue
+			}
+			for _, row := range view.Rows {
+				if row.PlanetID == 0 {
+					candidates = append(candidates, universe.Coordinate{
+						Galaxy: view.Galaxy, System: view.System, Position: row.Position,
+					})
+				}
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		return universe.Coordinate{}, false
+	}
+	source := random.NewSeeded(uint64(profile.Seed) ^ uint64(profile.Tick) ^ 0x434f4c4f4e59)
+	return candidates[source.IntN(len(candidates))], true
+}
+
+func symmetricOffsets(distance int) []int {
+	if distance == 0 {
+		return []int{0}
+	}
+	return []int{distance, -distance}
+}
+
+func wrappedSystem(origin appeconomy.Planet, offset int) int {
+	system := origin.Coordinate.System + offset
+	if origin.Rules.Topology.CircularSystems {
+		systems := origin.Rules.Topology.SystemsPerGalaxy
+		return ((system-1)%systems+systems)%systems + 1
+	}
+	if system < 1 || system > origin.Rules.Topology.SystemsPerGalaxy {
+		return 0
+	}
+	return system
 }
 
 // observation is one report of the player, read once and used by everything
@@ -204,27 +367,35 @@ func (b *Brain) spy(ctx context.Context, principal appauth.Principal, profile do
 	if probes <= 0 {
 		return skip(domainai.Operational, "spy", "no probe on the ground", home.ID)
 	}
-	// A reconnaissance campaign is deliberate rather than a way of filling
-	// every free fleet slot. In particular, a slow probe must not make the next
-	// reflection launch another one at the same body (or at the next body).
+	interval := profile.ReconnaissanceInterval()
+	now := b.Clock.Now().UTC()
+	active := 0
+	var latest time.Time
 	for _, fleet := range overview.Fleets {
 		if fleet.Mission == domainfleet.MissionEspionage {
-			return skip(domainai.Operational, "spy", "reconnaissance is already underway", home.ID)
+			active++
+			if fleet.DepartedAt.After(latest) {
+				latest = fleet.DepartedAt
+			}
 		}
+	}
+	if active >= profile.ConcurrentScouts() {
+		return skip(domainai.Operational, "spy", "the reconnaissance flight budget is in use", home.ID)
 	}
 	wanted := profile.Preferences().Probes
 	if wanted > probes {
 		wanted = probes
 	}
 	recent := time.Duration(home.Rules.Espionage.RecentReportSeconds) * time.Second
-	now := b.Clock.Now().UTC()
-	// A report the game still calls recent is enough reconnaissance for this
-	// cycle. Without this pause a five-minute thinker produces twelve reports
-	// while the information has not meaningfully changed.
 	for _, seen := range observations {
-		age := now.Sub(seen.intel.ObservedAt)
-		if age >= 0 && age < recent {
-			return skip(domainai.Operational, "spy", "the latest reconnaissance is still recent", home.ID)
+		if seen.intel.ObservedAt.After(latest) {
+			latest = seen.intel.ObservedAt
+		}
+	}
+	if !latest.IsZero() {
+		age := now.Sub(latest)
+		if age >= 0 && age < interval {
+			return skip(domainai.Operational, "spy", "the reconnaissance budget is cooling down", home.ID)
 		}
 	}
 	covered := scoutingCoverage(observations, now, recent, wanted)
@@ -325,10 +496,10 @@ func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, prof
 	}
 	radius := min(profile.Behaviour().SearchRadius, home.Rules.Topology.SystemsPerGalaxy)
 	seen := map[int]bool{}
+	var candidates []universe.Coordinate
 	for distance := 0; distance < radius; distance++ {
-		offsets := []int{distance}
+		offsets := symmetricOffsets(distance)
 		if distance > 0 {
-			offsets = []int{distance, -distance}
 			// Half the characters walk the other direction first, keeping nearby
 			// targets shared without making every scout choose the same one.
 			if (profile.Seed+profile.Tick)&1 != 0 {
@@ -336,12 +507,8 @@ func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, prof
 			}
 		}
 		for _, offset := range offsets {
-			system := home.Coordinate.System + offset
-			if home.Rules.Topology.CircularSystems {
-				systems := home.Rules.Topology.SystemsPerGalaxy
-				system = ((system-1)%systems+systems)%systems + 1
-			}
-			if system < 1 || system > home.Rules.Topology.SystemsPerGalaxy || seen[system] {
+			system := wrappedSystem(home, offset)
+			if system == 0 || seen[system] {
 				continue
 			}
 			seen[system] = true
@@ -355,19 +522,30 @@ func (b *Brain) neighbour(ctx context.Context, principal appauth.Principal, prof
 				}
 				at := universe.Coordinate{Galaxy: home.Coordinate.Galaxy, System: system, Position: row.Position}
 				if !team.covers(row.OwnerName, at) && !covered[at] {
-					return at, true
+					candidates = append(candidates, at)
 				}
 			}
 		}
 	}
-	return universe.Coordinate{}, false
+	if len(candidates) == 0 {
+		return universe.Coordinate{}, false
+	}
+	source := random.NewSeeded(uint64(profile.Seed) ^ uint64(profile.Tick) ^ 0x544152474554)
+	return candidates[source.IntN(len(candidates))], true
 }
 
 // raid sends the fleet at a target the reports say is worth it.
 func (b *Brain) raid(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
 	home appeconomy.Planet, overview appfleet.Overview, target domainai.Target) domainai.Decision {
-	composition, ok := domainai.ComposeRaid(overview.Stationed, b.Catalogues.Units,
-		target.Plunder, target.Defence, profile.Preferences())
+	for _, fleet := range overview.Fleets {
+		if fleet.Mission == domainfleet.MissionAttack && fleet.Target == target.Coordinate {
+			return skip(domainai.Tactical, "raid "+target.Coordinate.String(),
+				"an attack is already underway to this target", home.ID)
+		}
+	}
+	sizing := raidSizing(profile, target.Coordinate)
+	composition, ok := domainai.ComposeRaidSized(overview.Stationed, b.Catalogues.Units,
+		target.Plunder, target.Defence, profile.Preferences(), sizing)
 	if !ok {
 		decision := skip(domainai.Tactical, "raid "+target.Coordinate.String(),
 			"not clearly stronger than what the report showed", home.ID)
@@ -387,8 +565,25 @@ func (b *Brain) raid(ctx context.Context, principal appauth.Principal, profile d
 	coordinate := target.Coordinate
 	return domainai.Decision{
 		Layer: domainai.Tactical, Action: "raid " + coordinate.String(), Outcome: domainai.Done,
-		Reason: "the report is fresh, complete and worth the trip", Score: target.Score,
+		Reason: raidReason(sizing, "the report is fresh, complete and worth the trip"), Score: target.Score,
 		BodyID: home.ID, Target: &coordinate,
+	}
+}
+
+func raidSizing(profile domainai.Profile, at universe.Coordinate) float64 {
+	coordinateSeed := uint64(at.Galaxy)*73856093 ^ uint64(at.System)*19349663 ^ uint64(at.Position)*83492791
+	source := random.NewSeeded(uint64(profile.Seed) ^ uint64(profile.Tick) ^ coordinateSeed ^ 0x5241494453495a45)
+	return domainai.RaidSizingFactor(profile.Difficulty, source)
+}
+
+func raidReason(sizing float64, accurate string) string {
+	switch {
+	case sizing < .75:
+		return "a rough estimate made a lean force look sufficient"
+	case sizing > 1.05:
+		return "a cautious estimate called for extra ships"
+	default:
+		return accurate
 	}
 }
 
@@ -414,6 +609,16 @@ func (b *Brain) fleetsave(ctx context.Context, principal appauth.Principal, prof
 		Target: shelter.Coordinate, TargetKind: domainfleet.TargetPlanet, Mission: domainfleet.MissionTransport,
 		Composition: domainfleet.Composition(composition), Percent: 10,
 	}
+	plan, err := b.Fleet.Preview(ctx, principal, home.ID, request)
+	if err != nil {
+		return failure(domainai.Operational, "fleetsave", err)
+	}
+	cargo := domainai.FleetsaveCargoUpTo(overview.Planet.Stock, plan.Capacity)
+	if profile.Preferences().Fleetsave == domainai.SaveLoaded &&
+		cargo.Metal == 0 && cargo.Crystal == 0 && cargo.Deuterium == 0 {
+		return skip(domainai.Operational, "fleetsave", "nothing worth loading", home.ID)
+	}
+	request.Cargo = cargo
 	key := commandKey(profile, "fleetsave", shelter.Coordinate.String())
 	if _, err := b.Fleet.Launch(ctx, principal, home.ID, request, key); err != nil {
 		return failure(domainai.Operational, "fleetsave", err)

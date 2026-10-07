@@ -103,10 +103,22 @@ func TestAnAllianceDefendsTheMemberThatCallsForHelp(t *testing.T) {
 		SELECT COUNT(*) FROM fleets WHERE mission = 'hold'
 		AND target_galaxy = ? AND target_system = ? AND target_position = ?`, 1,
 		at.Galaxy, at.System, at.Position)
+	// Another reflection observes the existing watch instead of launching a
+	// duplicate hold mission.
+	universeWorld.Clock.Advance(time.Minute)
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE mission = 'hold' AND owner_player_id = ?", 1, helper.playerID)
 
 	// The guard arrives and waits there.
 	flyEverything(t, ctx, universeWorld)
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM fleets WHERE state = 'holding'", 1)
+	// A defence objective is an individual watch, not an ACS group. It closes
+	// after its planning window instead of waiting forever for a group id.
+	universeWorld.Clock.Advance(31 * time.Minute)
+	think(t, ctx, universeWorld)
+	assertSingleText(t, database, "SELECT state FROM ai_alliance_objectives WHERE id = 1", "resolved")
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM acs_groups", 0)
 }
 
 // TestAMemberWithoutShipsSaysSoRatherThanPretend proves an alliance that lacks
