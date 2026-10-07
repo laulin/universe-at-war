@@ -97,10 +97,11 @@ func TestPagesAskForOneTargetedRefresh(t *testing.T) {
 	if !strings.Contains(fleet, `<script src="/static/app.js" defer></script>`) {
 		t.Fatal("the page does not load the client script")
 	}
-	// The absolute server time is rendered whatever happens, so the page is
-	// readable and correct without any script at all.
-	if !strings.Contains(fleet, "data-server-time") || !strings.Contains(fleet, "UTC") {
-		t.Fatalf("the page carries no authoritative server time: %q", fleet)
+	// The absolute server time remains machine-readable in UTC while the text
+	// is marked for localization in the player's browser.
+	if !strings.Contains(fleet, "data-server-time") || !strings.Contains(fleet, "data-local-time") ||
+		!strings.Contains(fleet, `datetime="`) {
+		t.Fatalf("the page carries no localizable authoritative time: %q", fleet)
 	}
 	research := getPage(t, handler, "/planets/1/research", session, csrfCookie)
 	for _, page := range []string{fleet, research} {

@@ -39,8 +39,8 @@
           <th scope="row">{{.Mission}}</th>
           <td>{{.Origin}} → {{.Target}}</td>
           <td>{{.Ships}}</td>
-          <td>{{.ArrivesAt.Format "15:04:05"}} (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" aria-live="off">{{.ArrivesAt.Format "15:04:05"}}</time>)</td>
-          <td>{{if .ReturnsAt}}{{.ReturnsAt.Format "15:04:05"}} (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{.ReturnsAt.Format "15:04:05"}}</time>){{else}}—{{end}}</td>
+          <td><time datetime="{{instant .ArrivesAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ArrivesAt $.Location "15:04:05"}}</time> (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" aria-live="off">{{localTime .ArrivesAt $.Location "15:04:05"}}</time>)</td>
+          <td>{{if .ReturnsAt}}<time datetime="{{instant .ReturnsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ReturnsAt $.Location "15:04:05"}}</time> (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{localTime .ReturnsAt $.Location "15:04:05"}}</time>){{else}}—{{end}}</td>
         </tr>
       {{end}}
       </tbody>

@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // templateFuncs are the few helpers the views need. Everything else is computed
@@ -13,9 +14,38 @@ var templateFuncs = template.FuncMap{
 	"emojis": func() []string {
 		return []string{"😀", "😂", "😍", "👍", "🚀", "🛰️", "⚔️", "🛡️", "🔥", "🎉"}
 	},
-	"figure":   figure,
-	"signed":   signed,
-	"unitName": unitName,
+	"figure":    figure,
+	"instant":   instant,
+	"localTime": localTime,
+	"signed":    signed,
+	"unitName":  unitName,
+}
+
+// instant serializes the absolute value consumed by browsers and countdowns.
+// It deliberately stays in UTC even when the visible fallback is localized.
+func instant(value any) string {
+	return timeValue(value).UTC().Format(time.RFC3339Nano)
+}
+
+// localTime formats an instant in the universe timezone. JavaScript replaces
+// this fallback with the player's browser timezone when it is available.
+func localTime(value any, location *time.Location, layout string) string {
+	if location == nil {
+		location = time.UTC
+	}
+	return timeValue(value).In(location).Format(layout)
+}
+
+func timeValue(value any) time.Time {
+	switch typed := value.(type) {
+	case time.Time:
+		return typed
+	case *time.Time:
+		if typed != nil {
+			return *typed
+		}
+	}
+	return time.Time{}
 }
 
 // decimal renders sampled unit averages in the French notation used by the

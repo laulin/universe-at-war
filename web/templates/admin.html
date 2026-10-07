@@ -19,13 +19,13 @@
       <dt>État</dt><dd>{{.Health.State}}</dd>
       <dt>En service depuis</dt><dd>{{.Health.Uptime}}</dd>
       <dt>Base</dt><dd>schéma {{.Health.SchemaVersion}}, journal {{.Health.JournalMode}}, {{.Health.DatabaseBytes}} octets</dd>
-      <dt>Ruleset actif</dt><dd>version {{.Health.RulesetVersion}}{{if not .Health.RulesetSince.IsZero}} depuis le {{.Health.RulesetSince.Format "2006-01-02 15:04"}} UTC{{end}}</dd>
-      <dt>Prochain événement</dt><dd>{{if .Health.NextEventAt}}{{.Health.NextEventType}} le {{.Health.NextEventAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">aucun</span>{{end}}</dd>
+      <dt>Ruleset actif</dt><dd>version {{.Health.RulesetVersion}}{{if not .Health.RulesetSince.IsZero}} depuis le <time datetime="{{instant .Health.RulesetSince}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Health.RulesetSince $.Location "02/01/2006 15:04"}}</time>{{end}}</dd>
+      <dt>Prochain événement</dt><dd>{{if .Health.NextEventAt}}{{.Health.NextEventType}} le <time datetime="{{instant .Health.NextEventAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Health.NextEventAt $.Location "02/01/2006 15:04:05"}}</time>{{else}}<span class="muted">aucun</span>{{end}}</dd>
       <dt>Arriéré</dt><dd>{{.Health.PendingEvents}} dus, {{.Health.FailedEvents}} en échec</dd>
       <dt>Débit</dt><dd>{{.Health.RecentEvents}} événements sur la dernière heure</dd>
       <dt>Population</dt><dd>{{.Health.Accounts}} comptes, {{.Health.Players}} empires, {{.Health.Artificials}} machines</dd>
       <dt>Sanctions actives</dt><dd>{{.Health.ActiveBans}}</dd>
-      <dt>Dernière sauvegarde</dt><dd>{{if .Health.LastBackupAt}}{{.Health.LastBackupName}} le {{.Health.LastBackupAt.Format "2006-01-02 15:04"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</dd>
+      <dt>Dernière sauvegarde</dt><dd>{{if .Health.LastBackupAt}}{{.Health.LastBackupName}} le <time datetime="{{instant .Health.LastBackupAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Health.LastBackupAt $.Location "02/01/2006 15:04"}}</time>{{else}}<span class="muted">aucune</span>{{end}}</dd>
     </dl>
     <form method="post" action="/admin/backup">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -89,7 +89,7 @@
       {{range .Invitations}}
         <tr>
           <th scope="row">{{if .Label}}{{.Label}}{{else}}<span class="muted">sans étiquette</span>{{end}}</th>
-          <td>{{.ExpiresAt.Format "2006-01-02 15:04"}} UTC</td>
+          <td><time datetime="{{instant .ExpiresAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ExpiresAt $.Location "02/01/2006 15:04"}}</time></td>
           <td>{{if .UsedAt}}utilisée par {{.UsedBy}}{{else if .Revoked}}révoquée{{else}}en attente{{end}}</td>
           <td>
             {{if and (not .UsedAt) (not .Revoked)}}

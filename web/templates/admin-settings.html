@@ -5,7 +5,7 @@
     <h2 id="settings-title">Paramètres du jeu</h2>
     <p>
       Version active <strong>{{.Settings.Version}}</strong>, publiée le
-      <time datetime="{{.Settings.EffectiveAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.Settings.EffectiveAt.Format "02/01/2006 à 15:04:05"}} UTC</time>.
+      <time datetime="{{instant .Settings.EffectiveAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Settings.EffectiveAt $.Location "02/01/2006 à 15:04:05"}}</time>.
     </p>
     <div class="alert" role="note">
       Une publication s'applique aux nouvelles actions. Elle ne recalcule pas les flottes,

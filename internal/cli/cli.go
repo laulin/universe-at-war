@@ -430,6 +430,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	handler, err := webhandler.New(webhandler.Dependencies{
 		Authentication:   authentication,
 		ServerState:      states,
+		Timezone:         states,
 		CSRFSecrets:      auth.NewSecretGenerator(random, 32),
 		Nonces:           auth.NewSecretGenerator(random, 16),
 		Setup:            setup,

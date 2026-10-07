@@ -9,7 +9,7 @@
       <a class="chat-thread{{if and $.Conversation (eq $.Conversation.ID .ID)}} chat-thread--active{{end}}" href="/admin/chats/{{.ID}}">
         <span class="chat-thread__avatar" aria-hidden="true">{{if eq .Kind "alliance"}}◎{{else}}✦{{end}}</span>
         <span><strong>{{.Title}}</strong><small>{{.LastMessage}}</small></span>
-        <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.UpdatedAt.Format "02/01 15:04"}}</time>
+        <time datetime="{{instant .UpdatedAt}}" data-local-time data-local-format="short-date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .UpdatedAt $.Location "02/01 15:04"}}</time>
       </a>
       {{else}}<p class="muted chat-empty">Aucune conversation enregistrée.</p>{{end}}
     </aside>
@@ -24,7 +24,7 @@
         {{range .Messages}}
         <li class="chat-message{{if not .FromInitiator}} chat-message--right{{end}}">
           <article>
-            <header><strong>{{.AuthorName}}</strong><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.CreatedAt.Format "02/01/2006 15:04"}}</time></header>
+            <header><strong>{{.AuthorName}}</strong><time datetime="{{instant .CreatedAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .CreatedAt $.Location "02/01/2006 15:04"}}</time></header>
             {{if .Body}}<p>{{.Body}}</p>{{end}}
             {{if .GIFURL}}<img class="chat-message__gif" src="{{.GIFURL}}" alt="GIF envoyé par {{.AuthorName}}" loading="lazy" referrerpolicy="no-referrer">{{end}}
           </article>

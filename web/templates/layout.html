@@ -145,7 +145,7 @@
     {{end}}
 
     <footer class="game-footer">
-      <span>Heure serveur <time datetime="{{.Now.Format "2006-01-02T15:04:05Z07:00"}}" data-server-time>{{.Now.Format "15:04:05"}} UTC</time></span>
+      <span>Heure locale <time datetime="{{instant .Now}}" data-server-time data-local-time data-local-format="time-seconds" data-local-zone title="Fuseau de repli : {{$.Timezone}}">{{localTime .Now $.Location "15:04:05 MST"}}</time><noscript> (fuseau serveur {{.Timezone}})</noscript></span>
       <span class="faint">Universe At War</span>
     </footer>
   </div>

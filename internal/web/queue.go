@@ -15,13 +15,13 @@ import (
 	domaineconomy "universeatwar/internal/domain/economy"
 )
 
-const clockLayout = "15:04:05"
-
 // queuePanel is what the "buildQueue" template renders.
 type queuePanel struct {
-	Eyebrow string
-	Title   string
-	Entries []queueEntryView
+	Eyebrow  string
+	Title    string
+	Entries  []queueEntryView
+	Timezone string
+	Location *time.Location
 }
 
 // queueEntryView is one line of a queue, whatever it builds. A running entry
@@ -32,8 +32,8 @@ type queueEntryView struct {
 	Name     string
 	Detail   string
 	Active   bool
-	StartsAt string
-	EndsAt   string
+	StartsAt time.Time
+	EndsAt   time.Time
 	EndsISO  string
 	// ElapsedSeconds and TotalSeconds fill the progress attributes. The policy
 	// refuses inline styles, so the bar is filled by value, never by CSS.
@@ -71,9 +71,9 @@ func (b queueBuilder) running(id int64, name, detail string, cost domaineconomy.
 	elapsed := min(max(int(b.now.Sub(startedAt)/time.Second), 0), total)
 	view := b.entry(id, name, detail, cost)
 	view.Active = true
-	view.StartsAt = startedAt.Format(clockLayout)
-	view.EndsAt = completesAt.Format(clockLayout)
-	view.EndsISO = completesAt.Format(time.RFC3339)
+	view.StartsAt = startedAt
+	view.EndsAt = completesAt
+	view.EndsISO = instant(completesAt)
 	view.ElapsedSeconds, view.TotalSeconds = elapsed, total
 	view.Progress = fmt.Sprintf("%d %%", elapsed*100/total)
 	return view
@@ -81,8 +81,8 @@ func (b queueBuilder) running(id int64, name, detail string, cost domaineconomy.
 
 func (b queueBuilder) waiting(id int64, name, detail string, cost domaineconomy.Resources, startsAt, completesAt time.Time) queueEntryView {
 	view := b.entry(id, name, detail, cost)
-	view.StartsAt = startsAt.Format(clockLayout)
-	view.EndsAt = completesAt.Format(clockLayout)
+	view.StartsAt = startsAt
+	view.EndsAt = completesAt
 	return view
 }
 
@@ -97,12 +97,12 @@ func (b queueBuilder) entry(id int64, name, detail string, cost domaineconomy.Re
 }
 
 // buildingQueuePanel turns a body's construction queue into the shared view.
-func buildingQueuePanel(planet appeconomy.Planet, token string, now time.Time) queuePanel {
+func buildingQueuePanel(planet appeconomy.Planet, token string, now time.Time, timezone string, location *time.Location) queuePanel {
 	builder := queueBuilder{
 		cancelPrefix: fmt.Sprintf("/planets/%d/queue/building", planet.ID),
 		token:        token, stock: planet.Stock, capacity: planet.Capacity, now: now,
 	}
-	panel := queuePanel{Eyebrow: "File de construction", Title: "Construction en cours"}
+	panel := queuePanel{Eyebrow: "File de construction", Title: "Construction en cours", Timezone: timezone, Location: location}
 	for _, entry := range planet.Queue {
 		detail := fmt.Sprintf("niveau %d", entry.TargetLevel)
 		name := buildingName(entry.Building)
@@ -116,12 +116,12 @@ func buildingQueuePanel(planet appeconomy.Planet, token string, now time.Time) q
 }
 
 // researchQueuePanel turns a player's research queue into the shared view.
-func researchQueuePanel(queue []appresearch.Queue, planet appeconomy.Planet, token string, now time.Time) queuePanel {
+func researchQueuePanel(queue []appresearch.Queue, planet appeconomy.Planet, token string, now time.Time, timezone string, location *time.Location) queuePanel {
 	builder := queueBuilder{
 		cancelPrefix: fmt.Sprintf("/planets/%d/queue/research", planet.ID),
 		token:        token, stock: planet.Stock, capacity: planet.Capacity, now: now,
 	}
-	panel := queuePanel{Eyebrow: "File de recherche", Title: "Recherche en cours"}
+	panel := queuePanel{Eyebrow: "File de recherche", Title: "Recherche en cours", Timezone: timezone, Location: location}
 	for _, entry := range queue {
 		detail := fmt.Sprintf("niveau %d", entry.TargetLevel)
 		name := researchName(entry.Research)
@@ -136,12 +136,12 @@ func researchQueuePanel(queue []appresearch.Queue, planet appeconomy.Planet, tok
 
 // productionQueuePanel turns one family's queue into the shared view. A running
 // batch also states how many of its units have already left the yard.
-func productionQueuePanel(queue []appshipyard.Order, planet appeconomy.Planet, token string, now time.Time) queuePanel {
+func productionQueuePanel(queue []appshipyard.Order, planet appeconomy.Planet, token string, now time.Time, timezone string, location *time.Location) queuePanel {
 	builder := queueBuilder{
 		cancelPrefix: fmt.Sprintf("/planets/%d/queue/unit", planet.ID),
 		token:        token, stock: planet.Stock, capacity: planet.Capacity, now: now,
 	}
-	panel := queuePanel{Eyebrow: "File de production", Title: "Production en cours"}
+	panel := queuePanel{Eyebrow: "File de production", Title: "Production en cours", Timezone: timezone, Location: location}
 	for _, order := range queue {
 		detail := fmt.Sprintf("× %d", order.Quantity)
 		name := unitName(order.Unit)

@@ -172,7 +172,7 @@ func (h *Handler) renderResearch(response http.ResponseWriter, request *http.Req
 	shell.Notice = cancellationNotice(request)
 	h.render(response, status, "research", researchPageData{
 		pageShell: shell, Planet: overview.Planet, Levels: overview.Levels,
-		Queue:      researchQueuePanel(overview.Queue, overview.Planet, token, shell.Now),
+		Queue:      researchQueuePanel(overview.Queue, overview.Planet, token, shell.Now, shell.Timezone, shell.Location),
 		Laboratory: overview.Laboratories.Local, Choices: choices,
 	})
 }
@@ -321,7 +321,7 @@ func (h *Handler) renderProduction(response http.ResponseWriter, request *http.R
 	shell.Notice = cancellationNotice(request)
 	h.render(response, status, "production", productionPageData{
 		pageShell: shell, Planet: overview.Planet, Family: string(family), Title: title,
-		Action: familyPath(family), Queue: productionQueuePanel(overview.Queue, overview.Planet, token, shell.Now),
+		Action: familyPath(family), Queue: productionQueuePanel(overview.Queue, overview.Planet, token, shell.Now, shell.Timezone, shell.Location),
 		Choices: choices,
 	})
 }

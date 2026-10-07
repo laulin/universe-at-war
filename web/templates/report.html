@@ -6,7 +6,7 @@
 
 {{define "content"}}
   <section class="panel-wide" aria-labelledby="report-title">
-    <p class="eyebrow">{{.Report.Coordinate}} — {{.Report.OccurredAt.Format "2006-01-02 15:04:05"}} UTC ({{.Report.Freshness}})</p>
+    <p class="eyebrow">{{.Report.Coordinate}} — <time datetime="{{instant .Report.OccurredAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Report.OccurredAt $.Location "02/01/2006 15:04:05"}}</time> ({{.Report.Freshness}})</p>
     <h2 id="report-title">{{.Report.KindName}}{{if .Report.Hostile}} <span class="hostile">⚠ hostile</span>{{end}}</h2>
 
     {{if .AttackLink}}<p><a class="button" href="{{.AttackLink}}">Préparer une attaque{{with .Current}} depuis {{.Name}}{{end}}</a></p>{{end}}

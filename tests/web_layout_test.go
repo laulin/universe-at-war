@@ -50,6 +50,29 @@ func TestGamePagesShareLayoutWithoutInlineScripts(t *testing.T) {
 	}
 }
 
+func TestGameTimesAreReadyForThePlayersBrowserTimezone(t *testing.T) {
+	handler, session, csrfCookie := playableHandler(t)
+	page := getPage(t, handler, "/planets/1", session, csrfCookie)
+	for _, fragment := range []string{
+		"Heure locale", "data-server-time", "data-local-time", "data-local-format=\"time-seconds\"",
+		"data-local-zone", "Fuseau de repli : Europe/Paris",
+	} {
+		if !strings.Contains(page, fragment) {
+			t.Fatalf("the page has no %q: %q", fragment, page)
+		}
+	}
+
+	asset := httptest.NewRecorder()
+	handler.ServeHTTP(asset, httptest.NewRequest(http.MethodGet, "/static/app.js", nil))
+	for _, fragment := range []string{
+		"Intl.DateTimeFormat", "resolvedOptions().timeZone", `time[data-local-time]`,
+	} {
+		if !strings.Contains(asset.Body.String(), fragment) {
+			t.Fatalf("the browser localizer has no %q", fragment)
+		}
+	}
+}
+
 func TestAuthenticationPagesKeepTheirOwnShellWithoutNavigation(t *testing.T) {
 	handler, err := webhandler.New(webhandler.Dependencies{
 		Authentication: webAuthenticationStub{},

@@ -32,6 +32,42 @@
     return `${pad(hours)}:${pad(minutes)}:${pad(total % 60)}`;
   };
 
+  const localTimeOptions = {
+    date: { day: "2-digit", month: "2-digit", year: "numeric" },
+    time: { hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
+    "time-seconds": { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" },
+    "short-date-time": { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
+    "short-date-time-seconds": { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" },
+    "date-time": { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
+    "date-time-seconds": { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" },
+  };
+  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "fuseau local";
+  const localFormatters = new Map();
+  const formatLocalTime = (instant, formatName, withZone = false) => {
+    if (!(instant instanceof Date) || Number.isNaN(instant.getTime())) {
+      return "";
+    }
+    const name = Object.prototype.hasOwnProperty.call(localTimeOptions, formatName) ? formatName : "date-time";
+    const key = `${name}:${withZone}`;
+    if (!localFormatters.has(key)) {
+      const options = { ...localTimeOptions[name] };
+      if (withZone) {
+        options.timeZoneName = "short";
+      }
+      localFormatters.set(key, new Intl.DateTimeFormat("fr-FR", options));
+    }
+    return localFormatters.get(key).format(instant);
+  };
+
+  for (const node of document.querySelectorAll("time[data-local-time]")) {
+    const instant = new Date(node.getAttribute("datetime"));
+    const rendered = formatLocalTime(instant, node.dataset.localFormat, node.hasAttribute("data-local-zone"));
+    if (rendered) {
+      node.textContent = rendered;
+      node.title = `Fuseau local : ${browserTimeZone}`;
+    }
+  }
+
   const serverTime = document.querySelector("[data-server-time]");
   const parsed = serverTime ? Date.parse(serverTime.getAttribute("datetime")) : NaN;
   const skew = Number.isNaN(parsed) ? 0 : parsed - Date.now();
@@ -284,9 +320,10 @@
       const sent = document.createElement("time");
       const instant = new Date(message.created_at);
       sent.dateTime = message.created_at;
-      sent.textContent = Number.isNaN(instant.getTime())
-        ? ""
-        : instant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      sent.dataset.localTime = "";
+      sent.dataset.localFormat = "time";
+      sent.textContent = formatLocalTime(instant, "time");
+      sent.title = `Fuseau local : ${browserTimeZone}`;
       header.append(author, sent);
       article.append(header);
       if (message.body) {
@@ -475,7 +512,7 @@
     window.setInterval(refreshUnread, 10000);
   }
 
-  if (countdowns.length === 0 && bars.length === 0 && counters.length === 0 && awaiting.length === 0) {
+  if (!serverTime && countdowns.length === 0 && bars.length === 0 && counters.length === 0 && awaiting.length === 0) {
     return;
   }
 
@@ -494,6 +531,9 @@
 
   const tick = () => {
     const now = Date.now() + skew;
+    if (serverTime) {
+      serverTime.textContent = formatLocalTime(new Date(now), serverTime.dataset.localFormat, true);
+    }
     let passed = false;
     for (const node of countdowns) {
       const deadline = Date.parse(node.getAttribute("datetime"));

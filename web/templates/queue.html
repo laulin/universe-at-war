@@ -11,10 +11,10 @@
         <progress class="queue-entry__bar" max="{{.TotalSeconds}}" value="{{.ElapsedSeconds}}"
                   data-progress data-end="{{.EndsISO}}" data-span="{{.TotalSeconds}}"
                   aria-label="Progression : {{.Name}} {{.Detail}}">{{.Progress}}</progress>
-        <p class="queue-entry__timing">Fin prévue à {{.EndsAt}} UTC —
-          <time datetime="{{.EndsISO}}" data-countdown data-done="terminée" data-refresh="page" aria-live="off">{{.EndsAt}}</time></p>
+        <p class="queue-entry__timing">Fin prévue à <time datetime="{{instant .EndsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .EndsAt $.Location "15:04:05"}}</time> —
+          <time datetime="{{.EndsISO}}" data-countdown data-done="terminée" data-refresh="page" aria-live="off">{{localTime .EndsAt $.Location "15:04:05"}}</time></p>
         {{else}}
-        <p class="queue-entry__timing faint">Début ≈ {{.StartsAt}} UTC — fin ≈ {{.EndsAt}} UTC</p>
+        <p class="queue-entry__timing faint">Début ≈ <time datetime="{{instant .StartsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .StartsAt $.Location "15:04:05"}}</time> — fin ≈ <time datetime="{{instant .EndsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .EndsAt $.Location "15:04:05"}}</time></p>
         {{end}}
         <form class="queue-entry__cancel" method="post" action="{{.CancelPath}}">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

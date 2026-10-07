@@ -68,6 +68,10 @@ type stateService interface {
 	Current(context.Context) (server.State, error)
 }
 
+type timezoneService interface {
+	Timezone(context.Context) (string, error)
+}
+
 type secretGenerator interface {
 	Generate() (string, error)
 }
@@ -182,6 +186,7 @@ type chatService interface {
 type Dependencies struct {
 	Authentication   authenticationService
 	ServerState      stateService
+	Timezone         timezoneService
 	CSRFSecrets      secretGenerator
 	Nonces           secretGenerator
 	Setup            setupService
@@ -218,6 +223,7 @@ type Dependencies struct {
 type Handler struct {
 	authentication   authenticationService
 	serverState      stateService
+	timezone         timezoneService
 	csrfSecrets      secretGenerator
 	nonces           secretGenerator
 	setup            setupService
@@ -313,6 +319,7 @@ func New(dependencies Dependencies) (http.Handler, error) {
 	handler := &Handler{
 		authentication:   dependencies.Authentication,
 		serverState:      dependencies.ServerState,
+		timezone:         dependencies.Timezone,
 		csrfSecrets:      dependencies.CSRFSecrets,
 		nonces:           nonces,
 		setup:            dependencies.Setup,
@@ -1007,7 +1014,7 @@ type overviewBodyView struct {
 type overviewConstructionView struct {
 	Name    string
 	Detail  string
-	EndsAt  string
+	EndsAt  time.Time
 	Waiting int
 }
 
@@ -1022,7 +1029,7 @@ func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Req
 		if head := planet.Queue; len(head) > 0 {
 			row.Construction = &overviewConstructionView{
 				Name: buildingName(head[0].Building), Detail: fmt.Sprintf("niveau %d", head[0].TargetLevel),
-				EndsAt: head[0].CompletesAt.Format(clockLayout), Waiting: len(head) - 1,
+				EndsAt: head[0].CompletesAt, Waiting: len(head) - 1,
 			}
 		}
 		rows = append(rows, row)
@@ -1084,7 +1091,7 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	shell.Notice = cancellationNotice(request)
 	h.render(response, status, "economy", economyPageData{
 		pageShell: shell, Planet: planet,
-		Queue: buildingQueuePanel(planet, token, shell.Now), Choices: views,
+		Queue: buildingQueuePanel(planet, token, shell.Now, shell.Timezone, shell.Location), Choices: views,
 	})
 }
 
@@ -1274,7 +1281,11 @@ type pageShell struct {
 	Bodies    []bodyLink
 	Current   *bodyLink
 	Now       time.Time
-	Alerts    int
+	// Timezone and Location are the universe fallback used by server-rendered
+	// pages. Browsers replace marked instants with the player's own timezone.
+	Timezone string
+	Location *time.Location
+	Alerts   int
 	// Incoming holds hostile flights aimed at any body of the account. It is
 	// populated once with the shared shell and rendered by the fleet page.
 	Incoming []incomingFleet
@@ -1379,8 +1390,10 @@ type loginPageData struct {
 
 // gameShell builds the navigation shell from the bodies of the account.
 func (h *Handler) gameShell(ctx context.Context, token string, principal appauth.Principal, section string, planets []appeconomy.Planet, currentID int64) pageShell {
+	timezone, location := h.displayTimezone(ctx, planets)
 	shell := pageShell{
 		CSRFToken: token, Username: principal.Username, Section: section, Now: h.clock(),
+		Timezone: timezone, Location: location,
 		Administrator:      principal.HasRole(appauth.RoleAdmin),
 		Messaging:          h.chat != nil && principal.HasRole(appauth.RolePlayer),
 		ChatAdministration: h.chat != nil && principal.HasRole(appauth.RoleAdmin),
@@ -1465,6 +1478,25 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 		shell.Current = &current
 	}
 	return shell
+}
+
+func (h *Handler) displayTimezone(ctx context.Context, planets []appeconomy.Planet) (string, *time.Location) {
+	name := ""
+	if h.timezone != nil {
+		if configured, err := h.timezone.Timezone(ctx); err == nil {
+			name = configured
+		}
+	}
+	// Most player pages already carry the active ruleset. It is a useful
+	// fallback for tests and for a transient failure of the dedicated reader.
+	if name == "" && len(planets) > 0 {
+		name = planets[0].Rules.Identity.Timezone
+	}
+	location, err := time.LoadLocation(name)
+	if err != nil {
+		return "UTC", time.UTC
+	}
+	return name, location
 }
 
 // bodySectionURL keeps body switching inside the current gameplay screen. A

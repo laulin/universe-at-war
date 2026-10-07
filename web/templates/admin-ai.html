@@ -58,7 +58,7 @@
           <td>{{if .Retired}}retiré{{else}}actif{{end}}</td>
           <td>{{with .Team}}{{.Tag}}{{if .Role}} ({{.Role}}){{end}}{{else}}<span class="muted">aucune</span>{{end}}</td>
           <td>{{.Bodies}}</td>
-          <td>{{if .NextThinkAt}}{{.NextThinkAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</td>
+          <td>{{if .NextThinkAt}}<time datetime="{{instant .NextThinkAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .NextThinkAt $.Location "02/01/2006 15:04:05"}}</time>{{else}}<span class="muted">aucune</span>{{end}}</td>
           <td>
             {{if not .Retired}}
             <div class="admin-ai-actions">

@@ -10,6 +10,7 @@ import (
 
 	appauth "universeatwar/internal/app/authentication"
 	appbootstrap "universeatwar/internal/app/bootstrap"
+	appserverstate "universeatwar/internal/app/serverstate"
 	appsetup "universeatwar/internal/app/setup"
 	"universeatwar/internal/auth"
 	appclock "universeatwar/internal/clock"
@@ -102,6 +103,10 @@ func TestSetupDraftAndActivationAreTransactional(t *testing.T) {
 	}
 	if decoded.Identity.Name != "Campagne locale" {
 		t.Fatalf("active universe name = %q", decoded.Identity.Name)
+	}
+	states := appserverstate.Service{Repository: storagesqlite.NewServerStateRepository(database.Read(), database.Write())}
+	if timezone, err := states.Timezone(ctx); err != nil || timezone != "Europe/Paris" {
+		t.Fatalf("active timezone = %q, %v, want Europe/Paris", timezone, err)
 	}
 }
 

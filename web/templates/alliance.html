@@ -17,7 +17,7 @@
         <tr>
           <th scope="row">{{.Name}}</th>
           <td>{{.Role}}</td>
-          <td>{{.JoinedAt.Format "2006-01-02"}}</td>
+          <td><time datetime="{{instant .JoinedAt}}" data-local-time data-local-format="date" title="Fuseau de repli : {{$.Timezone}}">{{localTime .JoinedAt $.Location "02/01/2006"}}</time></td>
           <td>
             {{if $.CanExpel}}
             <form method="post" action="/alliance/members/{{.PlayerID}}/expel">
@@ -53,7 +53,7 @@
     </form>
     {{if .Profile.Invitations}}
     <ul>
-      {{range .Profile.Invitations}}<li>{{.PlayerName}} — jusqu'au {{.ExpiresAt.Format "2006-01-02 15:04"}} UTC</li>{{end}}
+      {{range .Profile.Invitations}}<li>{{.PlayerName}} — jusqu'au <time datetime="{{instant .ExpiresAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ExpiresAt $.Location "02/01/2006 15:04"}}</time></li>{{end}}
     </ul>
     {{end}}
     {{end}}
@@ -71,14 +71,14 @@
     <h3 id="diplomacy-title">Diplomatie</h3>
     {{if .Profile.Relations}}
     <ul>
-      {{range .Profile.Relations}}<li>{{.OtherName}} [{{.OtherTag}}] — {{.Kind}} depuis le {{.DeclaredAt.Format "2006-01-02"}}</li>{{end}}
+      {{range .Profile.Relations}}<li>{{.OtherName}} [{{.OtherTag}}] — {{.Kind}} depuis le <time datetime="{{instant .DeclaredAt}}" data-local-time data-local-format="date" title="Fuseau de repli : {{$.Timezone}}">{{localTime .DeclaredAt $.Location "02/01/2006"}}</time></li>{{end}}
     </ul>
     {{else}}<p class="muted">Aucune relation déclarée.</p>{{end}}
 
     <h4>Déclarations reçues</h4>
     {{if .Profile.Received}}
     <ul>
-      {{range .Profile.Received}}<li>{{.OtherName}} [{{.OtherTag}}] — {{.Kind}} depuis le {{.DeclaredAt.Format "2006-01-02"}}</li>{{end}}
+      {{range .Profile.Received}}<li>{{.OtherName}} [{{.OtherTag}}] — {{.Kind}} depuis le <time datetime="{{instant .DeclaredAt}}" data-local-time data-local-format="date" title="Fuseau de repli : {{$.Timezone}}">{{localTime .DeclaredAt $.Location "02/01/2006"}}</time></li>{{end}}
     </ul>
     {{else}}<p class="muted">Aucune alliance ne s'est déclarée à votre égard.</p>{{end}}
     {{if .CanDiplomacy}}
@@ -98,14 +98,14 @@
     <h3 id="shared-title">Rapports partagés</h3>
     {{if .Shared}}
     <ul aria-labelledby="shared-title">
-      {{range .Shared}}<li><a href="/reports/{{.ID}}">{{.KindName}} — {{.Coordinate}}</a> ({{.OccurredAt.Format "2006-01-02 15:04"}} UTC)</li>{{end}}
+      {{range .Shared}}<li><a href="/reports/{{.ID}}">{{.KindName}} — {{.Coordinate}}</a> (<time datetime="{{instant .OccurredAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .OccurredAt $.Location "02/01/2006 15:04"}}</time>)</li>{{end}}
     </ul>
     {{else}}<p class="muted">Aucun rapport partagé.</p>{{end}}
 
     <h3 id="history-title">Historique</h3>
     {{if .Profile.History}}
     <ul aria-labelledby="history-title">
-      {{range .Profile.History}}<li>{{.OccurredAt.Format "2006-01-02 15:04"}} UTC — {{.Action}} {{.ActorName}} {{.TargetName}}</li>{{end}}
+      {{range .Profile.History}}<li><time datetime="{{instant .OccurredAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .OccurredAt $.Location "02/01/2006 15:04"}}</time> — {{.Action}} {{.ActorName}} {{.TargetName}}</li>{{end}}
     </ul>
     {{else}}<p class="muted">Rien à signaler.</p>{{end}}
 
@@ -120,7 +120,7 @@
     <ul aria-labelledby="invitations-title">
       {{range .Invitations}}
       <li>
-        {{.AllianceName}} [{{.AllianceTag}}] — invitée par {{.InvitedByName}}, jusqu'au {{.ExpiresAt.Format "2006-01-02 15:04"}} UTC
+        {{.AllianceName}} [{{.AllianceTag}}] — invitée par {{.InvitedByName}}, jusqu'au <time datetime="{{instant .ExpiresAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ExpiresAt $.Location "02/01/2006 15:04"}}</time>
         <form method="post" action="/alliance/invitations/{{.ID}}">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button type="submit" name="answer" value="accept">Accepter</button>

@@ -13,7 +13,7 @@
           <th scope="row"><a href="/alliance/operations/{{.ID}}">{{.Target}}</a></th>
           <td>{{.OwnerName}}</td>
           <td>{{.State}}</td>
-          <td><time datetime="{{.ArrivesAt.Format "2006-01-02T15:04:05Z07:00"}}" data-countdown aria-live="off" data-refresh="page">{{.ArrivesAt.Format "15:04:05"}} UTC</time></td>
+          <td><time datetime="{{instant .ArrivesAt}}" data-countdown aria-live="off" data-refresh="page">{{localTime .ArrivesAt $.Location "15:04:05"}}</time></td>
           <td>{{len .Participants}} / {{.MaximumSize}}</td>
         </tr>
       {{end}}
@@ -23,7 +23,7 @@
 
     {{with .Group}}
     <h3 id="group-title">Opération sur {{.Target}}</h3>
-    <p class="muted">Menée par {{.OwnerName}} — {{.State}} — arrivée prévue le {{.ArrivesAt.Format "2006-01-02 15:04:05"}} UTC.</p>
+    <p class="muted">Menée par {{.OwnerName}} — {{.State}} — arrivée prévue le <time datetime="{{instant .ArrivesAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ArrivesAt $.Location "02/01/2006 15:04:05"}}</time>.</p>
     <table class="bodies" aria-labelledby="group-title">
       <thead><tr><th scope="col">Joueur</th><th scope="col">Origine</th><th scope="col">Vaisseaux</th><th scope="col">Engagée</th><th scope="col">Action</th></tr></thead>
       <tbody>
@@ -32,7 +32,7 @@
           <th scope="row">{{.PlayerName}}</th>
           <td>{{.Origin}}</td>
           <td>{{.Ships}}</td>
-          <td>{{.JoinedAt.Format "15:04:05"}} UTC</td>
+          <td><time datetime="{{instant .JoinedAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .JoinedAt $.Location "15:04:05"}}</time></td>
           <td>
             {{if .Own}}
             <form method="post" action="/fleets/{{.FleetID}}/withdraw">
@@ -48,8 +48,8 @@
 
     {{with $.Preview}}
     <dl class="summary">
-      <dt>Arrivée de votre flotte</dt><dd>{{.Plan.ArrivesAt.Format "2006-01-02 15:04:05"}} UTC</dd>
-      <dt>Arrivée du groupe</dt><dd>{{.GroupArrival.Format "2006-01-02 15:04:05"}} UTC</dd>
+      <dt>Arrivée de votre flotte</dt><dd><time datetime="{{instant .Plan.ArrivesAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Plan.ArrivesAt $.Location "02/01/2006 15:04:05"}}</time></dd>
+      <dt>Arrivée du groupe</dt><dd><time datetime="{{instant .GroupArrival}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .GroupArrival $.Location "02/01/2006 15:04:05"}}</time></dd>
       <dt>Carburant</dt><dd>{{.Plan.Fuel}} deutérium</dd>
       <dt>Effet sur l'équipe</dt><dd>{{if .DelaysTheTeam}}Votre flotte retarde tout le groupe.{{else}}Votre flotte n'attarde personne.{{end}}</dd>
     </dl>

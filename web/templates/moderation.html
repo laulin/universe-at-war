@@ -35,8 +35,8 @@
         <tr>
           <th scope="row">{{.Username}}{{if .Administrator}} <span class="muted">(privilégié)</span>{{end}}</th>
           <td>{{.AuthorName}}</td>
-          <td>{{.StartsAt.Format "2006-01-02 15:04"}} UTC</td>
-          <td>{{if .EndsAt}}{{.EndsAt.Format "2006-01-02 15:04"}} UTC{{else}}définitif{{end}}</td>
+          <td><time datetime="{{instant .StartsAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .StartsAt $.Location "02/01/2006 15:04"}}</time></td>
+          <td>{{if .EndsAt}}<time datetime="{{instant .EndsAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .EndsAt $.Location "02/01/2006 15:04"}}</time>{{else}}définitif{{end}}</td>
           <td>{{if .LiftedAt}}levée{{else}}active{{end}}</td>
           <td>{{.Justification}}</td>
           <td>

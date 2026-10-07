@@ -14,8 +14,8 @@
       <dt>Intervalle</dt><dd>{{.Player.Interval}}</dd>
       <dt>Réflexions</dt><dd>{{.Player.Tick}}</dd>
       <dt>Corps</dt><dd>{{.Player.Bodies}}</dd>
-      <dt>Dernière réflexion</dt><dd>{{if .Player.LastThinkAt}}{{.Player.LastThinkAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">jamais</span>{{end}}</dd>
-      <dt>Prochaine réflexion</dt><dd>{{if .Player.NextThinkAt}}{{.Player.NextThinkAt.Format "2006-01-02 15:04:05"}} UTC{{else}}<span class="muted">aucune</span>{{end}}</dd>
+      <dt>Dernière réflexion</dt><dd>{{if .Player.LastThinkAt}}<time datetime="{{instant .Player.LastThinkAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Player.LastThinkAt $.Location "02/01/2006 15:04:05"}}</time>{{else}}<span class="muted">jamais</span>{{end}}</dd>
+      <dt>Prochaine réflexion</dt><dd>{{if .Player.NextThinkAt}}<time datetime="{{instant .Player.NextThinkAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Player.NextThinkAt $.Location "02/01/2006 15:04:05"}}</time>{{else}}<span class="muted">aucune</span>{{end}}</dd>
       <dt>État</dt><dd>{{if .Player.Retired}}retiré{{else}}actif{{end}}</dd>
     </dl>
 
@@ -71,7 +71,7 @@
       <dt>Objectif</dt>
       <dd>
         {{with .Objective}}{{.Kind}} sur {{.Coordinate}} — {{.State}}, quorum {{.Quorum}},
-        échéance {{.DeadlineAt.Format "2006-01-02 15:04"}} UTC{{if .GroupID}}, opération {{.GroupID}}{{end}}
+        échéance <time datetime="{{instant .DeadlineAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .DeadlineAt $.Location "02/01/2006 15:04"}}</time>{{if .GroupID}}, opération {{.GroupID}}{{end}}
         {{else}}<span class="muted">aucun</span>{{end}}
       </dd>
     </dl>
@@ -90,8 +90,8 @@
           <th scope="row">{{.Coordinate}}</th>
           <td>{{.Kind}}</td>
           <td>{{.AuthorName}}</td>
-          <td>{{.ObservedAt.Format "01-02 15:04"}}</td>
-          <td>{{.ExpiresAt.Format "01-02 15:04"}}</td>
+          <td><time datetime="{{instant .ObservedAt}}" data-local-time data-local-format="short-date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ObservedAt $.Location "02/01 15:04"}}</time></td>
+          <td><time datetime="{{instant .ExpiresAt}}" data-local-time data-local-format="short-date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ExpiresAt $.Location "02/01 15:04"}}</time></td>
           <td>{{printf "%.2f" .Confidence}}</td>
           <td>{{if .ReportID}}#{{.ReportID}}{{else}}<span class="muted">carte publique</span>{{end}}</td>
           <td>{{.Summary}}</td>
@@ -112,7 +112,7 @@
       <tbody>
       {{range .Player.Decisions}}
         <tr>
-          <td>{{.DecidedAt.Format "01-02 15:04:05"}}</td>
+          <td><time datetime="{{instant .DecidedAt}}" data-local-time data-local-format="short-date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .DecidedAt $.Location "02/01 15:04:05"}}</time></td>
           <td>{{.Layer}}</td>
           <th scope="row">{{.Action}}{{if .Target}} → {{.Target}}{{end}}</th>
           <td>{{.Outcome}}</td>
@@ -133,7 +133,7 @@
         <tr>
           <th scope="row">{{.Coordinate}}</th>
           <td>{{.Kind}}</td>
-          <td>{{.ObservedAt.Format "2006-01-02 15:04"}} UTC</td>
+          <td><time datetime="{{instant .ObservedAt}}" data-local-time data-local-format="date-time" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ObservedAt $.Location "02/01/2006 15:04"}}</time></td>
           <td>{{printf "%.0f" .Score}}</td>
           <td>{{.Summary}}</td>
         </tr>

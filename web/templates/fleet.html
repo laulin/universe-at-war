@@ -20,7 +20,7 @@
           <th scope="row">{{.Attacker}}</th>
           <td>{{.Origin}} → {{.Target}}</td>
           <td>{{.Composition}}</td>
-          <td>{{.ArrivesAt.Format "15:04:05"}} (<time datetime="{{.ArrivesISO}}" data-countdown data-done="impact" data-refresh="page" aria-live="off">{{.ArrivesAt.Format "15:04:05"}}</time>)</td>
+          <td><time datetime="{{instant .ArrivesAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ArrivesAt $.Location "15:04:05"}}</time> (<time datetime="{{.ArrivesISO}}" data-countdown data-done="impact" data-refresh="page" aria-live="off">{{localTime .ArrivesAt $.Location "15:04:05"}}</time>)</td>
         </tr>
       {{end}}
       </tbody>
@@ -55,8 +55,8 @@
           <td>{{.State}}</td>
           <td>{{.Origin}} → {{.Target}}</td>
           <td>{{.Composition}}</td>
-          <td>{{.ArrivesAt.Format "15:04:05"}} (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" data-refresh="page" aria-live="off">{{.ArrivesAt.Format "15:04:05"}}</time>)</td>
-          <td>{{if .ReturnsAt}}{{.ReturnsAt.Format "15:04:05"}} (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{.ReturnsAt.Format "15:04:05"}}</time>){{else}}—{{end}}</td>
+          <td><time datetime="{{instant .ArrivesAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ArrivesAt $.Location "15:04:05"}}</time> (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" data-refresh="page" aria-live="off">{{localTime .ArrivesAt $.Location "15:04:05"}}</time>)</td>
+          <td>{{if .ReturnsAt}}<time datetime="{{instant .ReturnsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ReturnsAt $.Location "15:04:05"}}</time> (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{localTime .ReturnsAt $.Location "15:04:05"}}</time>){{else}}—{{end}}</td>
           <td>
             {{if .Recallable}}
             <form method="post" action="/fleets/{{.ID}}/recall">

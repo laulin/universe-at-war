@@ -22,7 +22,7 @@
         <tr>
           <th scope="row"><a href="/reports/{{.ID}}">{{.KindName}}</a>{{if .Hostile}} <span class="hostile">⚠ hostile</span>{{end}}</th>
           <td>{{.Coordinate}}</td>
-          <td>{{.OccurredAt.Format "2006-01-02 15:04:05"}} UTC ({{.Freshness}})</td>
+          <td><time datetime="{{instant .OccurredAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .OccurredAt $.Location "02/01/2006 15:04:05"}}</time> ({{.Freshness}})</td>
           <td>{{if .Read}}lu{{else}}non lu{{end}}</td>
           <td>
             {{if not .Read}}

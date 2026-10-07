@@ -9,12 +9,12 @@
       <dt>Vitesse</dt><dd>{{.Form.Speed}} % — {{.Plan.Speed}}</dd>
       <dt>Carburant</dt><dd>{{.Plan.Fuel}} deutérium</dd>
       <dt>Capacité restante</dt><dd>{{figure .Plan.Capacity}}</dd>
-      <dt>Arrivée prévue</dt><dd>{{.Plan.ArrivesAt.Format "2006-01-02 15:04:05"}} UTC</dd>
-      <dt>Retour prévu</dt><dd>{{if .Plan.ReturnsAt}}{{.Plan.ReturnsAt.Format "2006-01-02 15:04:05"}} UTC{{else}}aucun{{end}}</dd>
+      <dt>Arrivée prévue</dt><dd><time datetime="{{instant .Plan.ArrivesAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Plan.ArrivesAt $.Location "02/01/2006 15:04:05"}}</time></dd>
+      <dt>Retour prévu</dt><dd>{{if .Plan.ReturnsAt}}<time datetime="{{instant .Plan.ReturnsAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .Plan.ReturnsAt $.Location "02/01/2006 15:04:05"}}</time>{{else}}aucun{{end}}</dd>
     </dl>
     {{with .Simulation}}
     <section class="battle-simulation" aria-labelledby="simulation-title">
-      <p class="eyebrow">Estimation fondée sur le rapport du {{.OccurredAt.Format "2006-01-02 15:04:05"}} UTC</p>
+      <p class="eyebrow">Estimation fondée sur le rapport du <time datetime="{{instant .OccurredAt}}" data-local-time data-local-format="date-time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .OccurredAt $.Location "02/01/2006 15:04:05"}}</time></p>
       <h3 id="simulation-title">Simulation de bataille</h3>
       {{if .Available}}
       <p class="simulation-outcomes">

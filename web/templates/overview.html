@@ -16,7 +16,7 @@
           <td class="res-metal">{{figure .Stock.Metal}}</td>
           <td class="res-crystal">{{figure .Stock.Crystal}}</td>
           <td class="res-deuterium">{{figure .Stock.Deuterium}}</td>
-          <td>{{with .Construction}}{{.Name}} {{.Detail}} — {{.EndsAt}} UTC{{if .Waiting}} <span class="faint">+{{.Waiting}} en file</span>{{end}}{{else}}aucune{{end}}</td>
+          <td>{{with .Construction}}{{.Name}} {{.Detail}} — <time datetime="{{instant .EndsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .EndsAt $.Location "15:04:05"}}</time>{{if .Waiting}} <span class="faint">+{{.Waiting}} en file</span>{{end}}{{else}}aucune{{end}}</td>
         </tr>
       {{end}}
       </tbody>

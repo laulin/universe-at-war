@@ -6,8 +6,8 @@
     <dl class="summary">
       <dt>Niveau</dt><dd>{{.Level}}</dd>
       <dt>État</dt>
-      <dd>{{if .Ready}}prête{{else}}en recharge jusqu'à {{.ReadyAt.Format "15:04:05"}} UTC
-        (<time datetime="{{.ReadyISO}}" data-countdown data-done="prête" data-refresh="page" aria-live="off">{{.ReadyAt.Format "15:04:05"}}</time>){{end}}</dd>
+      <dd>{{if .Ready}}prête{{else}}en recharge jusqu'à <time datetime="{{instant .ReadyAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ReadyAt $.Location "15:04:05"}}</time>
+        (<time datetime="{{.ReadyISO}}" data-countdown data-done="prête" data-refresh="page" aria-live="off">{{localTime .ReadyAt $.Location "15:04:05"}}</time>){{end}}</dd>
     </dl>
     {{if not .Level}}<p class="muted">Construisez une porte de saut sur cette lune.</p>{{end}}
   </section>

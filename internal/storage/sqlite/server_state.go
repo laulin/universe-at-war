@@ -31,3 +31,16 @@ func (r *ServerStateRepository) Current(ctx context.Context) (server.State, erro
 	}
 	return state, nil
 }
+
+// Timezone reads the display fallback from the active immutable ruleset.
+func (r *ServerStateRepository) Timezone(ctx context.Context) (string, error) {
+	var timezone string
+	if err := r.read.QueryRowContext(ctx, `
+		SELECT json_extract(document, '$.identity.timezone')
+		FROM ruleset_versions WHERE status = 'active'
+		ORDER BY version DESC LIMIT 1
+	`).Scan(&timezone); err != nil {
+		return "", fmt.Errorf("server state repository: read active timezone: %w", err)
+	}
+	return timezone, nil
+}
