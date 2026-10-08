@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	appgalaxy "universeatwar/internal/app/galaxy"
 	"universeatwar/internal/domain/debris"
@@ -69,7 +70,7 @@ func (r *GalaxyRepository) System(ctx context.Context, accountID int64, galaxy, 
 	}
 
 	fields, err := r.read.QueryContext(ctx,
-		"SELECT position, metal, crystal FROM debris_fields WHERE galaxy = ? AND system = ?", galaxy, system)
+		"SELECT position, metal, crystal, updated_at FROM debris_fields WHERE galaxy = ? AND system = ?", galaxy, system)
 	if err != nil {
 		return appgalaxy.View{}, fmt.Errorf("galaxy repository: read debris: %w", err)
 	}
@@ -77,7 +78,8 @@ func (r *GalaxyRepository) System(ctx context.Context, accountID int64, galaxy, 
 	for fields.Next() {
 		var position int
 		var field debris.Field
-		if err := fields.Scan(&position, &field.Metal, &field.Crystal); err != nil {
+		var updatedText string
+		if err := fields.Scan(&position, &field.Metal, &field.Crystal, &updatedText); err != nil {
 			return appgalaxy.View{}, fmt.Errorf("galaxy repository: scan debris: %w", err)
 		}
 		if position < 1 || position > limits.Positions {
@@ -85,6 +87,10 @@ func (r *GalaxyRepository) System(ctx context.Context, accountID int64, galaxy, 
 		}
 		wreckage := field
 		rows[position-1].Debris = &wreckage
+		rows[position-1].DebrisUpdatedAt, err = time.Parse(time.RFC3339Nano, updatedText)
+		if err != nil {
+			return appgalaxy.View{}, fmt.Errorf("galaxy repository: parse debris date: %w", err)
+		}
 	}
 	if err := fields.Err(); err != nil {
 		return appgalaxy.View{}, fmt.Errorf("galaxy repository: iterate debris: %w", err)

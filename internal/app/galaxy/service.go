@@ -5,6 +5,7 @@ package galaxy
 import (
 	"context"
 	"errors"
+	"time"
 
 	appauth "universeatwar/internal/app/authentication"
 	"universeatwar/internal/domain/debris"
@@ -25,6 +26,11 @@ type Row struct {
 	OwnerName     string
 	Own           bool
 	Debris        *debris.Field
+	// DebrisUpdatedAt is the last instant wreckage was added to or removed
+	// from this public field. The map does not render it, but observers that
+	// automate their own visits can use it without gaining access to private
+	// combat state.
+	DebrisUpdatedAt time.Time
 }
 
 // View is one system of the map.

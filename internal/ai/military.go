@@ -41,6 +41,10 @@ type Fleet interface {
 	Launch(context.Context, appauth.Principal, int64, appfleet.LaunchRequest, string) (appfleet.Fleet, error)
 }
 
+// publicDebrisGrace is deliberately real server time. Universe speed must not
+// turn artificial players into permanent galaxy-page watchers.
+const publicDebrisGrace = 20 * time.Minute
+
 // campaign runs the operational layer: look, then strike, or put the fleet out
 // of reach before the night.
 func (b *Brain) campaign(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
@@ -350,12 +354,48 @@ func (b *Brain) intelOf(payload report.EspionagePayload, summary appreports.Summ
 			Deuterium: int64(float64(payload.Resources.Deuterium) * ratio),
 		}
 	}
+	intel.Debris = b.expectedDebris(payload, home)
 	intel.Defence = domainai.Strength(inventoryOf(payload.Fleet), b.Catalogues.Units) +
 		domainai.Strength(inventoryOf(payload.Defenses), b.Catalogues.Units)
 	if distance, err := domainfleet.Distance(home.Coordinate, summary.Coordinate, home.Rules.Topology); err == nil {
 		intel.Distance = distance
 	}
 	return intel
+}
+
+// expectedDebris prices only units revealed by the report, at the configured
+// production cost and debris ratios. It deliberately assumes every revealed
+// unit could be lost: combat, not the planner, decides the actual wreckage.
+func (b *Brain) expectedDebris(payload report.EspionagePayload, home appeconomy.Planet) domaineconomy.Resources {
+	ships := b.wreckageValue(inventoryOf(payload.Fleet), home, home.Rules.Combat.ShipsToDebris)
+	defenses := b.wreckageValue(inventoryOf(payload.Defenses), home, home.Rules.Combat.DefensesToDebris)
+	return ships.Plus(defenses)
+}
+
+func (b *Brain) wreckageValue(inventory map[unit.ID]int64, home appeconomy.Planet,
+	ratio float64) domaineconomy.Resources {
+	if ratio <= 0 {
+		return domaineconomy.Resources{}
+	}
+	var metal, crystal int64
+	for id, quantity := range inventory {
+		if quantity <= 0 {
+			continue
+		}
+		cost, err := b.Catalogues.Units.UnitCost(id, home.Rules)
+		if err != nil {
+			continue
+		}
+		total, err := unit.TotalCost(cost, quantity)
+		if err != nil {
+			continue
+		}
+		metal += total.Metal
+		crystal += total.Crystal
+	}
+	return domaineconomy.Resources{
+		Metal: int64(float64(metal) * ratio), Crystal: int64(float64(crystal) * ratio),
+	}
 }
 
 // spy sends probes at the most promising body it cannot yet judge, or at a
@@ -444,8 +484,9 @@ func scoutingCoverage(observations []observation, now time.Time, recent time.Dur
 	return covered
 }
 
-// recycle lifts a debris field of the home system. Fields are public, so this
-// needs no report: an artificial player sees them exactly as anybody does.
+// recycle visits the public map like a human would. A newly changed field is
+// left alone for a real-time grace period, and a fleet already flying there
+// reserves it so one artificial player never races itself.
 func (b *Brain) recycle(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
 	home appeconomy.Planet, overview appfleet.Overview) (domainai.Decision, bool) {
 	if b.Galaxy == nil || overview.Stationed[unit.Recycler] <= 0 {
@@ -455,10 +496,22 @@ func (b *Brain) recycle(ctx context.Context, principal appauth.Principal, profil
 	if err != nil {
 		return domainai.Decision{}, false
 	}
+	reserved := make(map[universe.Coordinate]bool)
+	for _, fleet := range overview.Fleets {
+		if fleet.Mission == domainfleet.MissionRecycle && fleet.State == domainfleet.Outbound {
+			reserved[fleet.Target] = true
+		}
+	}
+	now := b.Clock.Now().UTC()
 	var field domaineconomy.Resources
 	var at universe.Coordinate
 	for _, row := range view.Rows {
 		if row.Debris == nil {
+			continue
+		}
+		candidateAt := universe.Coordinate{Galaxy: view.Galaxy, System: view.System, Position: row.Position}
+		age := now.Sub(row.DebrisUpdatedAt)
+		if row.DebrisUpdatedAt.IsZero() || age < publicDebrisGrace || reserved[candidateAt] {
 			continue
 		}
 		candidate := row.Debris.Resources()
@@ -466,7 +519,7 @@ func (b *Brain) recycle(ctx context.Context, principal appauth.Principal, profil
 			continue
 		}
 		field = candidate
-		at = universe.Coordinate{Galaxy: view.Galaxy, System: view.System, Position: row.Position}
+		at = candidateAt
 	}
 	composition, ok := domainai.ComposeRecycling(overview.Stationed, field, home.Rules.Combat.RecyclerCapacity)
 	if !ok {
@@ -483,7 +536,7 @@ func (b *Brain) recycle(ctx context.Context, principal appauth.Principal, profil
 	coordinate := at
 	return domainai.Decision{
 		Layer: domainai.Tactical, Action: "recycle " + coordinate.String(), Outcome: domainai.Done,
-		Reason: "a debris field anybody can see", BodyID: home.ID, Target: &coordinate,
+		Reason: "a public debris field remained available after the observation delay", BodyID: home.ID, Target: &coordinate,
 	}, true
 }
 
@@ -558,16 +611,82 @@ func (b *Brain) raid(ctx context.Context, principal appauth.Principal, profile d
 		Target: target.Coordinate, TargetKind: domainfleet.TargetPlanet, Mission: domainfleet.MissionAttack,
 		Composition: domainfleet.Composition(composition), Percent: 100,
 	}
+	salvage, planned := b.planSalvage(ctx, principal, profile, home, overview, target, request)
 	key := commandKey(profile, "raid", target.Coordinate.String())
-	if _, err := b.Fleet.Launch(ctx, principal, home.ID, request, key); err != nil {
+	attack, err := b.Fleet.Launch(ctx, principal, home.ID, request, key)
+	if err != nil {
 		return failure(domainai.Tactical, "raid "+target.Coordinate.String(), err)
+	}
+	reason := raidReason(sizing, "the report is fresh, complete and worth the trip")
+	if planned {
+		salvageKey := commandKey(profile, "planned-recycle", fmt.Sprintf("%d", attack.ID))
+		if _, err := b.Fleet.Launch(ctx, principal, home.ID, salvage, salvageKey); err == nil {
+			reason = "the target is worth attacking for its wreckage; recyclers were timed behind the battle"
+		} else {
+			reason = "the attack left, but its planned recycling convoy could not be launched"
+		}
 	}
 	coordinate := target.Coordinate
 	return domainai.Decision{
 		Layer: domainai.Tactical, Action: "raid " + coordinate.String(), Outcome: domainai.Done,
-		Reason: raidReason(sizing, "the report is fresh, complete and worth the trip"), Score: target.Score,
+		Reason: reason, Score: target.Score,
 		BodyID: home.ID, Target: &coordinate,
 	}
+}
+
+// planSalvage recognizes an actual recycling attack rather than relabelling
+// every raid after the fact. The expected wreckage must outweigh the plunder,
+// no older public field may already be present, and the convoy must be able to
+// arrive no earlier than combat. Its hold never exceeds the wreckage estimate.
+func (b *Brain) planSalvage(ctx context.Context, principal appauth.Principal, profile domainai.Profile,
+	home appeconomy.Planet, overview appfleet.Overview, target domainai.Target,
+	attack appfleet.LaunchRequest) (appfleet.LaunchRequest, bool) {
+	capacity := home.Rules.Combat.RecyclerCapacity
+	debrisTotal := target.Debris.Metal + target.Debris.Crystal
+	plunderTotal := target.Plunder.Metal + target.Plunder.Crystal + target.Plunder.Deuterium
+	available := overview.Stationed[unit.Recycler] - attack.Composition[unit.Recycler]
+	if !profile.Behaviour().RecycleEnabled || b.Galaxy == nil || capacity <= 0 ||
+		debrisTotal < capacity || debrisTotal < plunderTotal || available <= 0 ||
+		overview.Slots-overview.Used < 2 {
+		return appfleet.LaunchRequest{}, false
+	}
+	for _, fleet := range overview.Fleets {
+		if fleet.Mission == domainfleet.MissionRecycle && fleet.State == domainfleet.Outbound &&
+			fleet.Target == target.Coordinate {
+			return appfleet.LaunchRequest{}, false
+		}
+	}
+	view, err := b.Galaxy.System(ctx, principal, target.Coordinate.Galaxy, target.Coordinate.System)
+	if err != nil || target.Coordinate.Position < 1 || target.Coordinate.Position > len(view.Rows) ||
+		view.Rows[target.Coordinate.Position-1].Debris != nil {
+		return appfleet.LaunchRequest{}, false
+	}
+	wanted := debrisTotal / capacity
+	if wanted > available {
+		wanted = available
+	}
+	if wanted <= 0 {
+		return appfleet.LaunchRequest{}, false
+	}
+	attackPlan, err := b.Fleet.Preview(ctx, principal, home.ID, attack)
+	if err != nil {
+		return appfleet.LaunchRequest{}, false
+	}
+	for _, percent := range []int{100, 90, 80, 70, 60, 50, 40, 30, 20, 10} {
+		request := appfleet.LaunchRequest{
+			Target: target.Coordinate, TargetKind: domainfleet.TargetDebris, Mission: domainfleet.MissionRecycle,
+			Composition: domainfleet.Composition{unit.Recycler: wanted}, Percent: percent,
+		}
+		plan, err := b.Fleet.Preview(ctx, principal, home.ID, request)
+		if err != nil || plan.ArrivesAt.Before(attackPlan.ArrivesAt) {
+			continue
+		}
+		if !overview.Planet.Stock.Covers(attackPlan.Debit.Plus(plan.Debit)) {
+			continue
+		}
+		return request, true
+	}
+	return appfleet.LaunchRequest{}, false
 }
 
 func raidSizing(profile domainai.Profile, at universe.Coordinate) float64 {

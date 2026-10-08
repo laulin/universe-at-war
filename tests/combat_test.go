@@ -246,6 +246,7 @@ func TestEspionageAndAttackRefuseTheirOwnPlanets(t *testing.T) {
 	colony := insertColony(t, ctx, database, 1, "Colonie", 1, 1, 5)
 	setUnits(t, ctx, database, home.ID, "espionage_probe", 3)
 	setUnits(t, ctx, database, home.ID, "light_fighter", 3)
+	setUnits(t, ctx, database, home.ID, "recycler", 1)
 	setResources(t, ctx, database, home.ID, 5000, 5000, 5000)
 
 	own := coordinateOf(t, 1, 1, 5)
@@ -261,13 +262,15 @@ func TestEspionageAndAttackRefuseTheirOwnPlanets(t *testing.T) {
 	}, "self-attack"); !errors.Is(err, domainfleet.ErrInvalidTarget) {
 		t.Fatalf("attacking one's own colony error = %v", err)
 	}
+	// Recycling is the intentional exception: a player may time recyclers
+	// behind a future battle even while the position is still empty.
 	if _, err := universe.Fleet.Launch(ctx, alice, home.ID, appfleet.LaunchRequest{
 		Target: own, TargetKind: domainfleet.TargetDebris, Mission: domainfleet.MissionRecycle,
 		Composition: domainfleet.Composition{unit.Recycler: 1}, Percent: 100,
-	}, "empty-field"); err == nil {
-		t.Fatal("recycling an empty position was accepted")
+	}, "empty-field"); err != nil {
+		t.Fatalf("prelaunching recyclers to an empty position error = %v", err)
 	}
-	assertSingleValue(t, database, "SELECT COUNT(*) FROM fleets", 0)
+	assertSingleValue(t, database, "SELECT COUNT(*) FROM fleets", 1)
 	_ = colony
 }
 

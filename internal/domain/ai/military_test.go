@@ -32,6 +32,20 @@ func TestScoringWeighsPlunderFreshnessAndDefence(t *testing.T) {
 	}
 }
 
+func TestScoringCanRecognizeWreckageAsThePrize(t *testing.T) {
+	now := time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC)
+	withoutWreckage := ScoreTarget(Intel{
+		ReportID: 1, ObservedAt: now, Defence: 5000, Complete: true,
+	}, now, time.Hour, Raider.Preferences())
+	withWreckage := ScoreTarget(Intel{
+		ReportID: 1, ObservedAt: now, Defence: 5000, Complete: true,
+		Debris: economy.Resources{Metal: 30000, Crystal: 10000},
+	}, now, time.Hour, Raider.Preferences())
+	if withWreckage.Score <= withoutWreckage.Score {
+		t.Fatalf("wreckage did not affect the attack motive: %v then %v", withoutWreckage.Score, withWreckage.Score)
+	}
+}
+
 func TestFleetsaveCargoRespectsThePlannedHoldAndLeavesDeuterium(t *testing.T) {
 	stock := economy.Resources{Metal: 800, Crystal: 600, Deuterium: 1000}
 	cargo := FleetsaveCargoUpTo(stock, 1200)

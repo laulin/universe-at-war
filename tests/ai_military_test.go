@@ -463,9 +463,10 @@ func think(t *testing.T, ctx context.Context, universeWorld *world) {
 	}
 }
 
-// TestArtificialPlayerLiftsDebrisItCanSee proves an artificial player collects
-// what the map shows to everybody, with just enough recyclers for the field.
-func TestArtificialPlayerLiftsDebrisItCanSee(t *testing.T) {
+// TestArtificialPlayerLeavesFreshPublicDebrisToHumans proves map visibility is
+// not treated as permanent observation. The AI waits in real server time,
+// then sends just enough recyclers and does not duplicate the mission.
+func TestArtificialPlayerLeavesFreshPublicDebrisToHumans(t *testing.T) {
 	ctx := context.Background()
 	database, universeWorld, admin := aiUniverse(t)
 	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
@@ -492,6 +493,16 @@ func TestArtificialPlayerLiftsDebrisItCanSee(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A human gets a genuine window in which to notice and collect the field.
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE mission = 'recycle' AND owner_player_id = 2", 0)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 19, 59, 0, time.UTC))
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE mission = 'recycle' AND owner_player_id = 2", 0)
+
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 20, 0, 0, time.UTC))
 	think(t, ctx, universeWorld)
 	assertSingleValue(t, database,
 		"SELECT COUNT(*) FROM fleets WHERE mission = 'recycle' AND owner_player_id = 2", 1)
@@ -501,4 +512,100 @@ func TestArtificialPlayerLiftsDebrisItCanSee(t *testing.T) {
 		WHERE f.mission = 'recycle' AND s.unit_id = 'recycler'`, 3)
 	assertSingleValue(t, database,
 		"SELECT COUNT(*) > 0 FROM ai_decisions WHERE action LIKE 'recycle %' AND outcome = 'done'", 1)
+
+	// A second reflection sees its own outbound convoy and does not reserve the
+	// same field twice.
+	think(t, ctx, universeWorld)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE mission = 'recycle' AND owner_player_id = 2", 1)
+}
+
+// TestArtificialPlayerPrelaunchesRecyclersForASalvageAttack proves the grace
+// period has one narrow exception: the report made wreckage the reason for the
+// attack, and the recycler convoy was committed before combat created it.
+func TestArtificialPlayerPrelaunchesRecyclersForASalvageAttack(t *testing.T) {
+	ctx := context.Background()
+	database, universeWorld, admin := aiUniverse(t)
+	setClock(t, universeWorld.Clock, time.Date(2042, time.September, 10, 12, 0, 0, 0, time.UTC))
+
+	profile, err := universeWorld.AI.Create(ctx, admin, appai.Request{
+		Name: "Ferrailleur offensif", Archetype: domainai.Fleeter,
+		Window: domainai.Window{Start: 0, End: 0}, Interval: 5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setUnits(t, ctx, database, 2, "espionage_probe", 5)
+	setUnits(t, ctx, database, 2, "cruiser", 50)
+	setUnits(t, ctx, database, 2, "recycler", 10)
+	setResearch(t, ctx, database, profile.PlayerID, "espionage_technology", 4)
+	setResearch(t, ctx, database, profile.PlayerID, "computer_technology", 4)
+	setResources(t, ctx, database, 2, 300000, 300000, 300000)
+	setUnits(t, ctx, database, 1, "light_fighter", 40)
+	setResources(t, ctx, database, 1, 0, 0, 0)
+
+	think(t, ctx, universeWorld)
+	var spyReturnText string
+	if err := database.Read().QueryRowContext(ctx, `
+		SELECT returns_at FROM fleets
+		WHERE owner_player_id = ? AND mission = 'espionage' ORDER BY id DESC LIMIT 1
+	`, profile.PlayerID).Scan(&spyReturnText); err != nil {
+		t.Fatal(err)
+	}
+	spyReturn, err := time.Parse(time.RFC3339Nano, spyReturnText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setClock(t, universeWorld.Clock, spyReturn)
+	if _, err := universeWorld.Events.CompleteDue(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	think(t, ctx, universeWorld)
+
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'attack'", 1, profile.PlayerID)
+	assertSingleValue(t, database,
+		"SELECT COUNT(*) FROM fleets WHERE owner_player_id = ? AND mission = 'recycle'", 1, profile.PlayerID)
+	assertSingleValue(t, database, `
+		SELECT COUNT(*) FROM fleets recycler JOIN fleets attack
+		  ON recycler.owner_player_id = attack.owner_player_id
+		 AND recycler.target_galaxy = attack.target_galaxy
+		 AND recycler.target_system = attack.target_system
+		 AND recycler.target_position = attack.target_position
+		WHERE recycler.mission = 'recycle' AND attack.mission = 'attack'
+		  AND recycler.arrives_at >= attack.arrives_at
+	`, 1)
+	// Forty fighters promise 48,000 resources at the default debris ratio. The
+	// planned hold is floored to two recyclers (40,000), never rounded above the
+	// wreckage estimate so an attack cannot be a pretext to drain an older field.
+	assertSingleValue(t, database, `
+		SELECT quantity FROM fleet_ships s JOIN fleets f ON f.id = s.fleet_id
+		WHERE f.owner_player_id = ? AND f.mission = 'recycle' AND s.unit_id = 'recycler'
+	`, 2, profile.PlayerID)
+	assertSingleValue(t, database, `
+		SELECT COUNT(*) > 0 FROM ai_decisions
+		WHERE player_id = ? AND action LIKE 'raid %'
+		  AND reason LIKE '%recyclers were timed behind the battle%'
+	`, 1, profile.PlayerID)
+
+	var recyclerArrivalText string
+	if err := database.Read().QueryRowContext(ctx, `
+		SELECT arrives_at FROM fleets
+		WHERE owner_player_id = ? AND mission = 'recycle' ORDER BY id DESC LIMIT 1
+	`, profile.PlayerID).Scan(&recyclerArrivalText); err != nil {
+		t.Fatal(err)
+	}
+	recyclerArrival, err := time.Parse(time.RFC3339Nano, recyclerArrivalText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setClock(t, universeWorld.Clock, recyclerArrival)
+	if _, err := universeWorld.Events.CompleteDue(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	assertSingleValue(t, database, `
+		SELECT COUNT(*) FROM reports
+		WHERE recipient_player_id = ? AND kind = 'recycling'
+		  AND json_extract(payload, '$.collected.Metal') + json_extract(payload, '$.collected.Crystal') > 0
+	`, 1, profile.PlayerID)
 }

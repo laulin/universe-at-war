@@ -310,13 +310,9 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
 		}
 	case domainfleet.TargetDebris:
-		field, fieldErr := loadDebris(ctx, tx, request.Target)
-		if fieldErr != nil {
-			return domainfleet.Plan{}, appeconomy.Planet{}, 0, fieldErr
-		}
-		if field.Empty() {
-			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
-		}
+		// A recycler may be timed behind an attack, before its wreckage exists.
+		// Arrival remains authoritative: an empty position simply yields an
+		// empty recycling report and sends the fleet home.
 	}
 	active, err := activeFleetCount(ctx, tx, playerID)
 	if err != nil {

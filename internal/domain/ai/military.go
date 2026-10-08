@@ -20,6 +20,9 @@ type Intel struct {
 	ObservedAt time.Time
 	// Plunder is what the report says could be carried away.
 	Plunder economy.Resources
+	// Debris is the upper-bound wreckage value of the ships and defenses the
+	// report revealed. It is an estimate, not knowledge of a future battle.
+	Debris economy.Resources
 	// Defence is the strength of the fleet and the turrets that were seen.
 	Defence int64
 	// Complete says whether the report revealed both the fleet and the
@@ -74,7 +77,8 @@ func Strength(units map[unit.ID]int64, catalogue unit.Catalogue) int64 {
 func ScoreTarget(intel Intel, now time.Time, recent time.Duration, preferences Preferences) Target {
 	freshness := Fresh(intel.ObservedAt, now, recent)
 	plunder := intel.Plunder.Metal + intel.Plunder.Crystal + intel.Plunder.Deuterium
-	score := float64(plunder)*freshness*preferences.Greed -
+	debris := intel.Debris.Metal + intel.Debris.Crystal
+	score := float64(plunder+debris)*freshness*preferences.Greed -
 		float64(intel.Defence)*preferences.Caution -
 		float64(intel.Distance)
 	return Target{Intel: intel, Freshness: freshness, Score: score}
