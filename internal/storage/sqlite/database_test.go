@@ -209,6 +209,65 @@ func TestFusionReactorMigrationPreservesExistingDeuteriumRemainders(t *testing.T
 	}
 }
 
+func TestLateSettlementMigrationRetriesOnlyTheEventsItPoisoned(t *testing.T) {
+	ctx := context.Background()
+	database, err := Open(ctx, filepath.Join(t.TempDir(), "late-settlement-upgrade.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	available, err := loadMigrations(migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Write().ExecContext(ctx, migrationTable); err != nil {
+		t.Fatal(err)
+	}
+	var retryMigration migration
+	for _, candidate := range available {
+		if candidate.version == 24 {
+			retryMigration = candidate
+			break
+		}
+		if err := applyMigration(ctx, database.Write(), candidate); err != nil {
+			t.Fatalf("apply migration %d: %v", candidate.version, err)
+		}
+	}
+	if retryMigration.version == 0 {
+		t.Fatal("late settlement migration is missing")
+	}
+	for _, event := range []struct {
+		key   string
+		error string
+	}{
+		{"late", "economy: production time cannot move backwards"},
+		{"other", "economy repository: building queue target is stale"},
+	} {
+		if _, err := database.Write().ExecContext(ctx, `
+			INSERT INTO scheduled_events(event_type, due_at, entity_type, entity_id, idempotency_key, attempts, last_error, created_at)
+			VALUES ('building_completed', '2042-09-10T11:12:13Z', 'building_queue', '1', ?, 5, ?, '2042-09-10T11:12:13Z')
+		`, event.key, event.error); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := applyMigration(ctx, database.Write(), retryMigration); err != nil {
+		t.Fatalf("apply late settlement migration: %v", err)
+	}
+	for key, want := range map[string]int{"late": 0, "other": 5} {
+		var attempts int
+		if err := database.Read().QueryRowContext(ctx,
+			"SELECT attempts FROM scheduled_events WHERE idempotency_key = ?", key).Scan(&attempts); err != nil {
+			t.Fatal(err)
+		}
+		if attempts != want {
+			t.Fatalf("attempts of %q = %d, want %d", key, attempts, want)
+		}
+	}
+	if err := database.Migrate(ctx); err != nil {
+		t.Fatalf("idempotent Migrate() after late settlement upgrade: %v", err)
+	}
+}
+
 func TestExistingWorldLoadsAllianceDepotAtLevelZeroWithoutSchemaChange(t *testing.T) {
 	ctx := context.Background()
 	database, err := Open(ctx, filepath.Join(t.TempDir(), "alliance-depot-upgrade.db"))
