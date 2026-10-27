@@ -29,17 +29,19 @@ const (
 	CombatDefense     Kind = "combat_defense"
 	Recycling         Kind = "recycling"
 	Expedition        Kind = "expedition"
+	MissileAttack     Kind = "missile_attack"
+	MissileDefense    Kind = "missile_defense"
 )
 
 // Hostile reports whether a report tells its recipient they are under threat.
 func (k Kind) Hostile() bool {
-	return k == CombatDefense || k == EspionageDetected
+	return k == CombatDefense || k == EspionageDetected || k == MissileDefense
 }
 
 // Valid reports whether the kind is one this build knows.
 func (k Kind) Valid() bool {
 	switch k {
-	case Espionage, EspionageDetected, CombatAttack, CombatDefense, Recycling, Expedition:
+	case Espionage, EspionageDetected, CombatAttack, CombatDefense, Recycling, Expedition, MissileAttack, MissileDefense:
 		return true
 	default:
 		return false
@@ -158,6 +160,20 @@ type ExpeditionPayload struct {
 	Story     string              `json:"story"`
 }
 
+// MissilePayload records only the outcome of a strike, without resources,
+// ships, research levels, or the attacker's targeting choice.
+type MissilePayload struct {
+	AttackerName string              `json:"attacker_name"`
+	Origin       universe.Coordinate `json:"origin"`
+	Target       universe.Coordinate `json:"target"`
+	TargetKind   string              `json:"target_kind"`
+	Sent         int64               `json:"sent"`
+	Intercepted  int64               `json:"intercepted"`
+	Losses       map[string]int64    `json:"losses,omitempty"`
+	Remaining    map[string]int64    `json:"remaining,omitempty"`
+	Aborted      bool                `json:"aborted,omitempty"`
+}
+
 // Marshal encodes a payload with the version this build writes.
 func Marshal(kind Kind, payload any) (int, []byte, error) {
 	if !kind.Valid() {
@@ -189,6 +205,8 @@ func Unmarshal(kind Kind, version int, document []byte) (any, error) {
 		return decode[RecyclingPayload](document)
 	case Expedition:
 		return decode[ExpeditionPayload](document)
+	case MissileAttack, MissileDefense:
+		return decode[MissilePayload](document)
 	default:
 		return nil, fmt.Errorf("report: unknown kind %q", kind)
 	}
@@ -217,6 +235,8 @@ func matches(kind Kind, payload any) error {
 		valid = kind == Recycling
 	case ExpeditionPayload:
 		valid = kind == Expedition
+	case MissilePayload:
+		valid = kind == MissileAttack || kind == MissileDefense
 	}
 	if !valid {
 		return fmt.Errorf("report: payload does not match kind %q", kind)

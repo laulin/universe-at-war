@@ -35,6 +35,7 @@ valeur documentée ; une valeur plus faible est traitée en premier.
 | Type d'événement | Priorité | Jalon |
 | --- | ---: | --- |
 | `combat_resolved` (arrivée d'une attaque) | 10 | 5 |
+| `missile_impact` (impact d'une salve indépendante des flottes) | 10 | missiles |
 | `acs_resolved` (arrivée d'une opération groupée) | 10 | 7 |
 | `espionage_resolved` (arrivée d'un espionnage) | 20 | 5 |
 | `fleet_arrived` | 30 | 4 |

@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"time"
 
 	appactivity "universeatwar/internal/app/activity"
+	"universeatwar/internal/domain/fleet"
+	"universeatwar/internal/domain/unit"
 )
 
 // ActivityRepository reads the queues and movements that feed the permanent
@@ -71,6 +74,20 @@ func (r *ActivityRepository) Snapshot(ctx context.Context, accountID int64) (app
 	if err != nil {
 		return appactivity.Snapshot{}, err
 	}
+	missiles, err := incomingMissiles(ctx, transaction, playerID)
+	if err != nil {
+		return appactivity.Snapshot{}, err
+	}
+	incoming = append(incoming, missiles...)
+	sort.SliceStable(incoming, func(i, j int) bool {
+		if !incoming[i].ArrivesAt.Equal(incoming[j].ArrivesAt) {
+			return incoming[i].ArrivesAt.Before(incoming[j].ArrivesAt)
+		}
+		if incoming[i].Missile != incoming[j].Missile {
+			return !incoming[i].Missile
+		}
+		return incoming[i].FleetID < incoming[j].FleetID
+	})
 	snapshot.Incoming = incoming
 	for _, approach := range incoming {
 		body := snapshot.Bodies[approach.TargetPlanetID]
@@ -138,4 +155,37 @@ func incomingAttacks(ctx context.Context, transaction *sql.Tx, playerID int64) (
 		approaches = append(approaches, item.approach)
 	}
 	return approaches, nil
+}
+
+// incomingMissiles is a warning, not a phalanx sighting or a fleet slot.
+func incomingMissiles(ctx context.Context, tx *sql.Tx, playerID int64) ([]appactivity.Approach, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT s.id, target.id, attacker.display_name,
+        s.origin_galaxy, s.origin_system, s.origin_position, s.target_galaxy, s.target_system, s.target_position,
+        s.arrives_at, s.quantity FROM missile_strikes s
+        JOIN players attacker ON attacker.id = s.owner_player_id JOIN planets target ON target.id = s.target_body_id AND target.created_at = s.target_created_at
+        WHERE target.owner_player_id = ? AND s.owner_player_id <> ? AND s.state = 'outbound'
+        ORDER BY julianday(s.arrives_at), s.id`, playerID, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []appactivity.Approach
+	for rows.Next() {
+		var approach appactivity.Approach
+		var arrival string
+		var count int64
+		if err := rows.Scan(&approach.FleetID, &approach.TargetPlanetID, &approach.AttackerName,
+			&approach.Origin.Galaxy, &approach.Origin.System, &approach.Origin.Position,
+			&approach.Target.Galaxy, &approach.Target.System, &approach.Target.Position, &arrival, &count); err != nil {
+			return nil, err
+		}
+		approach.ArrivesAt, err = time.Parse(time.RFC3339Nano, arrival)
+		if err != nil {
+			return nil, err
+		}
+		approach.Missile = true
+		approach.Composition = fleet.Composition{unit.InterplanetaryMissile: count}
+		result = append(result, approach)
+	}
+	return result, rows.Err()
 }

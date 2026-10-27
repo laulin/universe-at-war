@@ -19,6 +19,7 @@ import (
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appjumpgate "universeatwar/internal/app/jumpgate"
+	appmissile "universeatwar/internal/app/missile"
 	appphalanx "universeatwar/internal/app/phalanx"
 	appranking "universeatwar/internal/app/ranking"
 	appreports "universeatwar/internal/app/reports"
@@ -46,6 +47,7 @@ type world struct {
 	Research         appresearch.Service
 	Shipyard         appshipyard.Service
 	Fleet            appfleet.Service
+	Missiles         appmissile.Service
 	Galaxy           appgalaxy.Service
 	Ranking          appranking.Service
 	Reports          appreports.Service
@@ -69,6 +71,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
 	shipyardRepository := storagesqlite.NewShipyardRepository(database.Write(), catalogues)
 	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
+	missileRepository := storagesqlite.NewMissileRepository(database.Write(), catalogues)
 	acsRepository := storagesqlite.NewACSRepository(database.Write(), catalogues, fleetRepository)
 	aiRepository := storagesqlite.NewAIRepository(database.Write())
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
@@ -76,6 +79,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 	researchRepository.RegisterHandlers(events)
 	shipyardRepository.RegisterHandlers(events)
 	fleetRepository.RegisterHandlers(events)
+	missileRepository.RegisterHandlers(events)
 	acsRepository.RegisterHandlers(events)
 	aiRepository.RegisterHandlers(events)
 	economy := appeconomy.Service{
@@ -145,6 +149,7 @@ func newWorld(t testing.TB, database *storagesqlite.Database, clock *appclock.Fa
 		Research:         research,
 		Shipyard:         shipyard,
 		Fleet:            fleetService,
+		Missiles:         appmissile.Service{Clock: clock, Repository: missileRepository, Completer: events, Seeds: random.NewSeedGenerator(rand.Reader)},
 		Galaxy:           galaxyService,
 		Ranking:          rankingService,
 		Reports:          reportsService,
@@ -265,9 +270,11 @@ func newBenchmarkWorld(b *testing.B, database *storagesqlite.Database, clock *ap
 	catalogues := catalogue.Default()
 	economyRepository := storagesqlite.NewEconomyRepository(database.Write(), catalogues.Buildings)
 	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
+	missileRepository := storagesqlite.NewMissileRepository(database.Write(), catalogues)
 	events := storagesqlite.NewEventProcessor(database.Write(), clock)
 	economyRepository.RegisterHandlers(events)
 	fleetRepository.RegisterHandlers(events)
+	missileRepository.RegisterHandlers(events)
 	return &world{
 		Database: database,
 		Clock:    clock,

@@ -300,6 +300,7 @@
 .galaxy-debris img { width: 1.5rem; height: 1.5rem; }
 .galaxy-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .galaxy-actions .button { min-height: 1.9rem; padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+.galaxy-missile { display: inline-flex; align-items: center; gap: var(--space-1); }
 .galaxy-chat {
   display: inline-grid;
   place-items: center;

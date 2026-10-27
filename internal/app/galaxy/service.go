@@ -22,6 +22,8 @@ type Row struct {
 	Position      int
 	PlanetID      int64
 	PlanetName    string
+	MoonID        int64
+	MoonName      string
 	OwnerPlayerID int64
 	OwnerName     string
 	Own           bool

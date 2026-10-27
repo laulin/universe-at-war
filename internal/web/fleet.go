@@ -13,6 +13,7 @@ import (
 	appbattlesimulation "universeatwar/internal/app/battlesimulation"
 	appeconomy "universeatwar/internal/app/economy"
 	appfleet "universeatwar/internal/app/fleet"
+	appmissile "universeatwar/internal/app/missile"
 	appreports "universeatwar/internal/app/reports"
 	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
@@ -49,11 +50,13 @@ type fleetPageMission struct {
 
 type fleetPageData struct {
 	pageShell
-	Planet   appeconomy.Planet
-	Ships    []fleetPageShip
-	Slots    int
-	Used     int
-	Missions []fleetPageMission
+	Planet         appeconomy.Planet
+	Ships          []fleetPageShip
+	Slots          int
+	Used           int
+	Missions       []fleetPageMission
+	MissileStrikes []appmissile.Strike
+	HasMissiles    bool
 }
 
 type fleetSendPageData struct {
@@ -188,9 +191,18 @@ func (h *Handler) renderFleet(response http.ResponseWriter, request *http.Reques
 		}
 		missions = append(missions, view)
 	}
+	var missileStrikes []appmissile.Strike
+	if h.missiles != nil {
+		missileOverview, err := h.missiles.Overview(request.Context(), principal, planetID)
+		if err != nil {
+			h.progressionFailure(response, request, err)
+			return
+		}
+		missileStrikes = missileOverview.Strikes
+	}
 	h.render(response, status, "fleet", fleetPageData{
 		pageShell: shell, Planet: overview.Planet, Ships: stationedShips(overview.Stationed, h.shipCatalogue()),
-		Slots: overview.Slots, Used: overview.Used, Missions: missions,
+		Slots: overview.Slots, Used: overview.Used, Missions: missions, MissileStrikes: missileStrikes, HasMissiles: h.missiles != nil,
 	})
 }
 

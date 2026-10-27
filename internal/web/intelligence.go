@@ -11,25 +11,34 @@ import (
 	appeconomy "universeatwar/internal/app/economy"
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appreports "universeatwar/internal/app/reports"
+	"universeatwar/internal/domain/building"
 	domaineconomy "universeatwar/internal/domain/economy"
+	"universeatwar/internal/domain/missile"
 	"universeatwar/internal/domain/report"
+	"universeatwar/internal/domain/research"
 	"universeatwar/internal/domain/rules"
+	"universeatwar/internal/domain/unit"
 	"universeatwar/internal/domain/universe"
 )
 
 // galaxyPageRow is one position of the map prepared for display.
 type galaxyPageRow struct {
-	Position      int
-	Coordinate    string
-	ArtSlot       string
-	PlanetName    string
-	OwnerPlayerID int64
-	OwnerName     string
-	Own           bool
-	Occupied      bool
-	DebrisMetal   int64
-	DebrisCrystal int64
-	HasDebris     bool
+	Position        int
+	Coordinate      string
+	ArtSlot         string
+	PlanetName      string
+	MoonName        string
+	MoonID          int64
+	MissileLink     string
+	MoonMissileLink string
+	MissileReason   string
+	OwnerPlayerID   int64
+	OwnerName       string
+	Own             bool
+	Occupied        bool
+	DebrisMetal     int64
+	DebrisCrystal   int64
+	HasDebris       bool
 	// IsOrigin marks the very body the actions would fly from. A fleet may fly
 	// to its own coordinate — the domain measures that trip at five — but
 	// offering to send one there from itself helps nobody.
@@ -75,13 +84,16 @@ type reportPageSummary struct {
 
 type reportPageData struct {
 	pageShell
-	Report     reportPageSummary
-	AttackLink string
-	Espionage  *espionagePageView
-	Detected   *report.DetectedPayload
-	Combat     *report.CombatPayload
-	Recycling  *report.RecyclingPayload
-	Expedition *report.ExpeditionPayload
+	Report           reportPageSummary
+	AttackLink       string
+	Espionage        *espionagePageView
+	Detected         *report.DetectedPayload
+	Combat           *report.CombatPayload
+	Recycling        *report.RecyclingPayload
+	Expedition       *report.ExpeditionPayload
+	Missile          *report.MissilePayload
+	MissileLosses    string
+	MissileRemaining string
 }
 
 // espionagePageSection is one part of an espionage report as the page shows it.
@@ -238,11 +250,14 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 	// planet and the map reads them into the same row.
 	origin := universe.Coordinate{}
 	homePlanet := int64(0)
+	var launchBody *appeconomy.Planet
 	if shell.Current != nil {
 		homePlanet = shell.Current.ID
 		for _, planet := range planets {
 			if planet.ID == homePlanet {
 				origin = planet.Coordinate
+				copy := planet
+				launchBody = &copy
 				break
 			}
 		}
@@ -250,16 +265,40 @@ func (h *Handler) renderGalaxy(response http.ResponseWriter, request *http.Reque
 	rows := make([]galaxyPageRow, 0, len(view.Rows))
 	for _, row := range view.Rows {
 		display := galaxyPageRow{
-			Position:      row.Position,
-			Coordinate:    fmt.Sprintf("%d:%d:%d", view.Galaxy, view.System, row.Position),
-			ArtSlot:       bodyArtSlot(row.Position, false),
-			PlanetName:    row.PlanetName,
+			Position:   row.Position,
+			Coordinate: fmt.Sprintf("%d:%d:%d", view.Galaxy, view.System, row.Position),
+			ArtSlot:    bodyArtSlot(row.Position, false),
+			PlanetName: row.PlanetName,
+			MoonID:     row.MoonID, MoonName: row.MoonName,
 			OwnerPlayerID: row.OwnerPlayerID,
 			OwnerName:     row.OwnerName,
 			Own:           row.Own,
 			Occupied:      row.PlanetID > 0,
 			IsOrigin: origin.Galaxy == view.Galaxy && origin.System == view.System &&
 				origin.Position == row.Position,
+		}
+		if display.Occupied && !display.Own && launchBody != nil && h.missiles != nil {
+			body := *launchBody
+			switch {
+			case !body.Rules.Combat.MissilesEnabled:
+				display.MissileReason = "Missiles désactivés dans cet univers"
+			case body.Kind != building.OnPlanet:
+				display.MissileReason = "Les missiles partent uniquement d’une planète"
+			case body.Levels[building.MissileSilo] < 4:
+				display.MissileReason = "Silo à missiles de niveau 4 requis"
+			case body.Units[unit.InterplanetaryMissile] == 0:
+				display.MissileReason = "Aucun missile interplanétaire disponible"
+			default:
+				target := universe.Coordinate{Galaxy: view.Galaxy, System: view.System, Position: row.Position}
+				if _, err := missile.Flight(body.Coordinate, target, body.Researches[research.ImpulseDrive], body.Rules.Topology, body.Rules.Time.HostileFleetSpeed); err != nil {
+					display.MissileReason = "Cible hors de portée"
+				} else {
+					display.MissileLink = fmt.Sprintf("/planets/%d/missiles?galaxy=%d&system=%d&position=%d&kind=planet", homePlanet, view.Galaxy, view.System, row.Position)
+					if row.MoonID > 0 {
+						display.MoonMissileLink = fmt.Sprintf("/planets/%d/missiles?galaxy=%d&system=%d&position=%d&kind=moon", homePlanet, view.Galaxy, view.System, row.Position)
+					}
+				}
+			}
 		}
 		if row.Debris != nil {
 			display.HasDebris = true
@@ -389,6 +428,13 @@ func (h *Handler) reportPage(response http.ResponseWriter, request *http.Request
 		data.Recycling = &payload
 	case report.ExpeditionPayload:
 		data.Expedition = &payload
+	case report.MissilePayload:
+		data.Missile = &payload
+		data.MissileLosses = compositionSummary(documentInventory(payload.Losses))
+		data.MissileRemaining = compositionSummary(documentInventory(payload.Remaining))
+		if data.MissileRemaining == "" {
+			data.MissileRemaining = "aucune"
+		}
 	}
 	h.render(response, http.StatusOK, "report", data)
 }
@@ -450,6 +496,10 @@ func reportKindName(kind report.Kind) string {
 		return "Rapport de défense"
 	case report.Recycling:
 		return "Rapport de recyclage"
+	case report.MissileAttack:
+		return "Attaque par missiles"
+	case report.MissileDefense:
+		return "Défense contre les missiles"
 	default:
 		return string(kind)
 	}
@@ -464,4 +514,14 @@ func freshnessName(freshness report.Freshness) string {
 	default:
 		return "inconnu"
 	}
+}
+
+func documentInventory(entries map[string]int64) map[unit.ID]int64 {
+	result := map[unit.ID]int64{}
+	for id, count := range entries {
+		if count > 0 {
+			result[unit.ID(id)] = count
+		}
+	}
+	return result
 }

@@ -33,6 +33,7 @@ type Body struct {
 // the tactical warning surface, not an intelligence report about a third party.
 type Approach struct {
 	FleetID        int64
+	Missile        bool
 	TargetPlanetID int64
 	AttackerName   string
 	Origin         universe.Coordinate

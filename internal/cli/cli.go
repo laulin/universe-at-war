@@ -29,6 +29,7 @@ import (
 	appfleet "universeatwar/internal/app/fleet"
 	appgalaxy "universeatwar/internal/app/galaxy"
 	appjumpgate "universeatwar/internal/app/jumpgate"
+	appmissile "universeatwar/internal/app/missile"
 	appmoderation "universeatwar/internal/app/moderation"
 	appphalanx "universeatwar/internal/app/phalanx"
 	appranking "universeatwar/internal/app/ranking"
@@ -309,6 +310,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	researchRepository := storagesqlite.NewResearchRepository(database.Write(), catalogues)
 	shipyardRepository := storagesqlite.NewShipyardRepository(database.Write(), catalogues)
 	fleetRepository := storagesqlite.NewFleetRepository(database.Write(), catalogues)
+	missileRepository := storagesqlite.NewMissileRepository(database.Write(), catalogues)
 	acsRepository := storagesqlite.NewACSRepository(database.Write(), catalogues, fleetRepository)
 	aiRepository := storagesqlite.NewAIRepository(database.Write())
 	metrics := observability.NewMetrics()
@@ -319,6 +321,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 	researchRepository.RegisterHandlers(events)
 	shipyardRepository.RegisterHandlers(events)
 	fleetRepository.RegisterHandlers(events)
+	missileRepository.RegisterHandlers(events)
 	acsRepository.RegisterHandlers(events)
 	aiRepository.RegisterHandlers(events)
 	worker := appsimulation.NewWorker(clock, events)
@@ -371,6 +374,8 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Seeds:      seeds.NewSeedGenerator(cryptorand.Reader),
 		Completer:  events,
 	}
+	missiles := appmissile.Service{Clock: clock, Repository: missileRepository, Completer: events,
+		Seeds: seeds.NewSeedGenerator(cryptorand.Reader), Wake: worker.Wake}
 	galaxy := appgalaxy.Service{Repository: storagesqlite.NewGalaxyRepository(database.Read())}
 	ranking := appranking.Service{
 		Repository: storagesqlite.NewRankingRepository(database.Read()),
@@ -439,6 +444,7 @@ func (r Runner) runServe(ctx context.Context, arguments []string) int {
 		Research:         research,
 		Shipyard:         shipyard,
 		Fleet:            fleet,
+		Missiles:         missiles,
 		Activity:         activity,
 		Galaxy:           galaxy,
 		Ranking:          ranking,

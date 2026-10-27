@@ -70,6 +70,10 @@ dépasser un. Les missiles occupent des emplacements de silo : le silo offre
 `10 * niveau` emplacements, un missile d'interception en occupe un et un missile
 interplanétaire deux.
 
+Les missiles livrés se lancent depuis la vue galaxie. Le trajet, les
+interceptions et les pertes définitives sont décrits dans
+[`missiles.md`](missiles.md).
+
 ## Catalogue initial
 
 Les identifiants sont persistés et indépendants de la langue.

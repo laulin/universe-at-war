@@ -53,6 +53,18 @@
     </table>
     {{end}}
 
+    {{with .Missile}}
+    <dl class="summary">
+      <dt>Attaquant</dt><dd>{{.AttackerName}} depuis {{.Origin}}</dd>
+      <dt>Cible</dt><dd>{{.Target}} ({{if eq .TargetKind "moon"}}lune{{else}}planète{{end}})</dd>
+      <dt>Missiles envoyés</dt><dd>{{figure .Sent}}</dd>
+      <dt>Missiles interceptés</dt><dd>{{figure .Intercepted}}</dd>
+      <dt>Résultat</dt><dd>{{if .Aborted}}Cible disparue ou devenue propre : missiles perdus.{{else}}Impact résolu. Aucune reconstruction des défenses détruites.{{end}}</dd>
+      <dt>Défenses détruites</dt><dd>{{if .Losses}}{{$.MissileLosses}}{{else}}aucune{{end}}</dd>
+      {{if not .Aborted}}<dt>Défenses restantes</dt><dd>{{if eq .Sent .Intercepted}}inconnu — salve entièrement interceptée{{else}}{{$.MissileRemaining}}{{end}}</dd>{{end}}
+    </dl>
+    {{end}}
+
     {{with .Recycling}}
     <dl class="summary">
       <dt>Position</dt><dd>{{.Position}}</dd>

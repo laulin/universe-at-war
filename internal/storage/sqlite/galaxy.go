@@ -41,9 +41,10 @@ func (r *GalaxyRepository) System(ctx context.Context, accountID int64, galaxy, 
 	}
 
 	planets, err := r.read.QueryContext(ctx, `
-		SELECT p.position, p.id, p.name, pl.id, pl.display_name, pl.account_id
+		SELECT p.position, p.id, p.name, pl.id, pl.display_name, pl.account_id, COALESCE(m.id, 0), COALESCE(m.name, '')
 		FROM planets p JOIN players pl ON pl.id = p.owner_player_id
-		WHERE p.galaxy = ? AND p.system = ?
+		LEFT JOIN planets m ON m.parent_planet_id = p.id AND m.kind = 'moon'
+		WHERE p.galaxy = ? AND p.system = ? AND p.kind = 'planet'
 	`, galaxy, system)
 	if err != nil {
 		return appgalaxy.View{}, fmt.Errorf("galaxy repository: read planets: %w", err)
@@ -51,15 +52,17 @@ func (r *GalaxyRepository) System(ctx context.Context, accountID int64, galaxy, 
 	defer planets.Close()
 	for planets.Next() {
 		var position int
-		var planetID, ownerPlayerID, ownerAccountID int64
-		var planetName, ownerName string
-		if err := planets.Scan(&position, &planetID, &planetName, &ownerPlayerID, &ownerName, &ownerAccountID); err != nil {
+		var planetID, ownerPlayerID, ownerAccountID, moonID int64
+		var planetName, ownerName, moonName string
+		if err := planets.Scan(&position, &planetID, &planetName, &ownerPlayerID, &ownerName, &ownerAccountID, &moonID, &moonName); err != nil {
 			return appgalaxy.View{}, fmt.Errorf("galaxy repository: scan planet: %w", err)
 		}
 		if position < 1 || position > limits.Positions {
 			continue
 		}
 		rows[position-1].PlanetID = planetID
+		rows[position-1].MoonID = moonID
+		rows[position-1].MoonName = moonName
 		rows[position-1].PlanetName = planetName
 		rows[position-1].OwnerPlayerID = ownerPlayerID
 		rows[position-1].OwnerName = ownerName

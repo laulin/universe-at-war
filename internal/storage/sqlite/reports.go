@@ -169,7 +169,7 @@ func (r *ReportsRepository) UnreadHostile(ctx context.Context, accountID int64) 
 	if err := r.read.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM reports p
 		JOIN players pl ON pl.id = p.recipient_player_id
-		WHERE pl.account_id = ? AND p.read_at IS NULL AND p.kind IN ('combat_defense', 'espionage_detected')
+		WHERE pl.account_id = ? AND p.read_at IS NULL AND p.kind IN ('combat_defense', 'espionage_detected', 'missile_defense')
 	`, accountID).Scan(&count); err != nil {
 		return 0, fmt.Errorf("reports repository: count hostile: %w", err)
 	}

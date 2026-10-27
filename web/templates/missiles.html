@@ -1,0 +1,51 @@
+{{define "title"}}Attaque par missiles{{end}}
+{{define "content"}}
+<section class="panel-wide" aria-labelledby="missile-title">
+  <p class="eyebrow">{{.Overview.Planet.Name}} [{{.Overview.Planet.Coordinate}}]</p>
+  <h2 id="missile-title">Attaque par missiles</h2>
+  <p>Missiles disponibles : <strong>{{figure .Stock}}</strong> · Portée : {{.Range}} systèmes dans la même galaxie.</p>
+  <p>Un missile d’interception arrête un missile attaquant. Les défenses détruites ne sont pas reconstruites.</p>
+  {{if .Confirm}}
+  <h3>Confirmer le tir</h3>
+  <p>{{.Form.Count}} missile(s) vers {{.Plan.TargetName}} [{{.Form.Target}}] ({{if eq .Form.TargetKind "moon"}}lune{{else}}planète{{end}}).</p>
+  <p>Défense prioritaire : {{range .Choices}}{{if .Selected}}{{.Name}}{{end}}{{end}}{{if not .Form.Priority}}aucune{{end}}.</p>
+  <form method="post" action="/planets/{{.Overview.Planet.ID}}/missiles/launch">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="idempotency_key" value="{{.Key}}">
+    <input type="hidden" name="galaxy" value="{{.Form.Target.Galaxy}}">
+    <input type="hidden" name="system" value="{{.Form.Target.System}}">
+    <input type="hidden" name="position" value="{{.Form.Target.Position}}">
+    <input type="hidden" name="kind" value="{{.Form.TargetKind}}">
+    <input type="hidden" name="count" value="{{.Form.Count}}">
+    <input type="hidden" name="priority" value="{{.Form.Priority}}">
+    <p>Une fois lancés, les missiles ne peuvent pas être rappelés.</p>
+    <button type="submit">Lancer les missiles — tir irréversible</button>
+  </form>
+  <p><a href="/planets/{{.Overview.Planet.ID}}/missiles?galaxy={{.Form.Target.Galaxy}}&amp;system={{.Form.Target.System}}&amp;position={{.Form.Target.Position}}&amp;kind={{.Form.TargetKind}}">Modifier le tir</a></p>
+  {{else}}
+  <form method="post" action="/planets/{{.Overview.Planet.ID}}/missiles/preview">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <fieldset><legend>Cible</legend>
+      <label for="missile-galaxy">Galaxie <input id="missile-galaxy" type="number" name="galaxy" min="1" value="{{.Form.Target.Galaxy}}" required></label>
+      <label for="missile-system">Système <input id="missile-system" type="number" name="system" min="1" value="{{.Form.Target.System}}" required></label>
+      <label for="missile-position">Position <input id="missile-position" type="number" name="position" min="1" value="{{.Form.Target.Position}}" required></label>
+      <label for="missile-kind">Corps <select id="missile-kind" name="kind"><option value="planet"{{if eq .Form.TargetKind "planet"}} selected{{end}}>Planète</option><option value="moon"{{if eq .Form.TargetKind "moon"}} selected{{end}}>Lune</option></select></label>
+    </fieldset>
+    <label for="missile-count">Nombre de missiles <input id="missile-count" type="number" name="count" min="1" max="{{.Stock}}" value="{{.Form.Count}}" required></label>
+    <label for="missile-priority">Défense prioritaire <select id="missile-priority" name="priority"><option value="">Aucune priorité</option>{{range .Choices}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+    <button type="submit"{{if not .Stock}} disabled{{end}}>Préparer le tir</button>
+  </form>
+  {{end}}
+  {{with .Plan}}<p>Temps de vol : {{.Duration}} · Impact estimé : <time datetime="{{instant .ArrivesAt}}" data-local-time data-local-format="time-seconds">{{localTime .ArrivesAt $.Location "15:04:05"}}</time>.</p>{{end}}
+  <p>Le tir ne consomme aucun emplacement de flotte ni carburant supplémentaire.</p>
+</section>
+<section class="panel-wide" aria-labelledby="salvos-title">
+  <h2 id="salvos-title">Salves en vol</h2>
+  {{if .Overview.Strikes}}
+  <table class="bodies"><thead><tr><th scope="col">Sens</th><th scope="col">Trajet</th><th scope="col">Missiles</th><th scope="col">Impact</th></tr></thead><tbody>
+  {{range .Overview.Strikes}}<tr><td>{{if .Incoming}}Attaque entrante{{else}}Tir sortant{{end}}</td><td>{{.Origin}} → {{.Target}} ({{if eq .TargetKind "moon"}}lune{{else}}planète{{end}})</td><td>{{figure .Count}}</td><td><time datetime="{{instant .ArrivesAt}}" data-countdown data-done="impact" data-refresh="page" aria-live="off">{{localTime .ArrivesAt $.Location "15:04:05"}}</time></td></tr>{{end}}
+  </tbody></table>
+  {{else}}<p class="muted">Aucune salve en vol pour ce corps.</p>{{end}}
+  <p><a href="/galaxy/{{.Overview.Planet.Coordinate.Galaxy}}/{{.Overview.Planet.Coordinate.System}}">Retour à la galaxie</a></p>
+</section>
+{{end}}
