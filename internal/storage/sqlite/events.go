@@ -74,7 +74,7 @@ func (p *EventProcessor) NextDue(ctx context.Context) (time.Time, bool, error) {
 	err := p.write.QueryRowContext(ctx, `
 		SELECT due_at FROM scheduled_events
 		WHERE state = 'pending' AND attempts < ?
-		ORDER BY due_at, priority, id LIMIT 1
+		ORDER BY julianday(due_at), priority, id LIMIT 1
 	`, p.MaxAttempts).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return time.Time{}, false, nil
@@ -115,6 +115,9 @@ func (p *EventProcessor) CompleteDue(ctx context.Context, limit int) (int, error
 	return completed, nil
 }
 
+// selectDue compares due times as instants rather than as text: a deadline is
+// stored to the second while the clock carries a fraction, and "12:00:00Z"
+// sorts after "12:00:00.5Z", which would hold every event back by a second.
 func (p *EventProcessor) selectDue(ctx context.Context, now time.Time) (ScheduledEvent, bool, error) {
 	var event ScheduledEvent
 	var dueText, payload string
@@ -122,8 +125,8 @@ func (p *EventProcessor) selectDue(ctx context.Context, now time.Time) (Schedule
 	err := p.write.QueryRowContext(ctx, `
 		SELECT id, event_type, due_at, priority, entity_type, entity_id, ruleset_version, payload_version, payload, attempts
 		FROM scheduled_events
-		WHERE state = 'pending' AND due_at <= ? AND attempts < ?
-		ORDER BY due_at, priority, id LIMIT 1
+		WHERE state = 'pending' AND julianday(due_at) <= julianday(?) AND attempts < ?
+		ORDER BY julianday(due_at), priority, id LIMIT 1
 	`, timestamp(now), p.MaxAttempts).Scan(
 		&event.ID, &event.Type, &dueText, &event.Priority, &event.EntityType,
 		&event.EntityID, &rulesetVersion, &event.PayloadVersion, &payload, &event.Attempts,

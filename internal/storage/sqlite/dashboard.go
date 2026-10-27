@@ -69,7 +69,7 @@ func (r *DashboardRepository) Health(ctx context.Context, now time.Time) (appadm
 	var nextDue sql.NullString
 	if err := r.write.QueryRowContext(ctx, `
 		SELECT due_at, event_type FROM scheduled_events
-		WHERE state = 'pending' AND attempts < 5 ORDER BY due_at, priority, id LIMIT 1
+		WHERE state = 'pending' AND attempts < 5 ORDER BY julianday(due_at), priority, id LIMIT 1
 	`).Scan(&nextDue, &health.NextEventType); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return appadmin.Health{}, fmt.Errorf("dashboard repository: read next event: %w", err)
 	}
@@ -85,7 +85,7 @@ func (r *DashboardRepository) Health(ctx context.Context, now time.Time) (appadm
 		into  *int
 		args  []any
 	}{
-		{"SELECT COUNT(*) FROM scheduled_events WHERE state = 'pending' AND due_at <= ?", &health.PendingEvents,
+		{"SELECT COUNT(*) FROM scheduled_events WHERE state = 'pending' AND julianday(due_at) <= julianday(?)", &health.PendingEvents,
 			[]any{timestamp(now)}},
 		{"SELECT COUNT(*) FROM scheduled_events WHERE state = 'pending' AND attempts >= 5", &health.FailedEvents, nil},
 		{"SELECT COUNT(*) FROM scheduled_events WHERE state = 'completed' AND processed_at > ?", &health.RecentEvents,

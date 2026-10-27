@@ -125,6 +125,46 @@ func TestScenarioFCrashBeforeCommitReplaysExactlyOnce(t *testing.T) {
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM game_event_log WHERE event_type = 'effect_applied'", 1)
 }
 
+// Due times are stored to the second, or with a fraction when a recall dated
+// them, while the clock carries nanoseconds. Read as text, "12:00:00Z" sorts
+// after "12:00:00.5Z", which held every event back by a whole second and let
+// the worker spin until then.
+func TestEventProcessorComparesDueTimesChronologically(t *testing.T) {
+	ctx := context.Background()
+	database := economyDatabase(t, ctx, 1)
+	clock := appclock.NewFake(time.Date(2042, time.September, 10, 12, 0, 0, 500_000_000, time.UTC))
+	processor := storagesqlite.NewEventProcessor(database.Write(), clock)
+
+	var order []string
+	processor.Register("alpha", func(_ context.Context, _ *sql.Tx, event storagesqlite.ScheduledEvent, _ time.Time) error {
+		order = append(order, event.EntityID)
+		return nil
+	})
+	insertScheduledEvent(t, database, "alpha", "2042-09-10T12:00:00.3Z", 50, "fraction", "a1")
+	insertScheduledEvent(t, database, "alpha", "2042-09-10T12:00:00Z", 50, "whole", "a2")
+	insertScheduledEvent(t, database, "alpha", "2042-09-10T12:00:00.7Z", 50, "later", "a3")
+
+	processed, err := processor.CompleteDue(ctx, 10)
+	if err != nil {
+		t.Fatalf("CompleteDue() error = %v", err)
+	}
+	if processed != 2 || len(order) != 2 || order[0] != "whole" || order[1] != "fraction" {
+		t.Fatalf("processed %d in order %v, want whole then fraction", processed, order)
+	}
+	next, ok, err := processor.NextDue(ctx)
+	if err != nil || !ok {
+		t.Fatalf("NextDue() = %v %v %v", next, ok, err)
+	}
+	if want := time.Date(2042, time.September, 10, 12, 0, 0, 700_000_000, time.UTC); !next.Equal(want) {
+		t.Fatalf("NextDue() = %v, want %v", next, want)
+	}
+
+	setClock(t, clock, time.Date(2042, time.September, 10, 12, 0, 0, 800_000_000, time.UTC))
+	if processed, err := processor.CompleteDue(ctx, 10); err != nil || processed != 1 {
+		t.Fatalf("CompleteDue() = %d %v, want the later event", processed, err)
+	}
+}
+
 const (
 	insertSideEffect = `
 		INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at)
