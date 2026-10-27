@@ -690,7 +690,15 @@ func scanAndSettlePlanet(ctx context.Context, tx *sql.Tx, condition string, argu
 	if err := enrichEconomy(&planet); err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
-	state, err := economy.Settle(economy.ProductionState{Stock: planet.Stock, Remainder: remainders, ProducedAt: producedAt}, now, planet.Rates, planet.Capacity)
+	// An event applied late may find the planet already settled further, by a
+	// player who looked at it in the meantime. What was produced up to then is
+	// final, so the event takes effect from that instant instead of rewriting
+	// the past — and instead of failing on every retry until it is dropped.
+	settledAt := now
+	if settledAt.Before(producedAt) {
+		settledAt = producedAt
+	}
+	state, err := economy.Settle(economy.ProductionState{Stock: planet.Stock, Remainder: remainders, ProducedAt: producedAt}, settledAt, planet.Rates, planet.Capacity)
 	if err != nil {
 		return appeconomy.Planet{}, 0, economy.ProductionState{}, err
 	}
