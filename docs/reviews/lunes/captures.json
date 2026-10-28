@@ -1,0 +1,135 @@
+{
+  "source_commit": "dfd750a",
+  "kind": "Interface réelle avec partie de démonstration locale",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "captures": [
+    {
+      "file": "01-galaxie.png",
+      "title": "La lune dans la galaxie",
+      "description": "Séléné apparaît à côté d’Asteria en [1:1:8]. Son nom ouvre la lune ; les actions permettent de la ravitailler ou d’y stationner une flotte.",
+      "topic": "galaxie",
+      "width": 1440,
+      "height": 1362
+    },
+    {
+      "file": "02-batiments-lunaires.png",
+      "title": "Les huit bâtiments de Séléné",
+      "description": "La base lunaire, la phalange et la porte de saut figurent en tête. Robots, chantier et hangars complètent la page ; les stocks sont propres à la lune.",
+      "topic": "batiments",
+      "width": 1440,
+      "height": 1348
+    },
+    {
+      "file": "03-stationner-formulaire.png",
+      "title": "Choisir une lune et la mission Stationner",
+      "description": "Depuis Asteria : sélectionner Lune, saisir [1:1:8], choisir Stationner et embarquer 12 chasseurs légers, 5 petits transporteurs et un ravitaillement. Transporter livre seulement le cargo puis ramène les vaisseaux.",
+      "topic": "deplacement",
+      "width": 1440,
+      "height": 1162
+    },
+    {
+      "file": "04-stationner-confirmation.png",
+      "title": "Vérifier puis lancer la flotte",
+      "description": "La confirmation indique explicitement la destination lune, le carburant, le chargement et l’arrivée. Cliquer sur Lancer la flotte pour confirmer.",
+      "topic": "deplacement",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "05-stationnement-en-vol.png",
+      "title": "Le stationnement en cours",
+      "description": "La mission part effectivement vers [1:1:8] (lune). Le trajet peut être rappelé avant l’arrivée.",
+      "topic": "deplacement",
+      "width": 1440,
+      "height": 1021
+    },
+    {
+      "file": "06-vaisseaux-sur-la-lune.png",
+      "title": "Les vaisseaux sont arrivés sur Séléné",
+      "description": "La lune possède maintenant 20 chasseurs légers : les 8 déjà présents et les 12 transférés, ainsi que les 5 petits transporteurs. Le cargo rejoint ses stocks.",
+      "topic": "deplacement",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "07-phalange-balayage.png",
+      "title": "Préparer un balayage de phalange",
+      "description": "Choisir les coordonnées de la planète à observer et cliquer sur Balayer. Le niveau 3 indique une portée de 8 systèmes ; chaque balayage coûte 5 000 deutérium.",
+      "topic": "phalange",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "08-phalange-resultat.png",
+      "title": "Lire les missions détectées",
+      "description": "La phalange détecte un transport de 4 vaisseaux vers Asteria. Elle affiche mission, coordonnées et horaires, sans révéler la composition ni le cargo. Le deutérium du balayage est débité.",
+      "topic": "phalange",
+      "width": 1440,
+      "height": 1048
+    },
+    {
+      "file": "09-porte-de-saut.png",
+      "title": "Choisir les vaisseaux et la lune d’arrivée",
+      "description": "Sélectionner Triton [1:2:4], équipée elle aussi d’une porte. Ici : 10 chasseurs légers et 2 petits transporteurs. Cliquer sur Sauter ; aucune ressource n’est transportée.",
+      "topic": "portail",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "10-portes-en-recharge.png",
+      "title": "Les deux portes sont en recharge",
+      "description": "Le saut est immédiat. Les quantités restantes sur Séléné ont diminué ; la porte de départ et celle de Triton sont en recharge. Un second saut doit attendre.",
+      "topic": "portail",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "11-arrivee-par-portail.png",
+      "title": "Vérifier l’arrivée instantanée sur Triton",
+      "description": "Les 10 chasseurs légers et les 2 petits transporteurs sont déjà stationnés sur Triton, sans mission en vol et sans transfert de ressources.",
+      "topic": "portail",
+      "width": 1440,
+      "height": 1000
+    }
+  ],
+  "state_before_jump": {
+    "destination": {},
+    "destination_stock": {
+      "Metal": 350000,
+      "Crystal": 200000,
+      "Deuterium": 150000
+    },
+    "moon": {
+      "light_fighter": 20,
+      "small_cargo": 5
+    },
+    "moon_stock": {
+      "Metal": 2510000,
+      "Crystal": 4805000,
+      "Deuterium": 1197000
+    }
+  },
+  "state_after_jump": {
+    "destination": {
+      "light_fighter": 10,
+      "small_cargo": 2
+    },
+    "destination_stock": {
+      "Metal": 350000,
+      "Crystal": 200000,
+      "Deuterium": 150000
+    },
+    "moon": {
+      "light_fighter": 10,
+      "small_cargo": 3
+    },
+    "moon_stock": {
+      "Metal": 2510000,
+      "Crystal": 4805000,
+      "Deuterium": 1197000
+    }
+  }
+}
