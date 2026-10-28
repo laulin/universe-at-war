@@ -4,7 +4,7 @@
     <p class="eyebrow">{{.MissionName}} depuis {{.Planet.Name}}</p>
     <h2 id="confirm-title">Confirmer la mission</h2>
     <dl class="summary">
-      <dt>Destination</dt><dd>{{.Form.Galaxy}}:{{.Form.System}}:{{.Form.Position}}</dd>
+      <dt>Destination</dt><dd>{{.Form.Galaxy}}:{{.Form.System}}:{{.Form.Position}} · {{if eq .Form.TargetKind "moon"}}lune{{else if eq .Form.Mission "recycle"}}champ de débris{{else if eq .Form.Mission "colonize"}}position libre{{else if eq .Form.Mission "expedition"}}espace profond{{else}}planète{{end}}</dd>
       <dt>Distance</dt><dd>{{.Plan.Distance}}</dd>
       <dt>Vitesse</dt><dd>{{.Form.Speed}} % — {{.Plan.Speed}}</dd>
       <dt>Carburant</dt><dd>{{.Plan.Fuel}} deutérium</dd>
@@ -87,7 +87,7 @@
       {{end}}
       {{range .Warnings}}<p class="muted">⚠ {{.}}</p>{{end}}
       <p class="muted">Cette estimation ne consulte jamais l'état actuel de la cible. Une flotte, une défense ou une technologie peut changer avant l'arrivée.</p>
-      <p><a href="/planets/{{$.Planet.ID}}/fleet/send?galaxy={{$.Form.Galaxy}}&amp;system={{$.Form.System}}&amp;position={{$.Form.Position}}&amp;mission=espionage">Espionner à nouveau avant d'attaquer</a></p>
+      <p><a href="/planets/{{$.Planet.ID}}/fleet/send?galaxy={{$.Form.Galaxy}}&amp;system={{$.Form.System}}&amp;position={{$.Form.Position}}&amp;kind={{$.Form.TargetKind}}&amp;mission=espionage">Espionner à nouveau avant d'attaquer</a></p>
     </section>
     {{end}}
     <!-- One form for the whole confirmation. Each button carries its own action
@@ -99,6 +99,7 @@
       <input type="hidden" name="galaxy" value="{{.Form.Galaxy}}">
       <input type="hidden" name="system" value="{{.Form.System}}">
       <input type="hidden" name="position" value="{{.Form.Position}}">
+      <input type="hidden" name="kind" value="{{.Form.TargetKind}}">
       <input type="hidden" name="mission" value="{{.Form.Mission}}">
       <input type="hidden" name="hold_until" value="{{.Form.HoldUntil}}">
       <input type="hidden" name="speed" value="{{.Form.Speed}}">

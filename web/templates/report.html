@@ -29,7 +29,7 @@
       <dt>Espionné par</dt><dd>{{.AttackerPlayerName}}</dd>
       <dt>Origine</dt><dd>{{.Origin}}</dd>
       <dt>Sondes</dt><dd>{{.Probes}}{{if .ProbesDestroyed}} — détruites{{end}}</dd>
-      <dt>Planète visée</dt><dd>{{.TargetPlanetName}}</dd>
+      <dt>Corps visé</dt><dd>{{.TargetPlanetName}}</dd>
     </dl>
     {{end}}
 
@@ -38,7 +38,8 @@
       <dt>Issue</dt><dd>{{.Outcome}}</dd>
       <dt>Butin</dt><dd><span class="res-metal">M {{figure .Loot.Metal}}</span> · <span class="res-crystal">C {{figure .Loot.Crystal}}</span> · <span class="res-deuterium">D {{figure .Loot.Deuterium}}</span></dd>
       <dt>Débris</dt><dd><span class="res-metal">M {{figure .Debris.Metal}}</span> · <span class="res-crystal">C {{figure .Debris.Crystal}}</span></dd>
-      <dt>Chance de lune</dt><dd>{{.MoonChance}}</dd>
+      <dt>Chance de lune</dt><dd>{{$.MoonChance}}</dd>
+      <dt>Formation de lune</dt><dd>{{$.MoonOutcome}}{{if $.MoonLink}} <a href="{{$.MoonLink}}">Ouvrir votre lune</a>{{end}}</dd>
     </dl>
     <h3>Camps</h3>
     {{range .Attackers}}<p><strong>Attaquant {{.PlayerName}}</strong> — armes {{.Weapons}}, bouclier {{.Shielding}}, protection {{.Armour}} ; pertes {{range $id, $quantity := .Losses}}{{$id}} {{$quantity}}. {{else}}aucune{{end}}</p>{{end}}

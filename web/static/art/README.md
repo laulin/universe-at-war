@@ -9,7 +9,7 @@ and no stylesheet changes.
 
 | Category   | Slug                          | Suggested size | Filled |
 |------------|-------------------------------|----------------|--------|
-| `building` | the building identifier       | 640 x 480      | all 15 planetary buildings |
+| `building` | the building identifier       | 640 x 480      | all 18 buildings, including the 3 lunar installations |
 | `research` | the research identifier       | 640 x 480      | all 16 technologies |
 | `ship`     | the unit identifier           | 640 x 480      | all 14 |
 | `defense`  | the unit identifier           | 640 x 480      | all 10 |
@@ -31,3 +31,7 @@ The derivatives are committed. Building the game has to work from a plain
 checkout on a machine that has never heard of ImageMagick, and the continuous
 integration compiles the tree exactly as it stands. See
 `docs/adr/0003-masters-et-derives-d-illustration.md`.
+
+The lunar base, sensor phalanx and jump gate masters were generated with the
+built-in imagegen tool. The prompts, including the gate's framing adjustment,
+are recorded in `images/lunar-prompts.json`.

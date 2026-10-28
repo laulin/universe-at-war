@@ -41,3 +41,9 @@ would bring back the correspondence table this layout exists to avoid.
 `banner/shipyard.png` is cut from the battleship rather than drawn wide, so it
 is enlarged to fill a 1920x600 slot. It holds up at the height the banner is
 actually displayed, and it stands in until a natively wide picture exists.
+
+The lunar installations `building/lunar_base.png`, `building/sensor_phalanx.png`
+and `building/jump_gate.png` use the same slots and crop as the other buildings.
+Their built-in imagegen prompts are preserved in `lunar-prompts.json`; the gate
+was reframed to keep its whole ring visible after the 4:3 crop. The existing
+`body/moon.png` and `surface/moon.png` remain the lunar portrait and landscape.

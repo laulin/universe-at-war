@@ -46,6 +46,7 @@ type Economy interface {
 // Request identifies the immutable report and the fleet already validated by
 // the ordinary mission preview.
 type Request struct {
+	TargetKind   domainfleet.TargetKind
 	ReportID     int64
 	OriginPlanet int64
 	Target       universe.Coordinate
@@ -155,6 +156,25 @@ func (s Service) Estimate(ctx context.Context, principal appauth.Principal, requ
 	if detail.Summary.Coordinate != request.Target {
 		return Estimate{}, ErrTargetMismatch
 	}
+	// Coordinates alone cannot identify intelligence about a planet's moon.
+	reportKind := "planet"
+	switch payload := detail.Payload.(type) {
+	case report.EspionagePayload:
+		if payload.TargetKind != "" {
+			reportKind = payload.TargetKind
+		}
+	case report.CombatPayload:
+		if payload.TargetKind != "" {
+			reportKind = payload.TargetKind
+		}
+	}
+	targetKind := request.TargetKind
+	if targetKind == "" {
+		targetKind = domainfleet.TargetPlanet
+	}
+	if string(targetKind) != reportKind {
+		return Estimate{}, ErrTargetMismatch
+	}
 	origin, err := s.Economy.Planet(ctx, principal, request.OriginPlanet)
 	if err != nil {
 		return Estimate{}, err
@@ -237,6 +257,9 @@ func (s Service) Estimate(ctx context.Context, principal appauth.Principal, requ
 		results.shipDebris = append(results.shipDebris, result.ShipDebris)
 		results.defenseDebris = append(results.defenseDebris, result.DefenseDebris)
 		results.debris = append(results.debris, result.Debris)
+		if targetKind == domainfleet.TargetMoon {
+			result.MoonChance = 0
+		}
 		results.moonChance = append(results.moonChance, int64(result.MoonChance*100+0.5))
 		if known.resources != nil {
 			loot := economy.Resources{}

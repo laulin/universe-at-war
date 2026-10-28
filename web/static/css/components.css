@@ -182,7 +182,7 @@
   border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
   background: var(--surface-sunken);
 }
-.card__art img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.card__art img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
 
 /* The level or the quantity, bottom right of the illustration. */
 .card__badge {

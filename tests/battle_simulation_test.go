@@ -256,3 +256,25 @@ func insertSimulationReport(t *testing.T, ctx context.Context, database *storage
 	}
 	return id
 }
+
+func TestBattleSimulationDistinguishesAMoonFromItsPlanet(t *testing.T) {
+	ctx := context.Background()
+	db, w, _, moonID := phalanxUniverse(t)
+	alice := appauth.Principal{AccountID: 1}
+	at := coordinateOf(t, 1, 1, 1)
+	id := insertSimulationReport(t, ctx, db, 1, report.Espionage, moonID, at, w.Clock.Now(),
+		report.EspionagePayload{TargetKind: "moon", Target: at, Level: 9,
+			Fleet: map[string]int64{"light_fighter": 2500}, Defenses: map[string]int64{}, Research: map[string]int{}})
+	request := appbattlesimulation.Request{ReportID: id, OriginPlanet: 1, Target: at, Composition: domainfleet.Composition{unit.Battleship: 2000}}
+	if _, err := w.BattleSimulation.Estimate(ctx, alice, request); !errors.Is(err, appbattlesimulation.ErrTargetMismatch) {
+		t.Fatalf("lunar intelligence accepted for planet: %v", err)
+	}
+	request.TargetKind = domainfleet.TargetMoon
+	estimate, err := w.BattleSimulation.Estimate(ctx, alice, request)
+	if err != nil || !estimate.Available {
+		t.Fatalf("lunar simulation: %+v, %v", estimate, err)
+	}
+	if estimate.Debris.Total.Average <= 0 || estimate.MoonChance.Maximum != 0 {
+		t.Fatalf("a lunar battle predicts a new moon: %+v", estimate.MoonChance)
+	}
+}

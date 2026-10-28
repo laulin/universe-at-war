@@ -95,7 +95,7 @@ func (r *FleetRepository) resolveEspionage(ctx context.Context, tx *sql.Tx, row 
 // espionageReport keeps only the sections the mission actually revealed.
 func espionageReport(row fleetRow, planetName, ownerName string, probes int64, lost bool, revealed espionage.Report) report.EspionagePayload {
 	payload := report.EspionagePayload{
-		Target: row.target, TargetPlayerName: ownerName, TargetPlanetName: planetName,
+		TargetKind: string(row.targetKind), Target: row.target, TargetPlayerName: ownerName, TargetPlanetName: planetName,
 		Probes: probes, Level: revealed.Level, ProbesLost: lost,
 	}
 	if revealed.Resources != nil {
@@ -567,33 +567,59 @@ func consumeColonyShip(ctx context.Context, tx *sql.Tx, fleetID int64, compositi
 	return nil
 }
 
-// attemptMoon draws whether the wreckage gathers into a moon. A position that
-// already carries one never gets a second.
-func (r *FleetRepository) attemptMoon(ctx context.Context, tx *sql.Tx, row fleetRow, planetID int64,
-	target appeconomy.Planet, chance float64, source random.Source, now time.Time) (bool, error) {
-	if chance <= 0 {
-		return false, nil
-	}
-	existing, err := moonAt(ctx, tx, row.target)
+// attemptMoon continues the battle's random stream and records why a moon did
+// or did not form. The supplied seed is also the seed of a grouped battle.
+func (r *FleetRepository) attemptMoon(ctx context.Context, tx *sql.Tx, planetID, seed int64,
+	target appeconomy.Planet, chance float64, source random.Source, now time.Time) (*report.MoonFormation, error) {
+	formation, err := r.formMoon(ctx, tx, planetID, target, chance, source, now)
 	if err != nil {
-		return false, err
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload)
+		VALUES ('moon_attempted', 'planet', ?, ?, json_object('coordinate', ?, 'chance', ?, 'seed', ?, 'outcome', ?, 'moon_id', ?))
+	`, planetID, timestamp(now), target.Coordinate.String(), chance, seed, formation.Outcome, formation.MoonID); err != nil {
+		return nil, fmt.Errorf("fleet repository: log moon attempt: %w", err)
+	}
+	if formation.Outcome == report.MoonCreated {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload)
+			VALUES ('moon_created', 'planet', ?, ?, json_object('coordinate', ?, 'chance', ?, 'seed', ?, 'parent_planet_id', ?))
+		`, formation.MoonID, timestamp(now), target.Coordinate.String(), chance, seed, planetID); err != nil {
+			return nil, fmt.Errorf("fleet repository: log moon: %w", err)
+		}
+	}
+	return formation, nil
+}
+
+func (r *FleetRepository) formMoon(ctx context.Context, tx *sql.Tx, planetID int64,
+	target appeconomy.Planet, chance float64, source random.Source, now time.Time) (*report.MoonFormation, error) {
+	if target.Kind != building.OnPlanet {
+		return &report.MoonFormation{Outcome: report.MoonTargetNotPlanet}, nil
+	}
+	existing, err := moonAt(ctx, tx, target.Coordinate)
+	if err != nil {
+		return nil, err
 	}
 	if existing != 0 {
-		return false, nil
+		return &report.MoonFormation{Outcome: report.MoonAlreadyExists, MoonID: existing}, nil
+	}
+	if chance <= 0 {
+		return &report.MoonFormation{Outcome: report.MoonInsufficientDebris}, nil
 	}
 	if !random.Chance(source, chance) {
-		return false, nil
+		return &report.MoonFormation{Outcome: report.MoonFailed}, nil
 	}
 	owner, err := playerOfPlanet(ctx, tx, planetID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	moonID, err := createBody(ctx, tx, bodyRecord{
 		ownerPlayerID: owner,
 		kind:          building.OnMoon,
 		parentID:      planetID,
 		name:          "Lune",
-		at:            row.target,
+		at:            target.Coordinate,
 		traits: universe.Characteristics{
 			TotalFields:        target.Rules.Expansion.BaseMoonFields,
 			MinimumTemperature: target.MinimumTemperature,
@@ -602,15 +628,9 @@ func (r *FleetRepository) attemptMoon(ctx context.Context, tx *sql.Tx, row fleet
 		createdAt: now,
 	})
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO game_event_log(event_type, entity_type, entity_id, occurred_at, payload)
-		VALUES ('moon_created', 'planet', ?, ?, json_object('coordinate', ?, 'chance', ?, 'seed', ?, 'parent_planet_id', ?))
-	`, moonID, timestamp(now), row.target.String(), chance, row.seed, planetID); err != nil {
-		return false, fmt.Errorf("fleet repository: log moon: %w", err)
-	}
-	return true, nil
+	return &report.MoonFormation{Outcome: report.MoonCreated, MoonID: moonID}, nil
 }
 
 // moonAt returns the moon of a position, if it has one.

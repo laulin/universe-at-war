@@ -63,7 +63,7 @@ func (r *FleetRepository) resolveFleetArrival(ctx context.Context, tx *sql.Tx, r
 	if err != nil {
 		return err
 	}
-	targetPlanetID, _, err := planetAt(ctx, tx, row.target)
+	targetPlanetID, _, err := bodyAt(ctx, tx, row.target, row.targetKind)
 	if err != nil {
 		return err
 	}

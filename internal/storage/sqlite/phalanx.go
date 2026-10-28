@@ -79,12 +79,14 @@ func observableMissions(ctx context.Context, tx *sql.Tx, target universe.Coordin
 			f.target_galaxy, f.target_system, f.target_position, f.arrives_at, f.returns_at,
 			COALESCE((SELECT SUM(s.quantity) FROM fleet_ships s WHERE s.fleet_id = f.id), 0)
 		FROM fleets f
+		JOIN planets origin ON origin.id = f.origin_planet_id
 		WHERE f.state IN ('outbound', 'returning', 'recalled')
 		  AND f.mission <> 'espionage'
 		  AND (
-			(f.target_galaxy = ? AND f.target_system = ? AND f.target_position = ?)
-			OR (f.origin_galaxy = ? AND f.origin_system = ? AND f.origin_position = ?)
+			(f.state = 'outbound' AND f.target_kind = 'planet' AND f.target_galaxy = ? AND f.target_system = ? AND f.target_position = ?)
+			OR (origin.kind = 'planet' AND f.origin_galaxy = ? AND f.origin_system = ? AND f.origin_position = ?)
 		  )
+		  AND NOT (f.mission = 'deploy' AND f.state IN ('returning', 'recalled'))
 		ORDER BY f.arrives_at, f.id
 	`, target.Galaxy, target.System, target.Position, target.Galaxy, target.System, target.Position)
 	if err != nil {

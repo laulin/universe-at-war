@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -56,6 +57,34 @@ func TestMoonCreationIsReproducibleFromItsSeed(t *testing.T) {
 	}
 }
 
+func TestMoonCreationAtTwentyPercentRecordsBothOutcomes(t *testing.T) {
+	for _, test := range []struct {
+		seed    int64
+		created bool
+	}{{7, false}, {2, true}} {
+		t.Run(fmt.Sprint(test.seed), func(t *testing.T) {
+			ctx := context.Background()
+			db, w, alice, clock := battlefieldWithMoonChance(t, .2, 1, 2500)
+			got := resolveMoonBattle(t, ctx, db, w, alice, clock, test.seed, "twenty-percent")
+			if got != test.created {
+				t.Fatalf("seed %d: created=%t, want %t", test.seed, got, test.created)
+			}
+			assertSingleValue(t, db, "SELECT COUNT(*) FROM reports WHERE json_extract(payload, '$.moon_chance') = 0.2", 2)
+			outcome := "failed"
+			if got {
+				outcome = "created"
+			}
+			assertSingleText(t, db, "SELECT json_extract(payload, '$.moon.outcome') FROM reports WHERE kind = 'combat_defense'", outcome)
+			assertSingleText(t, db, "SELECT json_extract(payload, '$.outcome') FROM game_event_log WHERE event_type = 'moon_attempted'", outcome)
+			replayEvent(t, ctx, db, "combat_resolved")
+			if _, err := w.Events.CompleteDue(ctx, 50); err != nil {
+				t.Fatal(err)
+			}
+			assertSingleValue(t, db, "SELECT COUNT(*) FROM game_event_log WHERE event_type = 'moon_attempted'", 1)
+		})
+	}
+}
+
 func TestAMoonProducesNothingAndOnlyAcceptsLunarBuildings(t *testing.T) {
 	ctx := context.Background()
 	database, universeWorld, alice, clock := moonBattlefield(t, 7)
@@ -86,11 +115,11 @@ func TestAMoonProducesNothingAndOnlyAcceptsLunarBuildings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Buildings(moon) error = %v", err)
 	}
-	if len(choices) != 3 {
-		t.Fatalf("the moon offers %d buildings, want the three lunar ones", len(choices))
+	if len(choices) != 8 {
+		t.Fatalf("the moon offers %d buildings, want the eight lunar buildings", len(choices))
 	}
 	for _, choice := range choices {
-		if choice.Definition.Placement != building.OnMoon {
+		if !choice.Definition.Allows(building.OnMoon) {
 			t.Fatalf("the moon offers %s", choice.Definition.ID)
 		}
 	}

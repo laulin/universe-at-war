@@ -6,6 +6,7 @@ commit ; l'arbre reste compilable et les tests verts à chaque étape.
 
 | Fichier | Contenu |
 | --- | --- |
+| [`2026-10-27-lunes.md`](2026-10-27-lunes.md) | diagnostic de la création existante, catalogue et interface lunaires, illustrations et validation |
 | [`2026-09-05-roadmap-m3-m10.md`](2026-09-05-roadmap-m3-m10.md) | écarts spécification/code, décisions transverses, feuille de route et dépendances |
 | [`2026-09-05-partie-0-socle.md`](2026-09-05-partie-0-socle.md) | socle transverse : dispatch d'événements, ruleset évolutif, multi-planètes, layout, inscription, journalisation |
 | [`2026-09-05-milestone-03.md`](2026-09-05-milestone-03.md) | recherches, chantier spatial et défenses |

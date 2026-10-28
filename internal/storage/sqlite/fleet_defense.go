@@ -95,13 +95,13 @@ type defendingFleet struct {
 
 // stationedDefenders lists the allied fleets that fight for a body, in a stable
 // order so the same battle always resolves the same way.
-func (r *FleetRepository) stationedDefenders(ctx context.Context, tx *sql.Tx, at universe.Coordinate) ([]defendingFleet, error) {
+func (r *FleetRepository) stationedDefenders(ctx context.Context, tx *sql.Tx, at universe.Coordinate, kind domainfleet.TargetKind) ([]defendingFleet, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id FROM fleets
 		WHERE target_galaxy = ? AND target_system = ? AND target_position = ?
-			AND state = 'holding' AND mission = 'hold'
+			AND target_kind = ? AND state = 'holding' AND mission = 'hold'
 		ORDER BY id
-	`, at.Galaxy, at.System, at.Position)
+	`, at.Galaxy, at.System, at.Position, string(kind))
 	if err != nil {
 		return nil, fmt.Errorf("fleet repository: list defenders: %w", err)
 	}

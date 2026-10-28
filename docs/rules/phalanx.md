@@ -27,8 +27,12 @@ balayage sans rien révéler.
 
 ## Informations révélées
 
-Pour la position balayée, la phalange liste les missions en vol dont l'origine ou
-la destination est cette position exacte, avec :
+Un balayage vise la planète de la position, et distingue les deux corps qui
+partagent ses coordonnées. À l'aller, la phalange peut observer les missions
+dont l'origine planétaire ou la destination planétaire est cette position.
+Au retour, seule l'origine planétaire reste observable. Les trajets entre
+lunes restent invisibles et un stationnement permanent rappelé n'est pas révélé.
+Les missions visibles sont décrites avec :
 
 - le type de mission ;
 - l'origine et la destination ;

@@ -89,6 +89,9 @@ type reportPageData struct {
 	Espionage        *espionagePageView
 	Detected         *report.DetectedPayload
 	Combat           *report.CombatPayload
+	MoonChance       string
+	MoonOutcome      string
+	MoonLink         string
 	Recycling        *report.RecyclingPayload
 	Expedition       *report.ExpeditionPayload
 	Missile          *report.MissilePayload
@@ -413,6 +416,9 @@ func (h *Handler) reportPage(response http.ResponseWriter, request *http.Request
 	}
 	switch payload := detail.Payload.(type) {
 	case report.EspionagePayload:
+		if payload.TargetKind == "moon" && data.AttackLink != "" {
+			data.AttackLink += "&kind=moon"
+		}
 		var thresholds *rules.EspionageSettings
 		if len(planets) > 0 {
 			settings := planets[0].Rules.Espionage
@@ -424,6 +430,19 @@ func (h *Handler) reportPage(response http.ResponseWriter, request *http.Request
 		data.Detected = &payload
 	case report.CombatPayload:
 		data.Combat = &payload
+		data.MoonChance = fmt.Sprintf("%.0f %%", payload.MoonChance*100)
+		data.MoonOutcome = moonOutcome(payload.Moon)
+		if payload.TargetKind == "moon" && data.AttackLink != "" {
+			data.AttackLink += "&kind=moon"
+		}
+		if payload.Moon != nil && payload.Moon.MoonID > 0 {
+			for _, body := range planets {
+				if body.ID == payload.Moon.MoonID && body.Kind == building.OnMoon {
+					data.MoonLink = fmt.Sprintf("/planets/%d", body.ID)
+					break
+				}
+			}
+		}
 	case report.RecyclingPayload:
 		data.Recycling = &payload
 	case report.ExpeditionPayload:
@@ -437,6 +456,26 @@ func (h *Handler) reportPage(response http.ResponseWriter, request *http.Request
 		}
 	}
 	h.render(response, http.StatusOK, "report", data)
+}
+
+func moonOutcome(formation *report.MoonFormation) string {
+	if formation == nil {
+		return "Résultat non enregistré dans cet ancien rapport."
+	}
+	switch formation.Outcome {
+	case report.MoonCreated:
+		return "Une lune s'est formée autour de la planète du défenseur."
+	case report.MoonFailed:
+		return "Le tirage n'a pas créé de lune autour de la planète du défenseur."
+	case report.MoonInsufficientDebris:
+		return "Débris insuffisants pour une tentative de formation."
+	case report.MoonAlreadyExists:
+		return "Cette planète possède déjà une lune."
+	case report.MoonTargetNotPlanet:
+		return "Un combat sur une lune ne crée pas de nouvelle lune."
+	default:
+		return "Résultat de formation inconnu."
+	}
 }
 
 func (h *Handler) markReportRead(response http.ResponseWriter, request *http.Request) {

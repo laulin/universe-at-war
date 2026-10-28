@@ -15,6 +15,7 @@ import (
 	appfleet "universeatwar/internal/app/fleet"
 	appmissile "universeatwar/internal/app/missile"
 	appreports "universeatwar/internal/app/reports"
+	"universeatwar/internal/domain/building"
 	domaineconomy "universeatwar/internal/domain/economy"
 	domainfleet "universeatwar/internal/domain/fleet"
 	"universeatwar/internal/domain/unit"
@@ -39,6 +40,7 @@ type fleetPageMission struct {
 	State       string
 	Origin      string
 	Target      string
+	TargetKind  string
 	Composition string
 	Cargo       domaineconomy.Resources
 	ArrivesAt   time.Time
@@ -129,6 +131,7 @@ type fleetConfirmPageData struct {
 // fleetForm is the transport shape of the send wizard, kept as typed values so
 // the confirmation step can repost exactly what was previewed.
 type fleetForm struct {
+	TargetKind  string
 	Galaxy      int
 	System      int
 	Position    int
@@ -181,7 +184,7 @@ func (h *Handler) renderFleet(response http.ResponseWriter, request *http.Reques
 	for _, mission := range overview.Fleets {
 		view := fleetPageMission{
 			ID: mission.ID, Mission: missionName(mission.Mission), State: fleetStateName(mission.State),
-			Origin: mission.Origin.String(), Target: mission.Target.String(),
+			Origin: mission.Origin.String(), Target: mission.Target.String(), TargetKind: string(mission.TargetKind),
 			Composition: compositionSummary(mission.Composition), Cargo: mission.Cargo,
 			ArrivesAt: mission.ArrivesAt, ArrivesISO: mission.ArrivesAt.Format(time.RFC3339),
 			ReturnsAt: mission.ReturnsAt, Recallable: mission.Recallable,
@@ -202,7 +205,8 @@ func (h *Handler) renderFleet(response http.ResponseWriter, request *http.Reques
 	}
 	h.render(response, status, "fleet", fleetPageData{
 		pageShell: shell, Planet: overview.Planet, Ships: stationedShips(overview.Stationed, h.shipCatalogue()),
-		Slots: overview.Slots, Used: overview.Used, Missions: missions, MissileStrikes: missileStrikes, HasMissiles: h.missiles != nil,
+		Slots: overview.Slots, Used: overview.Used, Missions: missions, MissileStrikes: missileStrikes,
+		HasMissiles: h.missiles != nil && overview.Planet.Kind == building.OnPlanet,
 	})
 }
 
@@ -218,6 +222,7 @@ func (h *Handler) fleetSendPage(response http.ResponseWriter, request *http.Requ
 	form.Galaxy, _ = strconv.Atoi(request.URL.Query().Get("galaxy"))
 	form.System, _ = strconv.Atoi(request.URL.Query().Get("system"))
 	form.Position, _ = strconv.Atoi(request.URL.Query().Get("position"))
+	form.TargetKind = request.URL.Query().Get("kind")
 	if reportID, err := strconv.ParseInt(request.URL.Query().Get("report"), 10, 64); err == nil && reportID > 0 {
 		form.ReportID = reportID
 	}
@@ -329,6 +334,7 @@ func (h *Handler) previewFleet(response http.ResponseWriter, request *http.Reque
 		h.renderFleetSend(response, request, http.StatusBadRequest, principal, planetID, form, fleetError(err))
 		return
 	}
+	form.TargetKind = string(launchRequest.TargetKind)
 	planets, err := h.economy.Planets(request.Context(), principal)
 	if err != nil {
 		h.progressionFailure(response, request, err)
@@ -369,11 +375,12 @@ func (h *Handler) previewFleet(response http.ResponseWriter, request *http.Reque
 	if plan.ReturnsAt != nil {
 		data.ReturnsISO = plan.ReturnsAt.Format(time.RFC3339)
 	}
-	data.GroupedAttack = domainfleet.Mission(form.Mission) == domainfleet.MissionAttack &&
+	data.GroupedAttack = launchRequest.TargetKind == domainfleet.TargetPlanet && domainfleet.Mission(form.Mission) == domainfleet.MissionAttack &&
 		h.inAnAlliance(request.Context(), principal)
 	if form.ReportID > 0 && domainfleet.Mission(form.Mission) == domainfleet.MissionAttack && h.battleSimulation != nil {
 		estimate, estimateErr := h.battleSimulation.Estimate(request.Context(), principal, appbattlesimulation.Request{
-			ReportID: form.ReportID, OriginPlanet: planetID,
+			TargetKind: launchRequest.TargetKind,
+			ReportID:   form.ReportID, OriginPlanet: planetID,
 			Target: launchRequest.Target, Composition: launchRequest.Composition,
 			Cargo: launchRequest.Cargo, Fuel: plan.Fuel,
 		})
@@ -479,6 +486,7 @@ func parseFleetForm(request *http.Request) (fleetForm, error) {
 		return form, err
 	}
 	form.Mission = request.PostFormValue("mission")
+	form.TargetKind = request.PostFormValue("kind")
 	form.CargoMetal = optionalQuantity(request, "cargo_metal")
 	form.Crystal = optionalQuantity(request, "cargo_crystal")
 	form.Deuterium = optionalQuantity(request, "cargo_deuterium")
@@ -522,13 +530,20 @@ func (f fleetForm) request() (appfleet.LaunchRequest, error) {
 	if !mission.Valid() {
 		return appfleet.LaunchRequest{}, domainfleet.ErrInvalidMission
 	}
+	kind := mission.Target()
+	if kind == domainfleet.TargetPlanet && f.TargetKind != "" {
+		kind = domainfleet.TargetKind(f.TargetKind)
+		if kind != domainfleet.TargetPlanet && kind != domainfleet.TargetMoon {
+			return appfleet.LaunchRequest{}, domainfleet.ErrInvalidTarget
+		}
+	}
 	composition := domainfleet.Composition{}
 	for id, quantity := range f.Composition {
 		composition[id] = quantity
 	}
 	launch := appfleet.LaunchRequest{
 		Target:      universe.Coordinate{Galaxy: f.Galaxy, System: f.System, Position: f.Position},
-		TargetKind:  mission.Target(),
+		TargetKind:  kind,
 		Mission:     mission,
 		Composition: composition,
 		Cargo:       domaineconomy.Resources{Metal: f.CargoMetal, Crystal: f.Crystal, Deuterium: f.Deuterium},

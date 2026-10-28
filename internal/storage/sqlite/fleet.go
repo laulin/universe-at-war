@@ -278,12 +278,12 @@ func (r *FleetRepository) planLaunch(ctx context.Context, tx *sql.Tx, accountID,
 	if err != nil {
 		return domainfleet.Plan{}, appeconomy.Planet{}, 0, err
 	}
-	targetPlanetID, targetOwner, err := planetAt(ctx, tx, request.Target)
+	targetPlanetID, targetOwner, err := bodyAt(ctx, tx, request.Target, request.TargetKind)
 	if err != nil {
 		return domainfleet.Plan{}, appeconomy.Planet{}, 0, err
 	}
 	switch request.TargetKind {
-	case domainfleet.TargetPlanet:
+	case domainfleet.TargetPlanet, domainfleet.TargetMoon:
 		if targetPlanetID == 0 || targetPlanetID == planet.ID {
 			return domainfleet.Plan{}, appeconomy.Planet{}, 0, domainfleet.ErrInvalidTarget
 		}
@@ -483,10 +483,20 @@ func sortedComposition(composition domainfleet.Composition) []unit.ID {
 
 // planetAt returns the planet occupying a coordinate, if any.
 func planetAt(ctx context.Context, tx *sql.Tx, at universe.Coordinate) (int64, int64, error) {
+	return bodyAt(ctx, tx, at, domainfleet.TargetPlanet)
+}
+
+// bodyAt resolves coordinates together with the destination kind. A moon and
+// its planet must never receive one another's cargo, ships or combat losses.
+func bodyAt(ctx context.Context, tx *sql.Tx, at universe.Coordinate, kind domainfleet.TargetKind) (int64, int64, error) {
+	bodyKind := "planet"
+	if kind == domainfleet.TargetMoon {
+		bodyKind = "moon"
+	}
 	var planetID, ownerID int64
 	err := tx.QueryRowContext(ctx,
-		"SELECT id, owner_player_id FROM planets WHERE galaxy = ? AND system = ? AND position = ? AND kind = 'planet'",
-		at.Galaxy, at.System, at.Position).Scan(&planetID, &ownerID)
+		"SELECT id, owner_player_id FROM planets WHERE galaxy = ? AND system = ? AND position = ? AND kind = ?",
+		at.Galaxy, at.System, at.Position, bodyKind).Scan(&planetID, &ownerID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, 0, nil
 	}

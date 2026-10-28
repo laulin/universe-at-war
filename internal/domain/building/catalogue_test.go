@@ -141,13 +141,42 @@ func TestPlacementSeparatesPlanetsFromMoons(t *testing.T) {
 	}
 
 	moonBuildings := catalogue.DefinitionsFor(OnMoon)
-	if len(moonBuildings) != 3 {
-		t.Fatalf("the moon catalogue holds %d buildings, want 3", len(moonBuildings))
+	if len(moonBuildings) != 8 {
+		t.Fatalf("the moon catalogue holds %d buildings, want 8", len(moonBuildings))
 	}
 	for _, definition := range catalogue.DefinitionsFor(OnPlanet) {
-		if definition.Placement != OnPlanet {
+		if !definition.Allows(OnPlanet) {
 			t.Fatalf("%s is not a planetary building", definition.ID)
 		}
+	}
+}
+
+func TestLunarFacilitiesUseLocalPrerequisitesAndCanRecoverAFullMoon(t *testing.T) {
+	catalogue := DefaultCatalogue()
+	configured := rules.Default()
+	for _, id := range []ID{RoboticsFactory, Shipyard, MetalStorage, CrystalStorage, DeuteriumTank} {
+		for _, placement := range []Placement{OnPlanet, OnMoon} {
+			if _, err := catalogue.Plan(id, placement, Levels{RoboticsFactory: 2}, nil, 1, 10, configured); err != nil {
+				t.Fatalf("Plan(%s, %s): %v", id, placement, err)
+			}
+		}
+	}
+	if _, err := catalogue.Plan(Shipyard, OnMoon, Levels{}, nil, 1, 10, configured); err == nil {
+		t.Fatal("a lunar shipyard ignored its local robotics prerequisite")
+	}
+	for _, id := range []ID{MetalMine, SolarPlant, ResearchLab, NaniteFactory, Terraformer, MissileSilo, AllianceDepot} {
+		if _, err := catalogue.Plan(id, OnMoon, Levels{}, nil, 1, 10, configured); !errors.Is(err, ErrWrongPlacement) {
+			t.Fatalf("Plan(%s on moon): %v", id, err)
+		}
+	}
+	if _, err := catalogue.Plan(LunarBase, OnMoon, Levels{LunarBase: 1}, nil, 4, 4, configured); err != nil {
+		t.Fatalf("a full moon cannot expand its base: %v", err)
+	}
+	if _, err := catalogue.Plan(RoboticsFactory, OnMoon, Levels{}, nil, 4, 4, configured); !errors.Is(err, ErrNoFreeField) {
+		t.Fatalf("a full moon accepted a facility: %v", err)
+	}
+	if _, err := catalogue.Plan(LunarBase, OnMoon, Levels{}, nil, 5, 4, configured); !errors.Is(err, ErrNoFreeField) {
+		t.Fatalf("the lunar base ignored already overbooked fields: %v", err)
 	}
 }
 

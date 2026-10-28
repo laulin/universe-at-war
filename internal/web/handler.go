@@ -2,6 +2,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -936,7 +937,7 @@ func (h *Handler) renamePlanet(response http.ResponseWriter, request *http.Reque
 			http.Error(response, "economy unavailable", http.StatusInternalServerError)
 			return
 		}
-		message := "Impossible de renommer cette planète."
+		message := "Impossible de renommer ce corps céleste."
 		if errors.Is(err, appeconomy.ErrInvalidPlanetName) {
 			message = "Le nom doit contenir entre 1 et 32 caractères."
 		}
@@ -1037,7 +1038,7 @@ func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Req
 		return
 	}
 	rows := make([]overviewBodyView, 0, len(planets))
-	for _, planet := range planets {
+	for _, planet := range groupedBodies(planets) {
 		row := overviewBodyView{Planet: planet}
 		if head := planet.Queue; len(head) > 0 {
 			row.Construction = &overviewConstructionView{
@@ -1053,9 +1054,11 @@ func (h *Handler) renderOverview(response http.ResponseWriter, request *http.Req
 
 type economyPageData struct {
 	pageShell
-	Planet  appeconomy.Planet
-	Queue   queuePanel
-	Choices []buildingPageChoice
+	Planet      appeconomy.Planet
+	Queue       queuePanel
+	Choices     []buildingPageChoice
+	LunarParent *appeconomy.Planet
+	FullMoon    bool
 }
 
 func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Request, status int, principal appauth.Principal, planets []appeconomy.Planet, planet appeconomy.Planet, choices []appeconomy.BuildingChoice, message string) {
@@ -1102,10 +1105,19 @@ func (h *Handler) renderEconomy(response http.ResponseWriter, request *http.Requ
 	shell.RenameAction = fmt.Sprintf("/planets/%d/name", planet.ID)
 	shell.Error = message
 	shell.Notice = cancellationNotice(request)
-	h.render(response, status, "economy", economyPageData{
+	data := economyPageData{
 		pageShell: shell, Planet: planet,
 		Queue: buildingQueuePanel(planet, token, shell.Now, shell.Timezone, shell.Location), Choices: views,
-	})
+		FullMoon: planet.Kind == building.OnMoon && planet.BookedFields() >= planet.TotalFields,
+	}
+	for _, body := range planets {
+		if planet.Kind == building.OnMoon && body.ID == planet.ParentID {
+			parent := body
+			data.LunarParent = &parent
+			break
+		}
+	}
+	h.render(response, status, "economy", data)
 }
 
 // requirementViews translates the dependencies of one entry for the card.
@@ -1132,7 +1144,7 @@ func planRefusal(err error) string {
 	case err == nil:
 		return ""
 	case errors.Is(err, building.ErrNoFreeField):
-		return "Plus aucune case libre sur cette planète."
+		return "Plus aucune case libre sur ce corps céleste."
 	case errors.Is(err, building.ErrWrongPlacement):
 		return "Ce bâtiment ne peut pas être construit ici."
 	case errors.Is(err, building.ErrUnknownBuilding):
@@ -1328,6 +1340,8 @@ type bodyLink struct {
 	Coordinate string
 	Kind       string
 	IsMoon     bool
+	ParentID   int64
+	ParentName string
 	Current    bool
 	// ArtSlot names the illustration of the body.
 	ArtSlot string
@@ -1403,6 +1417,7 @@ type loginPageData struct {
 
 // gameShell builds the navigation shell from the bodies of the account.
 func (h *Handler) gameShell(ctx context.Context, token string, principal appauth.Principal, section string, planets []appeconomy.Planet, currentID int64) pageShell {
+	planets = groupedBodies(planets)
 	timezone, location := h.displayTimezone(ctx, planets)
 	shell := pageShell{
 		CSRFToken: token, Username: principal.Username, Section: section, Now: h.clock(),
@@ -1450,6 +1465,7 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 			ID: planet.ID, Name: planet.Name, URL: bodySectionURL(section, planet.ID, moon),
 			Coordinate: planet.Coordinate.String(),
 			Kind:       bodyKindName(planet.Kind), IsMoon: moon, Current: planet.ID == currentID,
+			ParentID:        planet.ParentID,
 			ArtSlot:         bodyArtSlot(planet.Coordinate.Position, moon),
 			SurfaceArtSlot:  bodySurfaceArtSlot(planet.Levels, moon),
 			Resources:       bodyResources(planet.Stock, planet.Capacity, planet.Rates, moon),
@@ -1464,6 +1480,14 @@ func (h *Handler) gameShell(ctx context.Context, token string, principal appauth
 			Defenses:        activity.Defenses,
 			OutboundFleets:  activity.OutboundFleets,
 			IncomingAttacks: activity.IncomingAttacks,
+		}
+		if moon {
+			for _, parent := range planets {
+				if parent.ID == planet.ParentID {
+					link.ParentName = parent.Name
+					break
+				}
+			}
 		}
 		metal += planet.Stock.Metal
 		crystal += planet.Stock.Crystal
@@ -1512,13 +1536,40 @@ func (h *Handler) displayTimezone(ctx context.Context, planets []appeconomy.Plan
 	return name, location
 }
 
-// bodySectionURL keeps body switching inside the current gameplay screen. A
-// lunar-only screen cannot exist for a planet, so those two sections fall back
-// to the target's resources instead of linking to a guaranteed 404.
+// groupedBodies keeps each satellite directly after its parent without changing
+// the order used by application services to select the home planet.
+func groupedBodies(bodies []appeconomy.Planet) []appeconomy.Planet {
+	ordered := slices.Clone(bodies)
+	root := func(p appeconomy.Planet) int64 {
+		if p.Kind == building.OnMoon {
+			return p.ParentID
+		}
+		return p.ID
+	}
+	slices.SortStableFunc(ordered, func(a, b appeconomy.Planet) int {
+		if order := cmp.Compare(root(a), root(b)); order != 0 {
+			return order
+		}
+		if a.Kind != b.Kind {
+			if a.Kind == building.OnPlanet {
+				return -1
+			}
+			return 1
+		}
+		return cmp.Compare(a.ID, b.ID)
+	})
+	return ordered
+}
+
+// bodySectionURL keeps body switching inside the current gameplay screen.
+// Unsupported sections fall back to the body's infrastructure.
 func bodySectionURL(section string, bodyID int64, moon bool) string {
 	base := fmt.Sprintf("/planets/%d", bodyID)
 	switch section {
 	case "research":
+		if moon {
+			return base
+		}
 		return base + "/research"
 	case "shipyard":
 		return base + "/shipyard"

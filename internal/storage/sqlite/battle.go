@@ -7,6 +7,7 @@ import (
 	"time"
 
 	domainacs "universeatwar/internal/domain/acs"
+	"universeatwar/internal/domain/building"
 	"universeatwar/internal/domain/combat"
 	"universeatwar/internal/domain/debris"
 	"universeatwar/internal/domain/economy"
@@ -47,7 +48,7 @@ func (r *FleetRepository) resolveBattle(ctx context.Context, tx *sql.Tx, attacke
 	if err != nil {
 		return battleOutcome{}, err
 	}
-	stationed, err := r.stationedDefenders(ctx, tx, lead.target)
+	stationed, err := r.stationedDefenders(ctx, tx, lead.target, domainfleet.TargetKind(target.Kind))
 	if err != nil {
 		return battleOutcome{}, err
 	}
@@ -97,9 +98,12 @@ func (r *FleetRepository) resolveBattle(ctx context.Context, tx *sql.Tx, attacke
 		debris.Field{Metal: result.Debris.Metal, Crystal: result.Debris.Crystal}, now); err != nil {
 		return battleOutcome{}, err
 	}
+	if target.Kind == building.OnMoon {
+		result.MoonChance = 0
+	}
 	// The moon draw continues the very sequence the battle used, so replaying
 	// the fight from its seed replays the moon as well.
-	moonCreated, err := r.attemptMoon(ctx, tx, lead, targetPlanetID, target, result.MoonChance, source, now)
+	formation, err := r.attemptMoon(ctx, tx, targetPlanetID, seed, target, result.MoonChance, source, now)
 	if err != nil {
 		return battleOutcome{}, err
 	}
@@ -116,7 +120,7 @@ func (r *FleetRepository) resolveBattle(ctx context.Context, tx *sql.Tx, attacke
 		return battleOutcome{}, err
 	}
 	if err := r.reportBattle(ctx, tx, lead.target, targetPlanetID, attackers, defenderPlayerID,
-		target.Researches, stationed, result, loot, dueAt); err != nil {
+		target.Researches, stationed, result, loot, formation, string(target.Kind), dueAt); err != nil {
 		return battleOutcome{}, err
 	}
 	for index, attacker := range attackers {
@@ -130,7 +134,7 @@ func (r *FleetRepository) resolveBattle(ctx context.Context, tx *sql.Tx, attacke
 			return battleOutcome{}, err
 		}
 	}
-	return battleOutcome{result: result, loot: loot, moon: moonCreated}, nil
+	return battleOutcome{result: result, loot: loot, moon: formation.Outcome == report.MoonCreated}, nil
 }
 
 // shareLoot pillages once for the whole attacking side, then splits the haul
@@ -191,7 +195,7 @@ func (r *FleetRepository) shareLoot(ctx context.Context, tx *sql.Tx, attackers [
 // told which defenses were rebuilt.
 func (r *FleetRepository) reportBattle(ctx context.Context, tx *sql.Tx, at universe.Coordinate,
 	targetPlanetID int64, attackers []battleFleet, defenderPlayerID int64, defenderLevels research.Levels,
-	stationed []defendingFleet, result combat.Result, loot economy.Resources, dueAt time.Time) error {
+	stationed []defendingFleet, result combat.Result, loot economy.Resources, moon *report.MoonFormation, targetKind string, dueAt time.Time) error {
 	names := map[int64]string{}
 	nameOf := func(playerID int64) (string, error) {
 		if known, ok := names[playerID]; ok {
@@ -236,6 +240,7 @@ func (r *FleetRepository) reportBattle(ctx context.Context, tx *sql.Tx, at unive
 	}
 
 	shared := report.CombatPayload{
+		TargetKind: targetKind, Moon: moon,
 		Coordinate: at,
 		Outcome:    string(result.Outcome),
 		Attackers:  attackingParticipants,

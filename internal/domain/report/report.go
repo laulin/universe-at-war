@@ -77,6 +77,7 @@ func FreshnessOf(occurredAt, now time.Time, recent time.Duration) Freshness {
 // which is the whole of that distinction: omitempty would drop the empty map
 // along with the nil one.
 type EspionagePayload struct {
+	TargetKind       string              `json:"target_kind,omitempty"`
 	Target           universe.Coordinate `json:"target"`
 	TargetPlayerName string              `json:"target_player_name"`
 	TargetPlanetName string              `json:"target_planet_name"`
@@ -126,6 +127,7 @@ type RoundSummary struct {
 // participant could observe during the fight is shared; the rebuilt defenses
 // are the defender's own business, and the seed never appears.
 type CombatPayload struct {
+	TargetKind string              `json:"target_kind,omitempty"`
 	Coordinate universe.Coordinate `json:"coordinate"`
 	Outcome    string              `json:"outcome"`
 	Attackers  []Participant       `json:"attackers"`
@@ -134,8 +136,24 @@ type CombatPayload struct {
 	Loot       economy.Resources   `json:"loot"`
 	Debris     economy.Resources   `json:"debris"`
 	MoonChance float64             `json:"moon_chance"`
+	Moon       *MoonFormation      `json:"moon,omitempty"`
 	Rebuilt    map[string]int64    `json:"rebuilt,omitempty"`
 }
+
+// MoonFormation records an outcome when the combat is resolved. Nil in an old
+// payload means unknown, rather than a failed draw.
+type MoonFormation struct {
+	Outcome string `json:"outcome"`
+	MoonID  int64  `json:"moon_id,omitempty"`
+}
+
+const (
+	MoonCreated            = "created"
+	MoonFailed             = "failed"
+	MoonInsufficientDebris = "insufficient_debris"
+	MoonAlreadyExists      = "already_exists"
+	MoonTargetNotPlanet    = "target_not_planet"
+)
 
 // RecyclingPayload is what a recycler brought home.
 type RecyclingPayload struct {

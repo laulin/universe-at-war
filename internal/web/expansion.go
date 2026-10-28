@@ -135,6 +135,10 @@ func (h *Handler) renderPhalanx(response http.ResponseWriter, request *http.Requ
 		h.progressionFailure(response, request, err)
 		return
 	}
+	if moon.Kind != building.OnMoon {
+		http.NotFound(response, request)
+		return
+	}
 	token, ok := h.ensureCSRF(response, request)
 	if !ok {
 		return

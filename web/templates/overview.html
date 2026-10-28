@@ -2,16 +2,16 @@
 {{define "content"}}
   <section aria-labelledby="bodies-title">
     <p class="eyebrow">Corps célestes</p>
-    <h2 id="bodies-title">Planètes</h2>
+    <h2 id="bodies-title">Planètes et lunes</h2>
     <table class="bodies">
       <caption>Ressources réglées à l'instant du serveur.</caption>
       <thead>
-        <tr><th scope="col">Planète</th><th scope="col">Coordonnées</th><th scope="col">Métal</th><th scope="col">Cristal</th><th scope="col">Deutérium</th><th scope="col">Construction</th></tr>
+        <tr><th scope="col">Corps céleste</th><th scope="col">Coordonnées</th><th scope="col">Métal</th><th scope="col">Cristal</th><th scope="col">Deutérium</th><th scope="col">Construction</th></tr>
       </thead>
       <tbody>
       {{range .Planets}}
         <tr>
-          <th scope="row"><a href="/planets/{{.ID}}">{{.Name}}</a></th>
+          <th scope="row">{{if eq .Kind "moon"}}☾ {{end}}<a href="/planets/{{.ID}}">{{.Name}}</a> <small>{{if eq .Kind "moon"}}Lune · <a href="/planets/{{.ParentID}}">planète mère</a>{{else}}Planète{{end}}</small></th>
           <td>{{.Coordinate}}</td>
           <td class="res-metal">{{figure .Stock.Metal}}</td>
           <td class="res-crystal">{{figure .Stock.Crystal}}</td>

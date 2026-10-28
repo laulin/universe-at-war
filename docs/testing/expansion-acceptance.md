@@ -16,8 +16,10 @@
 7. Un combat assez destructeur agrège une lune, une seule fois par position, et
    la redélivrance de l'événement n'en crée pas une seconde.
 8. La création de lune est reproductible : la même seed donne le même résultat.
-9. Une lune ne produit rien, n'a pas de plafond de stockage, n'accepte que les
-   bâtiments lunaires et gagne des cases avec sa base lunaire.
+9. Une lune ne produit rien, n'a pas de plafond de stockage et propose huit
+   bâtiments autorisés, dont les trois installations exclusivement lunaires.
+   La base agrandit également une lune pleine ; le chantier et ses robots
+   utilisent uniquement les niveaux locaux.
 10. La portée d'une phalange suit le carré de son niveau et la circularité de la
     galaxie ; une autre galaxie n'est jamais observable.
 11. Un balayage est payé même s'il ne trouve rien, refusé sans deutérium, refusé
@@ -31,6 +33,23 @@
     n'apparaissent que sur une lune.
 14. L'audit de fuite balaie seize routes joueur, phalange et porte de saut
     comprises, avec des valeurs sentinelles plantées chez le voisin.
+15. À 20 %, les seeds fixes 2 et 7 couvrent création et échec avec un même
+    scénario de combat. Le rapport et le journal enregistrent l'issue ; la
+    redélivrance ne retente pas le tirage. Le journal groupé utilise la seed
+    de l'opération.
+16. Le parcours HTTP conserve le type lune entre le raccourci de ravitaillement,
+    le formulaire, la confirmation, la modification et le lancement. Les
+    ressources et les vaisseaux arrivent sur la lune, y compris depuis la
+    planète aux mêmes coordonnées.
+17. Attaquer une lune ne combat pas les unités de sa planète et ne crée aucun
+    satellite. La simulation exige un rapport du même type de corps et affiche
+    une chance de nouvelle lune nulle pour une cible lunaire.
+18. La phalange distingue les extrémités lunaires et planétaires : un trajet
+    entre lunes reste invisible, un trajet vers une planète peut être vu
+    depuis cette planète. Le cargo et la composition restent cachés.
+19. Les rapports affichent le pourcentage et le résultat de formation, tout en
+    lisant les anciens documents. Un lien de gestion lunaire est réservé au
+    propriétaire. Chaque bâtiment possède une vraie illustration WebP.
 
 ## Contrôles
 

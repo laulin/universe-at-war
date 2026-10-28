@@ -22,6 +22,23 @@ func plainInput(attackers, defenders map[unit.ID]int64) Input {
 	}
 }
 
+func TestMoonChanceUsesOnlyCompleteDebrisStepsAndTheConfiguredCap(t *testing.T) {
+	for _, test := range []struct {
+		metal, crystal int64
+		cap, want      float64
+	}{
+		{0, 0, .2, 0}, {99999, 0, .2, 0}, {50000, 50000, .2, .01},
+		{1900000, 99999, .2, .19}, {1000000, 1000000, .2, .2},
+		{10000000, 10000000, .2, .2}, {1000000, 1000000, .1, .1},
+		{1000000, 1000000, 0, 0},
+	} {
+		got := MoonChance(economy.Resources{Metal: test.metal, Crystal: test.crystal, Deuterium: 9999999}, test.cap)
+		if got != test.want {
+			t.Fatalf("MoonChance(%d+%d, %v)=%v, want %v", test.metal, test.crystal, test.cap, got, test.want)
+		}
+	}
+}
+
 func TestOneFighterAgainstOneRocketLauncher(t *testing.T) {
 	input := plainInput(
 		map[unit.ID]int64{unit.LightFighter: 1},

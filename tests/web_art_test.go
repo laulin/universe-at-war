@@ -58,7 +58,7 @@ func TestArtDrawsAPlaceholderForAnEmptySlot(t *testing.T) {
 // must contain real artwork. Lunar buildings may keep their placeholders until
 // their own masters arrive, but any embedded building picture must still name
 // an entry from the catalogue.
-func TestEveryPlanetBuildingOfTheCatalogueIsIllustrated(t *testing.T) {
+func TestEveryBuildingOfTheCatalogueIsIllustrated(t *testing.T) {
 	handler := artHandler(t)
 	catalogue := building.DefaultCatalogue()
 	known := map[string]bool{}
@@ -66,9 +66,6 @@ func TestEveryPlanetBuildingOfTheCatalogueIsIllustrated(t *testing.T) {
 	for _, definition := range catalogue.Definitions() {
 		slug := string(definition.ID)
 		known[slug] = true
-		if definition.Placement != building.OnPlanet {
-			continue
-		}
 		recorder := fetch(handler, "/art/building/"+slug)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("GET /art/building/%s = %d", slug, recorder.Code)

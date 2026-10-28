@@ -55,8 +55,9 @@
       <a href="/"{{if eq .Section "overview"}} aria-current="page"{{end}}>Empire</a>
       {{with .Current}}
       <p class="nav-group">{{.Name}}</p>
-      <a href="/planets/{{.ID}}"{{if eq $.Section "planet"}} aria-current="page"{{end}}>Ressources</a>
-      <a href="/planets/{{.ID}}/research"{{if eq $.Section "research"}} aria-current="page"{{end}}>Recherche</a>
+      <a href="/planets/{{.ID}}"{{if eq $.Section "planet"}} aria-current="page"{{end}}>{{if .IsMoon}}Bâtiments lunaires{{else}}Ressources{{end}}</a>
+      {{if .IsMoon}}<a href="/planets/{{.ParentID}}/research">Recherche sur {{.ParentName}}</a>
+      {{else}}<a href="/planets/{{.ID}}/research"{{if eq $.Section "research"}} aria-current="page"{{end}}>Recherche</a>{{end}}
       <a href="/planets/{{.ID}}/shipyard"{{if eq $.Section "shipyard"}} aria-current="page"{{end}}>Chantier</a>
       <a href="/planets/{{.ID}}/defense"{{if eq $.Section "defense"}} aria-current="page"{{end}}>Défense</a>
       <a href="/planets/{{.ID}}/fleet"{{if eq $.Section "fleet"}} aria-current="page"{{end}}>Flotte</a>
@@ -92,7 +93,7 @@
               <h1><button class="hero__rename-trigger" type="button" data-body-rename-trigger hidden aria-label="Renommer {{with .Current}}{{.Name}}{{end}}">{{with .Current}}{{.Name}}{{end}}</button></h1>
               <form class="hero__rename-form" method="post" action="{{.RenameAction}}" data-body-rename-form>
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                <label for="body-name" class="visually-hidden">Nom de la planète</label>
+                <label for="body-name" class="visually-hidden">Nom du corps céleste</label>
                 <input id="body-name" name="name" value="{{with .Current}}{{.Name}}{{end}}" maxlength="32" required autocomplete="off" data-body-rename-input>
                 <button type="submit">Enregistrer</button>
                 <button class="ghost" type="button" data-body-rename-cancel hidden>Annuler</button>
@@ -113,11 +114,11 @@
       <p class="eyebrow">{{.Totals.Bodies}} corps</p>
       <ul>
         {{range .Bodies}}
-        <li class="body-card{{if .Current}} body-card--current{{end}}">
+        <li class="body-card{{if .IsMoon}} body-card--moon{{end}}{{if .Current}} body-card--current{{end}}">
           <a class="body-summary" href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>
             <img src="/art/body/{{.ArtSlot}}" alt="{{.Kind}}" width="38" height="38">
             <span class="body-name">{{.Name}}</span>
-            <span class="body-coord">[{{.Coordinate}}]</span>
+            <span class="body-coord">{{if .IsMoon}}Lune de {{.ParentName}} · {{end}}[{{.Coordinate}}]</span>
           </a>
           {{if or .Buildings .Researches .Ships .Defenses .OutboundFleets .IncomingAttacks}}
           <span class="body-activity" aria-label="Activités de {{.Name}}">

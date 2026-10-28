@@ -22,6 +22,13 @@
       </fieldset>
       <fieldset>
         <legend>Destination</legend>
+        <label for="target-kind">Corps céleste
+          <select id="target-kind" name="kind">
+            <option value="planet"{{if ne .Form.TargetKind "moon"}} selected{{end}}>Planète</option>
+            <option value="moon"{{if eq .Form.TargetKind "moon"}} selected{{end}}>Lune</option>
+          </select>
+        </label>
+        <p class="muted">Pour le recyclage, la colonisation et les expéditions, la mission détermine la destination.</p>
         <label for="galaxy">Galaxie
           <input id="galaxy" name="galaxy" type="number" min="1" value="{{if .Form.Galaxy}}{{.Form.Galaxy}}{{else}}{{.Planet.Coordinate.Galaxy}}{{end}}" required>
         </label>
@@ -78,6 +85,6 @@
       <button type="submit">{{if .Form.ReportID}}Calculer et simuler l'attaque{{else}}Calculer la mission{{end}}</button>
       <p class="muted">Vous verrez la distance, le carburant et l'heure d'arrivée{{if .Form.ReportID}}, puis l'estimation du combat,{{end}} avant de confirmer.</p>
     </form>
-    {{else}}<p class="muted">Aucun vaisseau disponible sur cette planète.</p>{{end}}
+    {{else}}<p class="muted">Aucun vaisseau disponible sur ce corps céleste.</p>{{end}}
   </section>
 {{end}}

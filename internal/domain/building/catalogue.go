@@ -35,13 +35,13 @@ const (
 	JumpGate      ID = "jump_gate"
 )
 
-// Placement says which kind of celestial body may hold a building. A lunar
-// building never appears on a planet, and the other way round.
+// Placement says which kind of celestial body may hold a building.
 type Placement string
 
 const (
 	OnPlanet Placement = "planet"
 	OnMoon   Placement = "moon"
+	OnBoth   Placement = "both"
 )
 
 // Definition contains all data needed by generic construction algorithms.
@@ -52,6 +52,13 @@ type Definition struct {
 	Growth        float64
 	Prerequisites []prerequisite.Requirement
 	MaximumLevel  int
+}
+
+// Allows is shared by catalogue discovery and order validation. OnBoth is a
+// catalogue placement, never a kind persisted on a celestial body.
+func (d Definition) Allows(placement Placement) bool {
+	return (placement == OnPlanet || placement == OnMoon) &&
+		(d.Placement == placement || d.Placement == OnBoth)
 }
 
 func requiresBuilding(id ID, level int) prerequisite.Requirement {
@@ -97,12 +104,12 @@ func DefaultCatalogue() Catalogue {
 		{ID: DeuteriumSynthesizer, BaseCost: economy.Resources{Metal: 225, Crystal: 75}, Growth: 1.5},
 		{ID: SolarPlant, BaseCost: economy.Resources{Metal: 75, Crystal: 30}, Growth: 1.5},
 		{ID: FusionReactor, BaseCost: economy.Resources{Metal: 900, Crystal: 360, Deuterium: 180}, Growth: 1.8, Prerequisites: []prerequisite.Requirement{requiresBuilding(DeuteriumSynthesizer, 5), requiresResearch("energy_technology", 3)}},
-		{ID: MetalStorage, BaseCost: economy.Resources{Metal: 1000}, Growth: 2},
-		{ID: CrystalStorage, BaseCost: economy.Resources{Metal: 1000, Crystal: 500}, Growth: 2},
-		{ID: DeuteriumTank, BaseCost: economy.Resources{Metal: 1000, Crystal: 1000}, Growth: 2},
-		{ID: RoboticsFactory, BaseCost: economy.Resources{Metal: 400, Crystal: 120, Deuterium: 200}, Growth: 2},
+		{ID: MetalStorage, Placement: OnBoth, BaseCost: economy.Resources{Metal: 1000}, Growth: 2},
+		{ID: CrystalStorage, Placement: OnBoth, BaseCost: economy.Resources{Metal: 1000, Crystal: 500}, Growth: 2},
+		{ID: DeuteriumTank, Placement: OnBoth, BaseCost: economy.Resources{Metal: 1000, Crystal: 1000}, Growth: 2},
+		{ID: RoboticsFactory, Placement: OnBoth, BaseCost: economy.Resources{Metal: 400, Crystal: 120, Deuterium: 200}, Growth: 2},
 		{ID: NaniteFactory, BaseCost: economy.Resources{Metal: 1_000_000, Crystal: 500_000, Deuterium: 100_000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(RoboticsFactory, 10), requiresResearch("computer_technology", 10)}},
-		{ID: Shipyard, BaseCost: economy.Resources{Metal: 400, Crystal: 200, Deuterium: 100}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(RoboticsFactory, 2)}},
+		{ID: Shipyard, Placement: OnBoth, BaseCost: economy.Resources{Metal: 400, Crystal: 200, Deuterium: 100}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(RoboticsFactory, 2)}},
 		{ID: ResearchLab, BaseCost: economy.Resources{Metal: 200, Crystal: 400, Deuterium: 200}, Growth: 2},
 		{ID: AllianceDepot, BaseCost: economy.Resources{Metal: 20_000, Crystal: 40_000}, Growth: 2},
 		{ID: MissileSilo, BaseCost: economy.Resources{Metal: 20_000, Crystal: 20_000, Deuterium: 1000}, Growth: 2, Prerequisites: []prerequisite.Requirement{requiresBuilding(Shipyard, 1)}},
@@ -143,8 +150,17 @@ func (c Catalogue) Definitions() []Definition {
 // DefinitionsFor returns the entries one kind of body may hold.
 func (c Catalogue) DefinitionsFor(placement Placement) []Definition {
 	result := make([]Definition, 0, len(c.definitions))
+	// A new moon needs its base first; give lunar installations priority over
+	// shared facilities and optional stores in its building page.
+	if placement == OnMoon {
+		for _, definition := range c.Definitions() {
+			if definition.Placement == OnMoon {
+				result = append(result, definition)
+			}
+		}
+	}
 	for _, definition := range c.Definitions() {
-		if definition.Placement == placement {
+		if definition.Allows(placement) && !(placement == OnMoon && definition.Placement == OnMoon) {
 			result = append(result, definition)
 		}
 	}
@@ -219,10 +235,13 @@ func (c Catalogue) Plan(id ID, placement Placement, levels Levels, researches pr
 	if !ok {
 		return Plan{}, ErrUnknownBuilding
 	}
-	if definition.Placement != placement {
+	if !definition.Allows(placement) {
 		return Plan{}, ErrWrongPlacement
 	}
-	if usedFields < 0 || totalFields <= 0 || usedFields >= totalFields {
+	// A lunar base expands the body while consuming its field. Allow that
+	// expansion on a full moon so an existing settlement cannot be stranded.
+	expandsMoon := id == LunarBase && placement == OnMoon && usedFields == totalFields
+	if usedFields < 0 || totalFields <= 0 || (usedFields >= totalFields && !expandsMoon) {
 		return Plan{}, ErrNoFreeField
 	}
 	for buildingID, level := range levels {

@@ -254,3 +254,6 @@
   .resource-bar__item { min-width: 6.5rem; }
   .resource-bar .session { margin-left: 0; width: 100%; }
 }
+
+/* Keep a satellite visually attached to the planet immediately above it. */
+.body-column .body-card--moon { margin-left: var(--space-3); border-left: 2px solid var(--border-strong); }

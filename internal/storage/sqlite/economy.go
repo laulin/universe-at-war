@@ -790,9 +790,6 @@ func loadLevels(ctx context.Context, tx *sql.Tx, planetID int64, catalogue build
 // page that offers a card and the transaction that accepts it apply the same
 // rule instead of the page ignoring it.
 func loadBusyFacilities(ctx context.Context, tx *sql.Tx, planetID int64, kind building.Placement) ([]building.ID, error) {
-	if kind != building.OnPlanet {
-		return nil, nil
-	}
 	var busy []building.ID
 	var researching bool
 	if err := tx.QueryRowContext(ctx, `
@@ -804,7 +801,7 @@ func loadBusyFacilities(ctx context.Context, tx *sql.Tx, planetID int64, kind bu
 	`, planetID).Scan(&researching); err != nil {
 		return nil, fmt.Errorf("economy repository: inspect research queue: %w", err)
 	}
-	if researching {
+	if researching && kind == building.OnPlanet {
 		busy = append(busy, building.ResearchLab)
 	}
 	var producing bool

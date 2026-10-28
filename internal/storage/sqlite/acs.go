@@ -117,7 +117,7 @@ func (r *ACSRepository) Create(ctx context.Context, accountID, planetID int64, r
 		if !configured.Team.ACSEnabled {
 			return appacs.ErrDisabled
 		}
-		if request.Mission != domainfleet.MissionAttack {
+		if request.Mission != domainfleet.MissionAttack || request.TargetKind != domainfleet.TargetPlanet {
 			return appacs.ErrInvalidRequest
 		}
 		fleet, plan, rulesetVersion, err := r.fleets.launchInto(ctx, tx, accountID, planetID, request, seed, idempotencyKey, now, false)

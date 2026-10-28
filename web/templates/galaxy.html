@@ -28,7 +28,7 @@
           <th scope="row">{{.Coordinate}}</th>
           <td data-label="Planète">{{if .Occupied}}<span class="galaxy-planet">
             <img class="galaxy-planet__icon" src="/art/body/{{.ArtSlot}}" alt="" width="42" height="42" loading="lazy" decoding="async">
-            <strong>{{.PlanetName}}</strong>{{if .MoonID}} <span title="Lune">☾ {{.MoonName}}</span>{{end}}
+            <strong>{{.PlanetName}}</strong>{{if .MoonID}} {{if .Own}}<a href="/planets/{{.MoonID}}" title="Ouvrir votre lune">☾ {{.MoonName}}</a>{{else}}<span title="Lune">☾ {{.MoonName}}</span>{{end}}{{end}}
           </span>{{else}}<span class="muted">inoccupée</span>{{end}}</td>
           <td data-label="Joueur">{{if .Occupied}}{{.OwnerName}}{{if .Own}} <span class="own-marker">(vous)</span>{{end}}{{else}}—{{end}}</td>
           <td data-label="Débris">
@@ -52,12 +52,20 @@
               </a>{{end}}
               <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=espionage">Espionner</a>
               <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=attack">Attaquer</a>
+              {{if .MoonID}}
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;kind=moon&amp;mission=espionage">Espionner la lune</a>
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;kind=moon&amp;mission=attack">Attaquer la lune</a>
+              {{end}}
               {{if .MissileLink}}<a class="button galaxy-missile" href="{{.MissileLink}}" title="Attaque par missiles"><img src="/art/defense/interplanetary_missile" width="24" height="24" alt=""> Missiles</a>{{else if .MissileReason}}<button class="galaxy-missile" type="button" disabled title="{{.MissileReason}}" aria-label="Attaque par missiles indisponible : {{.MissileReason}}"><img src="/art/defense/interplanetary_missile" width="24" height="24" alt=""> Missiles</button>{{end}}
               {{if .MoonMissileLink}}<a class="button" href="{{.MoonMissileLink}}">Missiles vers la lune</a>{{else if and .MoonID .MissileReason}}<button type="button" disabled title="{{.MissileReason}}">Missiles vers la lune</button>{{end}}
               {{else if and $.CanAct .Own (not .IsOrigin)}}
               <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=deploy">Stationner</a>
               <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;mission=transport">Transporter</a>
               {{else}}<span class="muted">—</span>{{end}}
+              {{if and $.CanAct .Own .MoonID}}
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;kind=moon&amp;mission=transport">Ravitailler la lune</a>
+              <a class="button" href="/planets/{{$.HomePlanet}}/fleet/send?galaxy={{$.Galaxy}}&amp;system={{$.System}}&amp;position={{.Position}}&amp;kind=moon&amp;mission=deploy">Stationner sur la lune</a>
+              {{end}}
             </div>
           </td>
         </tr>

@@ -91,6 +91,12 @@ func (m Mission) Target() TargetKind {
 	}
 }
 
+// AcceptsTarget allows body missions to address a planet or its distinct moon.
+// Recycling, colonisation and expeditions keep their own destination kinds.
+func (m Mission) AcceptsTarget(kind TargetKind) bool {
+	return kind == m.Target() || (m.Target() == TargetPlanet && kind == TargetMoon)
+}
+
 // Defends reports whether the fleet fights for the body it reaches instead of
 // against it, and therefore waits there until its holding time is over.
 func (m Mission) Defends() bool {

@@ -37,7 +37,7 @@
         <span class="stationed__name">{{.Name}}</span> <strong>{{figure .Owned}}</strong>
       </li>{{end}}
     </ul>
-    {{else}}<p class="muted">Aucun vaisseau sur cette planète.</p>{{end}}
+    {{else}}<p class="muted">Aucun vaisseau sur ce corps céleste.</p>{{end}}
   </section>
   {{if .MissileStrikes}}<section aria-labelledby="missile-flights-title">
     <h2 id="missile-flights-title">Salves de missiles en vol</h2>
@@ -60,7 +60,7 @@
         <tr>
           <th scope="row">{{.Mission}}</th>
           <td>{{.State}}</td>
-          <td>{{.Origin}} → {{.Target}}</td>
+          <td>{{.Origin}} → {{.Target}}{{if eq .TargetKind "moon"}} (lune){{end}}</td>
           <td>{{.Composition}}</td>
           <td><time datetime="{{instant .ArrivesAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ArrivesAt $.Location "15:04:05"}}</time> (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" data-refresh="page" aria-live="off">{{localTime .ArrivesAt $.Location "15:04:05"}}</time>)</td>
           <td>{{if .ReturnsAt}}<time datetime="{{instant .ReturnsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ReturnsAt $.Location "15:04:05"}}</time> (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{localTime .ReturnsAt $.Location "15:04:05"}}</time>){{else}}—{{end}}</td>

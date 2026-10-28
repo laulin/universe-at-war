@@ -43,12 +43,20 @@ func TestScenarioGGroupedAttackIsOneBattle(t *testing.T) {
 		t.Fatalf("Join() error = %v", err)
 	}
 	universeWorld.Clock.Set(joined.ArrivesAt)
+	// The operation owns the random stream, independently of any member fleet.
+	if _, err := database.Write().ExecContext(ctx, "UPDATE acs_groups SET seed = 42 WHERE id = ?", group.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Write().ExecContext(ctx, "UPDATE fleets SET seed = 99"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := universeWorld.Events.CompleteDue(ctx, 20); err != nil {
 		t.Fatalf("CompleteDue() error = %v", err)
 	}
 
 	// One battle, told once to each side, with both allies among the attackers.
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM game_event_log WHERE event_type = 'combat_resolved'", 1)
+	assertSingleValue(t, database, "SELECT json_extract(payload, '$.seed') FROM game_event_log WHERE event_type = 'moon_attempted'", 42)
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM reports WHERE kind = 'combat_attack'", 2)
 	assertSingleValue(t, database, "SELECT COUNT(*) FROM reports WHERE kind = 'combat_defense'", 1)
 	assertSingleValue(t, database,

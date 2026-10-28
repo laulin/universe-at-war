@@ -70,7 +70,7 @@ func PlanLaunch(request LaunchRequest, context Context) (Plan, error) {
 	if err := ValidateComposition(request.Mission, request.Composition, context.Catalogue); err != nil {
 		return Plan{}, err
 	}
-	if request.TargetKind != request.Mission.Target() {
+	if !request.Mission.AcceptsTarget(request.TargetKind) {
 		return Plan{}, ErrInvalidTarget
 	}
 	for id, quantity := range request.Composition {

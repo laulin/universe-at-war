@@ -1,8 +1,16 @@
 {{define "title"}}{{.Planet.Name}}{{end}}
 {{define "content"}}
+  {{if .LunarParent}}
+  <section class="panel-wide" aria-label="Vie sur la lune">
+    <p>Satellite de <a href="/planets/{{.LunarParent.ID}}">{{.LunarParent.Name}}</a>. Cette lune ne produit aucune ressource : ravitaillez-la par transport. Son stock est indépendant et sans limite.</p>
+    <p><a class="button" href="/planets/{{.LunarParent.ID}}/fleet/send?galaxy={{.Planet.Coordinate.Galaxy}}&amp;system={{.Planet.Coordinate.System}}&amp;position={{.Planet.Coordinate.Position}}&amp;kind=moon&amp;mission=transport">Ravitailler depuis {{.LunarParent.Name}}</a></p>
+    <p>Une base lunaire ajoute {{.Planet.Rules.Expansion.LunarBaseFields}} cases par niveau et utilise une case. Elle peut être améliorée même lorsque la lune est pleine.</p>
+    {{if .FullMoon}}<p class="alert" role="status">Toutes les cases sont occupées ou réservées. Développez la base lunaire pour agrandir cette lune.</p>{{end}}
+  </section>
+  {{end}}
   {{template "buildQueue" .Queue}}
   <section class="panel-wide" aria-labelledby="buildings-title">
-    <div class="section-bar"><h2 id="buildings-title">Infrastructure planétaire</h2></div>
+    <div class="section-bar"><h2 id="buildings-title">{{if eq .Planet.Kind "moon"}}Infrastructure lunaire{{else}}Infrastructure planétaire{{end}}</h2></div>
     <div class="card-grid">
     {{range .Choices}}
       <article class="card{{if not .Offered}} card--locked{{end}}">

@@ -96,6 +96,38 @@ func TestPhalanxRefusesToScanWithoutDeuterium(t *testing.T) {
 	assertSingleValue(t, database, "SELECT deuterium FROM planet_resources WHERE planet_id = ?", 100, moonID)
 }
 
+func TestPhalanxDoesNotConfuseLunarAndPlanetaryEndpoints(t *testing.T) {
+	ctx := context.Background()
+	db, w, _, bobMoon := phalanxUniverse(t)
+	alice := appauth.Principal{AccountID: 1}
+	aliceMoon := insertMoon(t, ctx, db, 1, 1, 1, 1, 8)
+	setResources(t, ctx, db, bobMoon, 0, 0, 50000)
+	setResources(t, ctx, db, aliceMoon, 0, 0, 10000)
+	setUnits(t, ctx, db, aliceMoon, "small_cargo", 3)
+	for i, origin := range []int64{aliceMoon, aliceMoon, 1} {
+		kind := domainfleet.TargetMoon
+		if i == 1 {
+			kind = domainfleet.TargetPlanet
+		}
+		if _, err := w.Fleet.Launch(ctx, alice, origin, appfleet.LaunchRequest{
+			Target: coordinateOf(t, 1, 1, 1), TargetKind: kind, Mission: domainfleet.MissionTransport,
+			Composition: domainfleet.Composition{unit.SmallCargo: 1}, Percent: 10,
+		}, []string{"moon-to-moon", "moon-to-planet", "planet-to-moon"}[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// At Bob's planet only the flight actually targeting the planet is visible.
+	scan, err := w.Phalanx.Scan(ctx, appauth.Principal{AccountID: 2}, bobMoon, coordinateOf(t, 1, 1, 1))
+	if err != nil || len(scan.Sightings) != 1 {
+		t.Fatalf("Bob's planet scan: %+v, %v", scan.Sightings, err)
+	}
+	// At Alice's planet only the flight originating on that planet is visible.
+	scan, err = w.Phalanx.Scan(ctx, appauth.Principal{AccountID: 2}, bobMoon, coordinateOf(t, 1, 1, 8))
+	if err != nil || len(scan.Sightings) != 1 {
+		t.Fatalf("Alice's planet scan: %+v, %v", scan.Sightings, err)
+	}
+}
+
 // phalanxUniverse gives Bob a moon with a level two phalanx, in range of his own
 // system and of a few neighbours.
 func phalanxUniverse(t *testing.T) (*storagesqlite.Database, *world, *appclock.Fake, int64) {

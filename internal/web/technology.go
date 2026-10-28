@@ -55,10 +55,14 @@ type technologyStatView struct {
 }
 
 func buildingTechnology(choice appeconomy.BuildingChoice, planet appeconomy.Planet) technologyView {
+	description := buildingRole(choice.Definition.ID)
+	if planet.Kind == domainbuilding.OnMoon && (choice.Definition.ID == domainbuilding.MetalStorage || choice.Definition.ID == domainbuilding.CrystalStorage || choice.Definition.ID == domainbuilding.DeuteriumTank) {
+		description = "Le stockage lunaire est sans limite, même sans hangar. Ce bâtiment utilise des cases sans augmenter la production : une lune ne produit aucune ressource."
+	}
 	return technologyView{
 		DialogID: "technology-building-" + string(choice.Definition.ID),
 		ID:       string(choice.Definition.ID), Name: buildingName(choice.Definition.ID), Kind: "Bâtiment",
-		ArtCategory: "building", Description: buildingRole(choice.Definition.ID), Level: choice.Level,
+		ArtCategory: "building", Description: description, Level: choice.Level,
 		Requirements: requirementViews(choice.Requirements),
 		Unlocks:      technologyUnlocks(prerequisite.Building, string(choice.Definition.ID)),
 		Progress:     buildingProgress(choice.Definition, planet),
@@ -176,6 +180,9 @@ func buildingEffect(id domainbuilding.ID, level int, planet appeconomy.Planet) (
 			return energy, "Consomme " + figure(fuel) + " deutérium/h"
 		}
 	case domainbuilding.MetalStorage, domainbuilding.CrystalStorage, domainbuilding.DeuteriumTank:
+		if planet.Kind == domainbuilding.OnMoon {
+			return 0, "Stockage lunaire sans limite"
+		}
 		capacity, err := domaineconomy.Capacity(planet.Rules.Economy.BaseStorage, level)
 		if err == nil {
 			return 0, "Capacité " + figure(capacity)
