@@ -5,15 +5,92 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	appauth "universeatwar/internal/app/authentication"
+	appfleet "universeatwar/internal/app/fleet"
 	appclock "universeatwar/internal/clock"
+	domainfleet "universeatwar/internal/domain/fleet"
+	"universeatwar/internal/domain/unit"
 	storagesqlite "universeatwar/internal/storage/sqlite"
 	webhandler "universeatwar/internal/web"
 )
+
+func TestWebFleetRefreshesAtTheNextMissionStage(t *testing.T) {
+	for _, state := range []domainfleet.State{domainfleet.Outbound, domainfleet.Holding, domainfleet.Returning, domainfleet.Recalled} {
+		t.Run(string(state), func(t *testing.T) {
+			ctx := context.Background()
+			db := economyDatabase(t, ctx, 1)
+			w := newWorldFor(t, db)
+			owner := appauth.Principal{AccountID: 1, Username: "player1"}
+			home, err := w.Economy.CreateEmpire(ctx, owner, "Alice")
+			if err != nil {
+				t.Fatal(err)
+			}
+			insertColony(t, ctx, db, 1, "Colonie", 1, 2, 4)
+			setUnits(t, ctx, db, home.ID, "small_cargo", 2)
+			setResources(t, ctx, db, home.ID, 5000, 5000, 5000)
+			request := appfleet.LaunchRequest{
+				Target: coordinateOf(t, 1, 2, 4), TargetKind: domainfleet.TargetPlanet, Mission: domainfleet.MissionTransport,
+				Composition: domainfleet.Composition{unit.SmallCargo: 2}, Percent: 100,
+			}
+			if state == domainfleet.Holding {
+				request.Mission = domainfleet.MissionHold
+				request.HoldUntil = w.Clock.Now().Add(24 * time.Hour)
+			}
+			flight, err := w.Fleet.Launch(ctx, owner, home.ID, request, "flight")
+			if err != nil {
+				t.Fatal(err)
+			}
+			next := flight.ArrivesAt
+			switch state {
+			case domainfleet.Holding, domainfleet.Returning:
+				setClock(t, w.Clock, flight.ArrivesAt)
+				if _, err := w.Events.CompleteDue(ctx, 10); err != nil {
+					t.Fatal(err)
+				}
+				if state == domainfleet.Holding {
+					next = *flight.HoldsUntil
+				} else {
+					next = *flight.ReturnsAt
+				}
+			case domainfleet.Recalled:
+				setClock(t, w.Clock, flight.DepartedAt.Add(time.Second))
+				flight, err = w.Fleet.Recall(ctx, owner, flight.ID, "recall")
+				if err != nil {
+					t.Fatal(err)
+				}
+				next = *flight.ReturnsAt
+			}
+			handler, err := webhandler.New(webhandler.Dependencies{
+				Authentication: webAuthenticationStub{principal: owner},
+				ServerState:    runningStateStub{}, CSRFSecrets: sequenceSecret{value: "csrf-token"},
+				Economy: w.Economy, Fleet: w.Fleet,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			session := &http.Cookie{Name: "uaw_session", Value: "session"}
+			csrf := &http.Cookie{Name: "uaw_csrf", Value: "csrf-token"}
+			page := getPage(t, handler, "/planets/1/fleet", session, csrf)
+			missions := betweenMarkers(page, `<section aria-labelledby="missions-title">`, "</section>")
+			refreshes := regexp.MustCompile(`<time\b[^>]*data-refresh="page"[^>]*>`).FindAllString(missions, -1)
+			if len(refreshes) != 1 || !strings.Contains(refreshes[0], `datetime="`+next.Format(time.RFC3339)+`"`) {
+				t.Fatalf("refresh deadlines = %v, want only %s", refreshes, next)
+			}
+			if state == domainfleet.Returning || state == domainfleet.Recalled {
+				setClock(t, w.Clock, next.Add(time.Second))
+				page = getPage(t, handler, "/planets/1/fleet", session, csrf)
+				if !strings.Contains(page, "Aucune flotte en vol.") {
+					t.Fatal("the returned fleet still appears in the mission list")
+				}
+			}
+		})
+	}
+}
 
 func TestWebFleetLaunchAndRecallWorkflow(t *testing.T) {
 	handler, database, session, csrfCookie := fleetHandler(t)

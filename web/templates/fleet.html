@@ -62,8 +62,12 @@
           <td>{{.State}}</td>
           <td>{{.Origin}} → {{.Target}}{{if eq .TargetKind "moon"}} (lune){{end}}</td>
           <td>{{.Composition}}</td>
-          <td><time datetime="{{instant .ArrivesAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ArrivesAt $.Location "15:04:05"}}</time> (<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" data-refresh="page" aria-live="off">{{localTime .ArrivesAt $.Location "15:04:05"}}</time>)</td>
-          <td>{{if .ReturnsAt}}<time datetime="{{instant .ReturnsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ReturnsAt $.Location "15:04:05"}}</time> (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée" aria-live="off">{{localTime .ReturnsAt $.Location "15:04:05"}}</time>){{else}}—{{end}}</td>
+          <td>
+            <time datetime="{{instant .ArrivesAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ArrivesAt $.Location "15:04:05"}}</time>
+            {{if .RefreshArrival}}(<time datetime="{{.ArrivesISO}}" data-countdown data-done="arrivée" data-refresh="page" aria-live="off">{{localTime .ArrivesAt $.Location "15:04:05"}}</time>){{end}}
+            {{if .HoldsUntil}}<br>Fin du stationnement : <time datetime="{{.HoldsISO}}" data-countdown data-done="départ" data-refresh="page" aria-live="off">{{localTime .HoldsUntil $.Location "15:04:05"}}</time>{{end}}
+          </td>
+          <td>{{if .ReturnsAt}}<time datetime="{{instant .ReturnsAt}}" data-local-time data-local-format="time-seconds" title="Fuseau de repli : {{$.Timezone}}">{{localTime .ReturnsAt $.Location "15:04:05"}}</time> (<time datetime="{{.ReturnsISO}}" data-countdown data-done="rentrée"{{if .RefreshReturn}} data-refresh="page"{{end}} aria-live="off">{{localTime .ReturnsAt $.Location "15:04:05"}}</time>){{else}}—{{end}}</td>
           <td>
             {{if .Recallable}}
             <form method="post" action="/fleets/{{.ID}}/recall">

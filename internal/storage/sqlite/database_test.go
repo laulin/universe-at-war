@@ -236,31 +236,43 @@ func TestLateSettlementMigrationRetriesOnlyTheEventsItPoisoned(t *testing.T) {
 	if retryMigration.version == 0 {
 		t.Fatal("late settlement migration is missing")
 	}
-	for _, event := range []struct {
-		key   string
-		error string
+	events := []struct {
+		key       string
+		eventType string
+		state     string
+		error     string
+		want      int
 	}{
-		{"late", "economy: production time cannot move backwards"},
-		{"other", "economy repository: building queue target is stale"},
-	} {
+		{"late-building", "building_completed", "pending", "economy: production time cannot move backwards", 0},
+		{"late-fleet", "fleet_returned", "pending", "economy: production time cannot move backwards", 0},
+		{"other", "fleet_returned", "pending", "fleet repository: missing origin", 5},
+		{"completed", "fleet_returned", "completed", "economy: production time cannot move backwards", 5},
+		{"cancelled", "fleet_returned", "cancelled", "economy: production time cannot move backwards", 5},
+	}
+	for _, event := range events {
 		if _, err := database.Write().ExecContext(ctx, `
-			INSERT INTO scheduled_events(event_type, due_at, entity_type, entity_id, idempotency_key, attempts, last_error, created_at)
-			VALUES ('building_completed', '2042-09-10T11:12:13Z', 'building_queue', '1', ?, 5, ?, '2042-09-10T11:12:13Z')
-		`, event.key, event.error); err != nil {
+			INSERT INTO scheduled_events(event_type, due_at, entity_type, entity_id, idempotency_key, state, attempts, last_error, created_at)
+			VALUES (?, '2042-09-10T11:12:13Z', 'test', '1', ?, ?, 5, ?, '2042-09-10T11:12:13Z')
+		`, event.eventType, event.key, event.state, event.error); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := applyMigration(ctx, database.Write(), retryMigration); err != nil {
 		t.Fatalf("apply late settlement migration: %v", err)
 	}
-	for key, want := range map[string]int{"late": 0, "other": 5} {
+	for _, event := range events {
 		var attempts int
+		var state string
+		var lastError sql.NullString
 		if err := database.Read().QueryRowContext(ctx,
-			"SELECT attempts FROM scheduled_events WHERE idempotency_key = ?", key).Scan(&attempts); err != nil {
+			"SELECT attempts, state, last_error FROM scheduled_events WHERE idempotency_key = ?", event.key).Scan(&attempts, &state, &lastError); err != nil {
 			t.Fatal(err)
 		}
-		if attempts != want {
-			t.Fatalf("attempts of %q = %d, want %d", key, attempts, want)
+		if attempts != event.want || state != event.state {
+			t.Fatalf("event %q = %s, attempts %d; want %s, %d", event.key, state, attempts, event.state, event.want)
+		}
+		if event.want == 0 && lastError.Valid || event.want != 0 && (!lastError.Valid || lastError.String != event.error) {
+			t.Fatalf("event %q last_error = %v", event.key, lastError)
 		}
 	}
 	if err := database.Migrate(ctx); err != nil {

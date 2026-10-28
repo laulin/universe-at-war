@@ -35,19 +35,23 @@ type fleetPageShip struct {
 
 // fleetPageMission is one mission in flight prepared for display.
 type fleetPageMission struct {
-	ID          int64
-	Mission     string
-	State       string
-	Origin      string
-	Target      string
-	TargetKind  string
-	Composition string
-	Cargo       domaineconomy.Resources
-	ArrivesAt   time.Time
-	ArrivesISO  string
-	ReturnsAt   *time.Time
-	ReturnsISO  string
-	Recallable  bool
+	ID             int64
+	Mission        string
+	State          string
+	Origin         string
+	Target         string
+	TargetKind     string
+	Composition    string
+	Cargo          domaineconomy.Resources
+	ArrivesAt      time.Time
+	ArrivesISO     string
+	RefreshArrival bool
+	HoldsUntil     *time.Time
+	HoldsISO       string
+	ReturnsAt      *time.Time
+	ReturnsISO     string
+	RefreshReturn  bool
+	Recallable     bool
 }
 
 type fleetPageData struct {
@@ -188,6 +192,12 @@ func (h *Handler) renderFleet(response http.ResponseWriter, request *http.Reques
 			Composition: compositionSummary(mission.Composition), Cargo: mission.Cargo,
 			ArrivesAt: mission.ArrivesAt, ArrivesISO: mission.ArrivesAt.Format(time.RFC3339),
 			ReturnsAt: mission.ReturnsAt, Recallable: mission.Recallable,
+			RefreshArrival: mission.State == domainfleet.Outbound,
+			RefreshReturn:  mission.State == domainfleet.Returning || mission.State == domainfleet.Recalled,
+		}
+		if mission.State == domainfleet.Holding && mission.HoldsUntil != nil {
+			view.HoldsUntil = mission.HoldsUntil
+			view.HoldsISO = mission.HoldsUntil.Format(time.RFC3339)
 		}
 		if mission.ReturnsAt != nil {
 			view.ReturnsISO = mission.ReturnsAt.Format(time.RFC3339)
